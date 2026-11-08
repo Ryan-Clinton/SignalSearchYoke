@@ -12,11 +12,13 @@ It is an **optical laser-line search** with the Lick Automated Planet Finder
 from Breakthrough Listen's GBT observations of KIC 8462852 was found; the
 observations began 26 Oct 2016
 (https://astrobiology.com/2016/10/25/breakthrough-listen-to-observe-tabbys-star-kic-8462852/).
-A narrowband limit from this cadence may be the first published for these
-data. That is UNVERIFIED: Painter et al. 2025 searched 9,684 GBT cadences of
-3,077 stars from the BL archive
-(https://iopscience.iop.org/article/10.3847/1538-3881/adbc5e), and whether
-KIC 8462852 is among them was not established.
+Painter et al. 2025 searched 9,684 GBT cadences of 3,077 stars, the whole
+GBT archive at Berkeley as of July 2023
+(https://iopscience.iop.org/article/10.3847/1538-3881/adbc5e;
+https://arxiv.org/abs/2412.05786), so these cadences were very probably
+among them. Their text does not name KIC 8462852 and gives no per-star
+limit; their per-target list was not found (checked 8 Nov 2026). A limit
+from this cadence is therefore not claimed as the first.
 
 **A flaw that affects the headline numbers:** `plant()` in `seti.py` puts each
 tone's full power into one channel per 18 s spectrum, whatever its drift.

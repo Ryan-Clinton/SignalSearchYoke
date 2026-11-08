@@ -31,9 +31,11 @@ which change what its results mean.
 2. **Its SNR is not on the published scale.** Noise is measured per spectrum
    (median absolute deviation) and divided by √16; that assumption is off by
    up to 3× on real Green Bank data (setigen issue #32). turboSETI's own
-   "SNR 10" is about 33 in true noise (Choza et al. 2024, §III.1.5). The
-   docs' "SNR 10, turboSETI's default" is therefore not an equal threshold,
-   and no limit can yet be quoted against published ones.
+   "SNR 10" is about 33 in true noise (Choza et al. 2024, §III.1.5, measured
+   on their data; the ratio depends on band shape and noise, so it is not a
+   fixed conversion). The docs' "SNR 10, turboSETI's default" is therefore
+   not an equal threshold, and no limit can yet be quoted against published
+   ones.
 3. **It throws the evidence away.** The sweep record keeps candidates and
    only *counts* everything else. Every professional vetting method (blc1's
    look-alikes, SonATA's 7-day database, SETI@home's zone filter, recurrence
@@ -55,13 +57,15 @@ which change what its results mean.
      880 MB moved per block for 300 MB of data.
    - `np.roll` in float64 takes 52 s a look where float32 slice-adds take
      3.8 s.
-   - Remaining 296 blocks: about 4–5 days now; about 2–2.5 hours after.
+   - Remaining 296 blocks: about 4–5 days now; estimated 2–2.5 hours
+     after (about 92 GB at the 11–14 MB/s measured; not yet run end to
+     end).
 
 What it already does better than turboSETI, and keeps:
 
 - an exact-line brute-force drift sum (no Taylor-tree path errors);
 - the band shape and noise measured block by block (turboSETI's whole-channel
-  noise is the source of its 3.25× error);
+  noise is the source of the 3.25× error Choza et al. measured);
 - the coarse channel's edges masked and its DC spike blanked;
 - zero drift searched, not dropped;
 - drift agreement required across ON looks (turboSETI's `find_event` checks
@@ -79,17 +83,23 @@ What it already does better than turboSETI, and keeps:
   steps of Sheikh et al.'s framework done and recorded.
 - **G4. Fast enough to finish.** A cadence of 308 blocks in an evening, on
   this PC, without a GPU.
-- **G5. Produce a result.** A published-standard limit on narrowband
-  transmitters at Tabby's star in 1.8–2.7 GHz. No published radio limit
-  from Breakthrough Listen's Green Bank data on this star was found (Harp et
-  al. 2016's ATA limit is about 20–30× shallower); whether Painter et al.
-  2025 included it is to be checked.
+- **G5. Produce a result.** A measured limit on narrowband transmitters at
+  Tabby's star in 1.8–2.7 GHz: the EIRP reached, the band covered and the
+  completeness, checked first on a known real signal. Not claimed as the
+  first: Painter et al. 2025 searched the whole Green Bank archive at
+  Berkeley as of July 2023, which holds these cadences, though they publish
+  no per-star limit and do not name this star. The value is in what this
+  search measures (completeness through the whole pipeline, drift loss,
+  kept hits) and in any candidate it finds that theirs missed. Harp et al.
+  2016's ATA limit is about 20–30× shallower.
 
 **Not goals, and why:**
 
-- **GPU code.** The search is about 4 s a look in numpy. The GTX 1080 is
-  Pascal, which CUDA 13 dropped, so cupy is a dependency with a short
-  future.
+- **GPU code, for now.** The measurements do not justify it: the search is
+  about 4 s a look in numpy, and the network sets the pace. The GTX 1080 is
+  Pascal, which CUDA 13 dropped (`cupy-cuda12x` still serves it). If a later
+  method (wider drifts, the `.0002` product) becomes compute-bound, this is
+  looked at again.
 - **Adopting seticore or BLISS.** Both are Linux builds (WSL2 at best). Their
   ideas are taken instead: desmearing, flag counts per hit, typed hits.
 - **ML classifiers.** Ma et al.'s 8 signals were all later found without ML;
@@ -137,10 +147,15 @@ and kept hits.
 
 **Done when:**
 
+- the direct chunk path gives arrays bit-identical to h5py's on the
+  reference block: same values, same shape, same chunk order;
 - the reference block gives the same hits as the baseline, or each
   difference is explained (float32 rounding);
-- a block of the live cadence takes 40 s or less, with the bytes moved
-  logged;
+- a sustained run of at least 10 consecutive blocks of the live cadence
+  averages 40 s a block or less, a target set from the estimate above,
+  not yet shown. It logs bytes moved, fetch and search seconds, CPU use
+  and peak memory, and is repeated at 4, 6 and 8 threads to pick the
+  count;
 - `find()` results are cached per run.
 
 ### Phase 2: the hit store
@@ -182,15 +197,25 @@ hits within ±200 Hz of each other across different files.
    - Noise is measured on the drift-summed output, a robust standard
      deviation of each block's summed rows, not per spectrum × √16.
    - Checked with signals of known power planted into the reference slices.
-   - The docs state the scale and its relation to turboSETI's (×3.25).
+   - The relation to turboSETI's scale is measured, not assumed: `benchmark`
+     runs both on the same saved slices, and the ratio of their SNRs for the
+     same signals is recorded per block. The docs give the median ratio, its
+     spread across blocks and bands, and how it was measured. Choza's 3.25
+     is quoted as their figure, for comparison only.
 2. **Desmearing.**
    - For drift lines faster than one channel per spectrum, each spectrum's
      contribution is a boxcar of ⌈|drift| × tsamp / channel width⌉ channels
      along the line (hyperseti and BLISS), which recovers about √N of the
      lost sensitivity.
-   - Alternative, chosen by measurement: scrunch adjacent channels per drift
-     octave (Breakthrough Listen's Kepler search).
-   - Whichever recovers more of the planted signals in Phase 6 is kept.
+   - Alternative: scrunch adjacent channels per drift octave (Breakthrough
+     Listen's Kepler search).
+   - Chosen here, in Phase 3, by a small injection test on the reference
+     slices: smeared signals in each drift bin of Phase 6, at a few SNRs,
+     through both methods. The test counts signals recovered at the right
+     frequency and drift, and also whether two signals planted close
+     together (a few to a few hundred channels apart) come out as two hits:
+     a method that gains one signal's power by merging its neighbour loses.
+     Phase 6 then measures the chosen method in full.
 3. **Hit selection without run-chaining.**
    - Local maxima in the (frequency, drift) plane, then iterative blanking:
      blank the strongest track, search again.
@@ -201,7 +226,14 @@ hits within ±200 Hz of each other across different files.
    not candidates, only evidence for the OFF test and recurrence.
 5. **Spectral kurtosis per channel** (hyperseti's log-SK, std 2/√N). Flagged
    samples stay in the data, out of the noise statistics, and each hit
-   carries its flagged fraction as an interference sign.
+   carries its flagged fraction as a recorded sign, not a verdict.
+   - With only 16 spectra a look, SK is noisy (2/√16 = 0.5); its false-flag
+     rate on real noise is measured before it is used.
+   - A steady tone has low SK, so a two-sided flag would mark the very
+     signal being searched for. Only the high side counts as an
+     interference sign, and the injection tests (here and in Phase 6) run
+     with SK flagging on, so its effect on planted signals is measured, not
+     assumed.
 6. **Drift range:** ±4 Hz/s stays. Earth's own motion gives at most about
    0.36 Hz/s at 2.7 GHz, and Li et al. 2023 put 99% of plausible signals for
    a Kepler-like star within about 1.2 Hz/s here. Completeness is reported
@@ -212,8 +244,11 @@ hits within ±200 Hz of each other across different files.
 - the reference slices give the same strong hits as before (2267.509 MHz
   tone, burst at 2266.79–2266.91 MHz);
 - planted smeared signals at 1 and 4 Hz/s are found at a stated, measured
-  rate;
-- a quiet slice gives no false hits at the cut.
+  rate, and the desmearing method is chosen;
+- the false-hit rate at the cut is measured on signal-free data from
+  several blocks and bands (the reference looks time-shuffled or
+  frequency-flipped, and quiet slices elsewhere), and stated as a rate per
+  block with its interval, not as "none".
 
 ### Phase 4: a stronger cadence test
 
@@ -253,8 +288,20 @@ hits within ±200 Hz of each other across different files.
 
 Each candidate is run through these checks in order. Every result is stored
 in `checks` with its evidence; no check deletes a candidate, they score it.
-The verdict is "interference (named reason)", "unexplained, weak", or
-"unexplained, strong".
+Each check's result has one of three strengths, kept apart:
+
+- **shown:** the same signal is demonstrably elsewhere: in an OFF look of
+  this cadence, or matched in frequency, drift and shape at another target
+  close in time;
+- **indicated:** a strong sign short of proof (a known band, zero drift, a
+  frequency match in another session months away);
+- **coincidence possible:** a relation (harmonic, intermodulation,
+  frequency match) whose chance rate, given how many hits there are, is not
+  small. The chance rate is computed and recorded with it.
+
+The verdict is "interference (shown, named reason)", "likely interference
+(indicated, named reasons)", "unexplained, weak", or "unexplained, strong".
+Only a "shown" result makes "interference" on its own.
 
 | # | Check | From |
 |---|---|---|
@@ -263,15 +310,15 @@ The verdict is "interference (named reason)", "unexplained, weak", or
 | 3 | Known Green Bank interference bands: GPS, GLONASS, Iridium, Inmarsat, satellite radio, the notch filters, cellular near 1930 MHz (Price 2020, Margot 2021); a weight, not a verdict | blc1 step 3, SETI@home |
 | 4 | Zero or very low drift (below one drift step) | UCLA, SonATA |
 | 5 | Drift against Earth's expected: rotation and orbit at Green Bank for this star, hour angle and frequency; observed minus expected recorded | blc1 steps 4–5 |
-| 6 | Recurrence: any hit within about 100 Hz (plus drift × time apart) in a look at a different target, any session, means interference; the same target in another session is carried forward as support | SonATA, blc1 step 6 |
+| 6 | Recurrence: hits within about 100 Hz (plus drift × time apart) in looks at other targets. "Shown" only within the same session or days of it, with the drift agreeing too; further apart in time, "indicated", with the chance of a match at that hit density recorded. The same target in another session is carried forward as support | SonATA, blc1 step 6 |
 | 7 | Look-alikes in the same cadence: hits with the same normalised drift (and its mirror); if they show in OFF looks, the candidate inherits their verdict | blc1 step 7 |
-| 8 | Harmonics and intermodulation: n × f₀ within 1 kHz; spacings that are integer multiples of common clocks (2.000004, 10, 15, 16, 25, 30, 100, 125, 128, 133.33 MHz); a·f₁ ± b·f₂ against strong zero-drift hits | blc1 §4.4 |
+| 8 | Harmonics and intermodulation: n × f₀ within 1 kHz; spacings that are integer multiples of common clocks (2.000004, 10, 15, 16, 25, 30, 100, 125, 128, 133.33 MHz); a·f₁ ± b·f₂ against strong zero-drift hits. Each match carries the chance of finding one by accident among that many hits (from shuffled frequencies), and is "coincidence possible" unless that chance is small | blc1 §4.4 |
 | 9 | Crowding: hits per MHz per hour around the candidate against the band's median | SETI@home, Ma |
-| 10 | Report: waterfalls of all six looks around the track, the stamp, every check's evidence, the blc1 10-step checklist marked done or not, a Rio 2.0 score | blc1, Rio 2.0 |
+| 10 | Report: waterfalls of all six looks around the track, the stamp, every check's evidence, and the blc1 10-step checklist with each step marked automated, reviewed by hand, not possible from archive data (re-observation: the project has no telescope), or awaiting follow-up. A Rio 2.0 assessment only for an "unexplained, strong" candidate, made by hand | blc1, Rio 2.0 |
 
 - **Recurrence needs other data.** The OFF looks of this cadence point at
   other stars, so the same session's own OFF looks are the first "other
-  target". After that, other sessions and targets on the archive (Phase 8)
+  target". After that, other sessions and targets on the archive (Phase 9)
   grow the history. There is no public machine-readable Green Bank
   interference list; the archive itself becomes this project's list.
 - **Stamps, not instead of hits:** a small time–frequency cut of all six
@@ -291,6 +338,10 @@ whole pipeline.
     `doppler_smearing`, sub-stepped);
   - a sinc² channel response;
   - a random position within the channel.
+- **Strength set independently of the search:** each signal's power is set
+  per channel per spectrum against the noise of the raw spectra around it
+  (not the drift-summed SNR the search reports), and also given in Jy from
+  the SEFD, so the detector is not measured with its own ruler.
 - **Through everything:**
   - the same signal planted in all three ON looks at its drift-consistent
     frequency, none in the OFF looks;
@@ -303,7 +354,9 @@ whole pipeline.
   - SNR;
   - drift (0–0.15, 0.15–0.5, 0.5–1, 1–2, 2–4 Hz/s);
   - position in the coarse channel (edges, DC bin);
-  - with the loss at each stage (search, cadence, each check).
+  - with the loss at each stage (search, cadence, each check);
+  - every rate with its 95% binomial (Wilson) interval and its number of
+    trials; at least 100 trials in each bin quoted.
 - **Checked against setigen** on one saved slice, once, to confirm the
   planted signals match its output.
 - **turboSETI comparison pinned:** version 2.3.2, with its known open bugs
@@ -312,10 +365,29 @@ whole pipeline.
   WSL if it does not install on Windows.
 
 **Done when:** a completeness table by SNR × drift is in `docs/seti.md`,
-measured on the reference cadence through the whole pipeline, replacing the
-single-look table.
+measured on the reference cadence through the whole pipeline, with
+intervals, replacing the single-look table.
 
-### Phase 7: the result
+### Phase 7: validation on real signals
+
+Planted signals test the pipeline against the model of a signal; real
+transmissions test it against what the model leaves out. Before any result
+is written:
+
+1. **A known spacecraft:** Voyager 1 (Enriquez 2017's check). The file is
+   public (checked 8 Nov 2026):
+   `blpd0.ssl.berkeley.edu/Voyager_data/Voyager1.single_coarse.fine_res.h5`,
+   one coarse channel, 50 MB. Found at the published frequency and drift,
+   with its sidebands, and its SNR set against turboSETI's on the same file.
+2. **A published result reproduced:** one star of Price et al. 2020 at
+   S-band, comparing hits and events to theirs. Wanted before the result;
+   if it cannot be done (data or their hit list not public), the report
+   says so among its limitations.
+
+**Done when:** Voyager 1 is recovered and written up in `docs/seti.md`, and
+the Price reproduction is done or its absence recorded.
+
+### Phase 8: the result
 
 `seti.py report TARGET SESSION` writes `docs/results/TARGET-SESSION.md`
 stating everything Section 5 of the sensitivity notes lists:
@@ -333,8 +405,11 @@ stating everything Section 5 of the sensitivity notes lists:
   - completeness by SNR and drift, through the whole pipeline;
   - S_min and EIRP_min at the cut and at 50% and 90% completeness, with the
     1 Hz transmitter width stated;
-  - CWTFM, and the limit on the fraction of such stars with a transmitter,
-    including efficiency (Margot 2023's form).
+  - CWTFM, for comparison with published searches only. No limit on the
+    fraction of stars with transmitters: for one star, Margot 2023's form
+    gives at best 0.95/(η·D) at 95% confidence, which says nothing. That
+    waits for a defined sample of many stars (Phase 9).
+- **Validation:** Phase 7's results, and each check not done.
 - **What it found:** hit counts at each stage, every candidate and its
   disposition.
 - **How:** git commit, library versions.
@@ -345,23 +420,19 @@ stating everything Section 5 of the sensitivity notes lists:
 **Done when:** the Tabby's star 2017 report exists from a complete sweep, and
 a second person could repeat it from the report alone.
 
-### Phase 8: beyond one cadence
+### Phase 9: beyond one cadence
 
 In order of value:
 
-1. **Validate on a known signal:** Voyager 1 or another spacecraft in the
-   open archive (Enriquez 2017's check), found with the right drift. Whether
-   the file is public needs checking.
-2. **Reproduce a published result:** one star of Price et al. 2020 at S-band,
-   comparing hits and events to theirs.
-3. **Grow the interference history:** the OFF looks of other sessions near in
+1. **Grow the interference history:** the OFF looks of other sessions near in
    time, searched in the same bands, feeding check 6.
-4. **More targets:** the other Tabby sessions (2016, 2018: no full cadence
+2. **More targets:** the other Tabby sessions (2016, 2018: no full cadence
    listed, still useful for recurrence); then the Exotica catalogue's
-   anomalies, TESS and Kepler targets with published BL searches.
-5. **The `.0002` product** (2.86 kHz × 1.07 s) for drifts beyond ±4 Hz/s and
+   anomalies, TESS and Kepler targets with published BL searches. A
+   defined sample of many stars is what a population limit needs.
+3. **The `.0002` product** (2.86 kHz × 1.07 s) for drifts beyond ±4 Hz/s and
    short signals: a separate search, specified when this one is done.
-6. **An ML post-filter on stamps** (Ma et al.'s method), only once there are
+4. **An ML post-filter on stamps** (Ma et al.'s method), only once there are
    enough labelled hits in the store to train on.
 
 ## 4. Engineering throughout
@@ -375,16 +446,18 @@ In order of value:
   - `data/logs/sweep.log` (rotating), one line per block: bytes, fetch and
     search seconds, counts;
   - a lock file stops two sweeps running at once.
-- **Unattended runs:**
-  - a Windows scheduled task for overnight sweeps (`schtasks`, "run whether
-    logged on or not", the PC kept awake);
-  - with Phase 1 a full cadence is about 2–2.5 hours.
+- **Unattended runs (optional; decision 1 below):**
+  - if wanted, a Windows scheduled task for overnight sweeps (`schtasks`,
+    "run whether logged on or not", the PC kept awake); the sweep does not
+    depend on it;
+  - with Phase 1 a full cadence is estimated at 2–2.5 hours.
 - **Checks kept short:**
   - a self-check command of a few seconds on tiny synthetic arrays;
   - what it covers: a planted tone found at the right drift; `judge`'s
     labels; channel arithmetic; the direct chunk decode matching h5py; the
     new search matching the old on the reference block;
-  - no long test suites, no CI.
+  - no long test suites. No CI is planned now; a lint-and-self-check job
+    on GitHub can be added later if it earns its place.
 - **Politeness:**
   - at most 6–8 concurrent requests, the User-Agent kept, back-off on errors;
   - Lebofsky et al. 2019 cited in the README;
@@ -406,8 +479,9 @@ In order of value:
 | 4 Cadence test | 3 | medium |
 | 5 Vetting | 2, 4 | large |
 | 6 Completeness | 3, 4, 5 | medium |
-| 7 Result | 6 | small |
-| 8 Beyond | 7 | open-ended |
+| 7 Validation | 3, 4 | small to medium |
+| 8 Result | 6, 7 | small |
+| 9 Beyond | 8 | open-ended |
 
 The sweep should not be run further until Phases 1–2 are in: every block
 searched now loses its hits and takes 40 times longer.
@@ -419,5 +493,5 @@ searched now loses its hits and takes 40 times longer.
    to them first is an option.
 2. **The self-check command** (a few seconds) in place of no checks at all.
 3. **Whether a result is to be published** (diary, arXiv note, or a message
-   to Breakthrough Listen) once Phase 7 gives one; it changes how much
-   Phase 6 has to cover.
+   to Breakthrough Listen) once Phase 8 gives one; it changes how much
+   Phases 6 and 7 have to cover.
