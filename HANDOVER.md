@@ -90,6 +90,14 @@ python3 -m venv --system-site-packages ~/.local/share/signalsearchyoke/seti-venv
 ~/.local/share/signalsearchyoke/seti-venv/bin/pip install turbo_seti
 ```
 
+On Windows the default place is
+`%LOCALAPPDATA%\signalsearchyoke\seti-venv\Scripts\python.exe`:
+
+```
+py -3 -m venv $env:LOCALAPPDATA\signalsearchyoke\seti-venv
+& "$env:LOCALAPPDATA\signalsearchyoke\seti-venv\Scripts\python.exe" -m pip install turbo_seti
+```
+
 `SSY_TURBOSETI_PYTHON` names another python. On the laptop where this was
 built, turboSETI is in `~/.local/share/telescopeyoke/seti-venv` (the old
 name); the desktop has no turboSETI environment.
@@ -135,6 +143,12 @@ name); the desktop has no turboSETI environment.
   vCPUs at 2.0 GHz, 7.7 GB RAM with no swap, 221 GB free SSD, Ubuntu
   24.04. It builds and serves ryanclinton.uk and runs sungrazeryoke's
   comet hunt.
+
+- **Windows PC** (`C:\Projects\SignalSearchYoke`, set up 8 November
+  2026): a clone of the GitHub repository with the laptop's `data/`
+  copied in; Python 3.12 in `.venv` with the four requirements from
+  pip. `seti.py find` and `check.py` run there. The laptop is
+  `ssh laptop` from it. No turboSETI environment yet.
 
 ## GitHub
 

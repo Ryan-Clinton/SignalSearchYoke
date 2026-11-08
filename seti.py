@@ -585,9 +585,14 @@ def inject(path, snrs=INJECT_SNRS, count=INJECT_COUNT, seed=0, say=print, read=r
 # turboSETI (github.com/UCBerkeleySETI/turbo_seti) is Breakthrough Listen's
 # own narrowband search. It is not an Ubuntu package, so it lives in its own
 # environment that sees the system's h5py;
-# TURBOSETI_PYTHON is that environment's python.
-TURBOSETI_PYTHON = Path(os.environ.get("SSY_TURBOSETI_PYTHON",
-                                       Path.home() / ".local/share/signalsearchyoke/seti-venv/bin/python"))
+# TURBOSETI_PYTHON is that environment's python (a venv's layout differs on
+# Windows: %LOCALAPPDATA%\signalsearchyoke\seti-venv\Scripts\python.exe).
+if os.name == "nt":
+    _TURBO_VENV = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData/Local")) / "signalsearchyoke/seti-venv"
+    _TURBO_DEFAULT = _TURBO_VENV / "Scripts/python.exe"
+else:
+    _TURBO_DEFAULT = Path.home() / ".local/share/signalsearchyoke/seti-venv/bin/python"
+TURBOSETI_PYTHON = Path(os.environ.get("SSY_TURBOSETI_PYTHON", _TURBO_DEFAULT))
 _TURBO = """
 import sys
 from turbo_seti.find_doppler.find_doppler import FindDoppler
@@ -610,16 +615,17 @@ def read_dat(text):
 def turboseti(path, run_it=subprocess.run):
     """turboSETI's hits on a slice file, at the same limits as ours."""
     if not TURBOSETI_PYTHON.exists():
-        raise yoke.Refusal("INVALID_REQUEST", f"turboSETI is not installed: python3 -m venv "
+        python = "py -3" if os.name == "nt" else "python3"
+        raise yoke.Refusal("INVALID_REQUEST", f"turboSETI is not installed: {python} -m venv "
                                 f"--system-site-packages {TURBOSETI_PYTHON.parent.parent} && "
-                                f"{TURBOSETI_PYTHON.parent}/pip install turbo_seti")
+                                f"{TURBOSETI_PYTHON} -m pip install turbo_seti")
     with tempfile.TemporaryDirectory() as out:
         done = run_it([str(TURBOSETI_PYTHON), "-c", _TURBO, str(path), str(MAX_DRIFT), str(SNR_MIN), out],
                       capture_output=True, text=True, timeout=3600)
         if done.returncode:
             raise yoke.Refusal("INTERNAL_ERROR", f"turboSETI failed on {path}: {done.stderr.strip()[-400:]}")
         dat = next(Path(out).glob("*.dat"), None)
-        return read_dat(dat.read_text()) if dat else []
+        return read_dat(dat.read_text(encoding="utf-8", errors="replace")) if dat else []
 
 
 def compare(ours, theirs, width_hz, seconds):
