@@ -12,10 +12,27 @@ the Green Bank Telescope, Parkes and others in cadences: three five-minute
 looks at the target, each followed by a look at another star (ON, OFF, ON,
 OFF, ON, OFF). The finest product of each look, `.gpuspec.0000.h5`, splits
 the band into channels about 2.8 Hz wide, one spectrum every 18 seconds,
-and is about 15 GB. The files are HDF5, stored in blocks and packed with
-bitshuffle, so `seti.py` reads only the blocks of the slice asked for, over
+and is about 15 GB. The files are HDF5, stored in chunks of one spectrum
+by one coarse channel (1,048,576 channels, about 3.1 MB packed) with
+bitshuffle, so `seti.py` reads only the chunks of the slice asked for, over
 the web with HTTP range requests (it needs h5py and hdf5plugin:
 `requirements.txt`, or Ubuntu's `python3-h5py` and `python3-hdf5plugin`).
+
+How it reads (`reading.py`, 8 November 2026):
+
+- Once per file, the place of every chunk is read from the file's own
+  HDF5 index (h5py's `chunk_iter`, through a 64 KB block cache: 87
+  requests, 17 s) and kept in `data/index/`, checked against the file's
+  ETag each run.
+- A slice's chunks are then fetched by their byte ranges, all the looks'
+  at once, and decoded in memory by the same bitshuffle filter: the values
+  are bit-identical to h5py's (checked on all 16 × 1,048,575 values of
+  block 153 of scan 31).
+- Every request goes through a kept-alive session (0.165 s a request
+  against 0.9 s with a fresh TLS handshake each), retried with back-off on
+  429 and 5xx, with at most `--threads` requests in flight (6 by default,
+  never more than 8). One look's block: 8.5 s, 50 MB, 16 requests, where
+  the old 4 MB read buffer moved 147 MB in 35 requests in 91 s.
 
 ## The commands
 
@@ -28,10 +45,15 @@ the web with HTTP range requests (it needs h5py and hdf5plugin:
   and gives the `cadence` line for a whole cadence.
 - `search` sums each look's spectra along every drift line up to 4 Hz a
   second either way (a transmitter on a turning, orbiting planet drifts)
-  and keeps lines 10 times above the noise (turboSETI's default). The
-  band's smooth shape is taken out first and the noise measured robustly
-  (median and median absolute deviation), so the band's edges and a few
-  bright signals do not make hits.
+  and keeps lines 10 times above the noise. The band's smooth shape is
+  taken out first and the noise measured robustly (median and median
+  absolute deviation), so the band's edges and a few bright signals do not
+  make hits. 10 is turboSETI's default number, but not the same threshold:
+  turboSETI's noise estimate runs high (Choza et al. 2024 measured its
+  "SNR 10" at about 33 in true noise on their data), and this search's
+  per-spectrum noise divided by √16 is not true noise either. The two
+  scales are to be measured against each other (docs/overhaul.md, Phase 3);
+  until then no figure here is on the published scale.
 - `cadence` follows each hit of the first ON look to where its drift puts
   it in the later looks. Found in every ON look and no OFF look, it is a
   candidate; seen in any OFF look, interference; missing from an ON look,
@@ -53,10 +75,71 @@ these targets). Every candidate examined so far has turned out to be ours.
 cadence N blocks further than the runs before got, one block at a time:
 each block is one chunk of the files (one coarse channel of 1,048,576
 channels, 2.93 MHz), so a block is read in the fewest pieces. Tabby's
-25 May 2017 cadence is 308 blocks, 1818 to 2721 MHz. Each block's answer
-is kept (`data/sweeps/TARGET-SESSION.json`), so the band is covered over
-many runs, and every candidate found in any block is listed with
-it.
+25 May 2017 cadence is 308 blocks, 1818 to 2721 MHz.
+
+- **Every hit is kept** (8 November 2026), in the hit store
+  `data/ssy.sqlite` (`store.py`): every hit of all six looks, not only the
+  candidates, with its frequency at the start and end of the look, drift
+  and its error, SNR, power and noise in the file's units, width, smear
+  (channels crossed in one spectrum) and whether it sits near a coarse
+  channel's end or middle; every cadence result with the hit it matched in
+  each look; the file, ETag and header of each look; and for each run the
+  code's commit, the libraries and every search parameter. One transaction
+  a block, so a block is in the store whole or not at all, and the
+  `blocks` table says where the next run starts. Rejected hits are the
+  evidence later checks (recurrence, look-alikes) work from.
+- **A readable record** is written from the store after each run
+  (`data/sweeps/TARGET-SESSION.json`): each block's counts and candidates,
+  which `check.py` reads. The counts of the 12 blocks searched before the
+  store kept hits are carried in it as `before_hit_store`.
+- **The next block is fetched while this one is searched**, and the six
+  looks are searched side by side. Each block's bytes, fetch and search
+  seconds, CPU time and peak memory go to `data/logs/sweep.log`. A lock
+  file (`data/sweep.lock`) stops two sweeps running at once.
+- **The search sums in float32, a tile of the band at a time**: on the
+  reference block (below) its hits and cadence labels are the same as the
+  old np.roll search's, to the last figure kept, at about 4 s a look
+  against 39 s.
+
+## The reference block, and the speed (8 November 2026)
+
+**The reference.** Block 153 of the 2017 cadence (2266.699 to 2269.629 MHz,
+the slice benchmarked against turboSETI, widened to its whole coarse
+channel), all six looks, saved in `data/reference/` (67 MB each; the
+URLs in `reference.json`). The old search's answer on it is kept in
+`baseline.json`, stamped with its commit (3cfeb68): hits per look 4, 2,
+2, 1, 1, 2; four events, the 2267.509 MHz tone as interference and three
+unconfirmed. Every change to the search is checked against it offline.
+
+**The new search on it:** every hit the same (channel, frequency, drift,
+SNR to 0.1, width) in all six looks, and the four events the same, at
+4.2 s a look against 39 s. The band-shape step (`flatten`) is the old
+one's values exactly, done block-wise in one go (1.1 s against 1.7 s).
+
+**A sustained run** (`sweep --blocks 11 --threads 6`, blocks 1 to 11 of
+the cadence, 8 November 2026):
+
+| | per block |
+|---|---|
+| moved over the web | 296 to 312 MB (the data; 880 MB with the old reader) |
+| fetch, six looks | 16.5 to 19.9 s, hidden behind the last block's search |
+| search, six looks side by side | 18.9 to 24.0 s |
+| each block, end to end | 21.6 s mean after the first (38.5 s, nothing to overlap) |
+| CPU | about 100 s a block, about 5 of the 16 cores |
+| peak memory | 4.2 GB |
+
+The run is limited by the search, not the network. At 4 requests in
+flight the fetch took 19.6 to 21.7 s, at 8 16.2 to 17.3 s (3 blocks
+each): 6 stays the default, as 8 gains nothing a search-bound run can
+use. The 308 blocks of the cadence would take about 1 h 50 min; that
+estimate is from these 18 blocks, not yet a whole cadence.
+
+**The same answers as before.** The 12 blocks the old sweep had searched
+(1818.46 to 1853.61 MHz) were searched again into the hit store: every
+block's counts the same as recorded (0 candidates, 11 interference, 1
+unconfirmed), now with every hit kept: 73 hits in the six looks. One query
+finds hits within 200 Hz of each other in different looks (140 pairs; the
+first is a steady tone at 1820.000 MHz in all six: interference).
 
 ## Checked against turboSETI
 
@@ -93,8 +176,9 @@ burst it keeps 51 separate hits where turboSETI keeps 5: turboSETI
 folds a burst 110 kHz wide into fewer hits, and on the brightest the
 two drifts differ by about 0.07 Hz/s (more than the two steps the
 comparison allows). The whole cadence of that slice (all six looks,
-880 MB read in 23 minutes) gave no candidate: 13 hits of the first ON
-look were in an OFF look too, and 98 were not in every ON look.
+880 MB read in 23 minutes on the laptop: the old reader moved about three
+times the 300 MB of data) gave no candidate: 13 hits of the first ON look
+were in an OFF look too, and 98 were not in every ON look.
 
 ## Is the search right?
 
@@ -114,6 +198,15 @@ the OFF look of Tabby's 2017 cadence, scan 32, 2266.75 to 2269.60 MHz,
 The search's cut is SNR 10, so a signal at the cut is found about a
 third of the time, as noise pushes it either side; from SNR 15 almost
 all are found, and none of the 240 runs made a false hit.
+
+**This table overstates what is found above about 0.15 Hz/s** (found
+8 November 2026). `plant` puts each signal's whole power in one channel a
+spectrum, whatever its drift; a real signal drifting faster than one
+channel per spectrum (2.79 Hz / 18.25 s ≈ 0.153 Hz/s) spreads its power
+over every channel it crosses within the spectrum, about 24 at 3.6 Hz/s,
+and the search, summing one channel a spectrum, collects a fraction of
+it. The table holds for slow drifts only; Phases 3 and 6 of
+docs/overhaul.md measure it properly.
 
 **Against turboSETI** after the changes of dd1a763 (noise measured
 block by block, one hit per run of bright channels, the ends masked):

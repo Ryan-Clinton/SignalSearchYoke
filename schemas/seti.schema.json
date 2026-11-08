@@ -341,6 +341,14 @@
         ]
       }
     },
+    "store": {
+      "type": "string",
+      "description": "sweep: the hit store (SQLite) every hit and cadence result of the run went into."
+    },
+    "run_id": {
+      "type": "integer",
+      "description": "sweep: this run's row in the store's runs table."
+    },
     "candidates_so_far": {
       "type": "array",
       "items": {

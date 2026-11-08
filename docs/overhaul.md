@@ -129,6 +129,11 @@ and kept hits.
 **Done when:** the reference slices and baseline output are on disk, and
 `provenance()` lists all three libraries.
 
+**Done, 8 November 2026:** block 153 (2266.699–2269.629 MHz, the
+benchmarked slice's whole coarse channel) in `data/reference/`, the old
+search's hits and events in `baseline.json`; `provenance()` lists numpy,
+h5py, hdf5plugin, requests and HDF5; sweep records are stamped.
+
 ### Phase 1: fast, polite reading
 
 1. **Session and buffer:** `Remote` uses one `requests.Session` with urllib3
@@ -157,6 +162,21 @@ and kept hits.
   and peak memory, and is repeated at 4, 6 and 8 threads to pick the
   count;
 - `find()` results are cached per run.
+
+**Done, 8 November 2026** (`reading.py`; details in `docs/seti.md`):
+
+- direct reads bit-identical to h5py on all of block 153 of scan 31;
+- the reference block's hits and events identical to the baseline, not
+  merely within rounding; 4.2 s a look against 39 s. The float32 sums are
+  done a cache-sized tile at a time: across the whole band at once they
+  were memory-bound, and six looks in threads took no less time than in
+  turn;
+- 11 consecutive blocks averaged 21.6 s after the first (fetch 17–20 s,
+  hidden; search 19–24 s; about 5 cores; 4.2 GB peak); at 4 and 8
+  threads the fetch took about 21 s and 17 s, so the run is search-bound
+  and 6 stays the default;
+- the cadence's six files are kept in the store, so a sweep after the
+  first asks the archive nothing but each file's ETag.
 
 ### Phase 2: the hit store
 
@@ -190,6 +210,15 @@ export for comparison.
 
 **Done when:** a sweep of 5 blocks fills all tables, and one SQL query lists
 hits within ±200 Hz of each other across different files.
+
+**Done, 8 November 2026** (`store.py`): the sweep fills `runs`, `files`,
+`blocks`, `hits`, `events` (and `event_hits`, linking each event to the
+hit it matched in each look); `inject` fills `injections` (240 rows from
+one run); `check.py` writes `checks`, empty until there is a candidate.
+The 12 old blocks were searched again with the same counts as before, and
+the ±200 Hz query finds 140 pairs across files. `power`, `noise` and the
+flags are filled; `flagged_fraction` waits for Phase 3's spectral
+kurtosis.
 
 ### Phase 3: a correct search
 

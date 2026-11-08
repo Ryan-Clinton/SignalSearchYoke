@@ -21,9 +21,11 @@ import argparse
 import json
 from datetime import datetime, timezone
 
+import store
 import yoke
 
 REPORTS = yoke.ROOT / "docs" / "leads"
+CHECK_VERSION = "1"
 
 # Bands satellites and the ground transmit in (ITU Radio Regulations,
 # Article 5), MHz: a hit inside one is most likely one of them.
@@ -109,13 +111,19 @@ def run(args, say=print):
     taken = {} if args.all else done()
     fresh = [lead for lead in leads() if lead_id(lead) not in taken]
     out = []
+    db = store.connect() if fresh else None
     for lead in fresh:
         r = check(lead)
         yoke.write(records_dir() / f"{r['lead']}.json", r)
+        store.save_check(db, r["lead"], "bands and zero drift", r["verdict"],
+                         {"band": r["band"], "signs": r["likely_because"]}, CHECK_VERSION, event_id=lead.get("event_id"),
+                         strength="indicated" if r["likely_because"] else None)
         REPORTS.mkdir(parents=True, exist_ok=True)
         (REPORTS / f"{r['lead']}.md").write_text(report(r), encoding="utf-8")
         say(f"{r['star']} {r['frequency_mhz']:.6f} MHz: {r['verdict']}")
         out.append(r)
+    if db:
+        db.close()
     if not fresh:
         say("No candidate waiting: every one in the sweeps has been looked into.")
     return {"checked": out, "candidates": len(leads())}

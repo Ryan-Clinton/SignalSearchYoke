@@ -86,11 +86,18 @@ def provenance(record_version=1):
     except (OSError, subprocess.SubprocessError):
         sha, changed = None, None
     libraries = {}
-    for name in ("numpy", "h5py", "hdf5plugin"):
+    for name in ("numpy", "h5py", "hdf5plugin", "requests"):
         try:
-            libraries[name] = __import__(name).__version__
+            module = __import__(name)
+            # hdf5plugin has no __version__: its version is hdf5plugin.version
+            libraries[name] = str(getattr(module, "__version__", None) or getattr(module, "version"))
         except (ImportError, AttributeError):
-            pass
+            libraries[name] = None
+    try:
+        import h5py
+        libraries["hdf5"] = h5py.version.hdf5_version
+    except ImportError:
+        pass
     return {"git_commit": sha, "uncommitted_changes": changed, "schema_version": SCHEMA_VERSION,
             "record_version": record_version, "python": platform.python_version(), "libraries": libraries,
             "created_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}

@@ -17,13 +17,15 @@ KIC 8462852.
 | Path | What it is |
 |---|---|
 | `seti.py` | find, search, cadence, sweep, inject, benchmark |
+| `reading.py` | reading the archive's files over the web: chunk index, parallel range requests, retries, the request limit |
+| `store.py` | the hit store, `data/ssy.sqlite`: runs, files, blocks, hits, events, checks, injections |
 | `check.py` | the sweeps' candidates checked for signs of interference |
 | `yoke.py` | the data folder, the `--json` envelope, writing a record whole |
 | `docs/seti.md` | how the search works, and everything measured so far |
 | `docs/overhaul.md` | the plan to bring the search up to the published searches' standard (8 Nov 2026) |
 | `docs/research/` | the research behind it: other pipelines, vetting, sensitivity, speed |
 | `schemas/seti.schema.json` | the shape of `seti.py`'s `--json` answers |
-| `data/` | sweep records and candidate checks, not in git (below) |
+| `data/` | not in git: `ssy.sqlite` (every hit), `sweeps/` (readable records), `index/` (each file's chunk index), `reference/` (block 153 of the 2017 cadence and the old search's answer on it), `logs/`, `checks/` |
 | `docs/leads/` | a report for each candidate `check.py` has looked into (none yet) |
 | `requirements.txt` | numpy, requests, h5py, hdf5plugin |
 
@@ -36,7 +38,7 @@ settings file.
 ./seti.py find KIC8462852                         the target's looks, by session, with the cadence line
 ./seti.py search URL --from 2250 --to 2253        narrowband hits in one look's slice
 ./seti.py cadence ON1 OFF1 ON2 OFF2 ON3 OFF3 --from 2250 --to 2253
-./seti.py sweep KIC8462852 --blocks N             the next N blocks of the target's whole cadence
+./seti.py sweep KIC8462852 --blocks N             the next N blocks of the target's whole cadence (--threads 1-8, default 6)
 ./seti.py inject FILE                             signals planted in a saved slice's noise, counted back
 ./seti.py benchmark FILE...                       saved slices through this search and turboSETI
 ./check.py [--all]                                the sweeps' candidates looked into
@@ -73,8 +75,10 @@ HDF5 file in Breakthrough Listen's layout), for `inject` and
    candidate. In any OFF look: interference. Missing from an ON look:
    unconfirmed.
 3. `sweep`: the target's whole cadence, block by block, continuing where
-   the last run stopped; each block's answer kept in
-   `data/sweeps/TARGET-SESSION.json`, with every candidate found.
+   the last run stopped; every hit of every look and every cadence result
+   kept in `data/ssy.sqlite`, one transaction a block, with a readable
+   record in `data/sweeps/TARGET-SESSION.json`. The next block is fetched
+   while one is searched.
 4. `check.py`: each candidate checked for a frequency in a band
    satellites and ground transmitters use (ITU Radio Regulations,
    Article 5) and for a drift of zero; verdict "likely interference" with
@@ -118,18 +122,27 @@ name); the desktop has no turboSETI environment.
 - **One whole cadence slice** (six looks, 880 MB read in 23 minutes on
   the laptop): no candidate.
 - **The sweep of Tabby's 25 May 2017 cadence** (session AGBT17A_999_68,
-  scans 31 to 36, 308 blocks, 1818-2721 MHz): 12 blocks done,
-  1818.46-1853.61 MHz, last on 6 November 2026 22:26 UTC; 0 candidates,
-  11 interference, 1 unconfirmed. Its record is
+  scans 31 to 36, 308 blocks, 1818-2721 MHz): 18 blocks done,
+  1818.46-1871.19 MHz, on 8 November 2026 into the hit store; 0
+  candidates, 19 interference, 5 unconfirmed, 123 hits kept. The first 12
+  were searched again (they had been searched before the store kept
+  hits) and gave the same counts as before. About 22 s a block on the
+  Windows PC. Every hit is in `data/ssy.sqlite`; the readable record is
   `data/sweeps/KIC8462852-AGBT17A_999_68.json`.
+- **The reference block** (block 153, all six looks) is in
+  `data/reference/`, with the old search's answer; the new search gives
+  the same hits on it, 9× faster.
 - No candidate has been found, so `check.py` has nothing to look into
   yet.
 
 ## The state on 8 November 2026
 
-- The code was run from this folder on the laptop: `./seti.py --help`,
-  and `./check.py` reads the copied sweep record (12 blocks, no
-  candidate waiting).
+- Phases 0 to 2 of [docs/overhaul.md](docs/overhaul.md) are done on the
+  Windows PC: the reference block, fast reading, the hit store. Phase 3
+  (a correct search: true SNR scale, desmearing, hit selection without
+  run-chaining) is next. The search is still the old one in method, so
+  the sweep should not go much further before Phase 3: every block will
+  be searched again then (about 2 hours for the whole cadence).
 - Nothing runs on a timer.
 - SETI has been taken out of telescopeyoke; nothing in this repository
   reads or imports anything from it.
