@@ -1,0 +1,13 @@
+[project]
+name = "signalsearchyoke"
+version = "0.1.0"
+description = "Narrowband radio signals in Breakthrough Listen's open data, with the ON-OFF cadence test"
+requires-python = ">=3.11"
+dependencies = ["numpy", "requests", "h5py>=3.8", "hdf5plugin>=4.0"]
+
+[tool.ruff]
+line-length = 120
+extend-exclude = ["data"]
+
+[tool.ruff.lint]
+select = ["E9", "F"]

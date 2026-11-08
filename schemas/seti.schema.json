@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/Ryan-Clinton/telescopeyoke/schemas/seti.schema.json",
+  "$id": "https://github.com/Ryan-Clinton/SignalSearchYoke/schemas/seti.schema.json",
   "title": "SETI",
   "description": "data of: seti.py find TARGET --json (Breakthrough Listen's open-data looks at a target, by session, with any OFF looks between); seti.py search LOOK --from MHZ --to MHZ --json (the narrowband hits in one look's slice); seti.py cadence ON OFF ON OFF ON OFF --from --to --json (each hit of the first ON look labelled candidate, interference or unconfirmed). A candidate is something to check against known interference, never a signal from anyone. Nothing moves and nothing is written.",
   "type": "object",

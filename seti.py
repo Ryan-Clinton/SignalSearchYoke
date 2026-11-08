@@ -35,8 +35,7 @@ Breakthrough Listen has examined so far has turned out to be ours.
 
 `benchmark FILE...` runs the same slices (saved with --keep) through
 turboSETI, Breakthrough Listen's own search, and sets the hits side by
-side. Nothing here moves the mount or uses the camera; only --keep
-writes, and only the slices.
+side. Only --keep writes slices, and only sweep keeps a record (data/sweeps/).
 """
 import argparse
 import io
@@ -53,9 +52,7 @@ from urllib.parse import unquote
 import numpy as np
 import requests
 
-import config
-import interface
-import records
+import yoke
 
 API = "https://seti.berkeley.edu/opendata/api/query-files"
 FINE = ".gpuspec.0000.h5"       # the finest frequency product of a Green Bank look
@@ -67,7 +64,7 @@ CADENCE_DAYS = 0.06             # OFF looks within this long (about 1.5 hours) o
 MAX_LISTED = 100                # hits or events listed; the counts are of all of them
 TIMEOUT = 120
 READ_BUFFER = 1 << 22           # bytes asked for at a time over the web
-HEADERS = {"User-Agent": "telescopeyoke/0.1 (personal SETI search of Breakthrough Listen open data)"}
+HEADERS = {"User-Agent": "signalsearchyoke/0.1 (personal SETI search of Breakthrough Listen open data)"}
 MJD_UNIX = 40587.0              # the MJD of 1970-01-01
 
 
@@ -191,11 +188,11 @@ class Remote(io.RawIOBase):
         # would be wrong data with no error.
         expected = f"bytes {self.pos}-{end}/"
         if reply.status_code != 206 or not str(reply.headers.get("Content-Range", "")).startswith(expected):
-            raise interface.Refusal("INTERNAL_ERROR", f"{self.url} did not answer the range asked for "
+            raise yoke.Refusal("INTERNAL_ERROR", f"{self.url} did not answer the range asked for "
                                     f"({reply.status_code}, Content-Range {reply.headers.get('Content-Range')!r}).")
         data = reply.content
         if len(data) != end - self.pos + 1:
-            raise interface.Refusal("INTERNAL_ERROR", f"{self.url} sent {len(data)} bytes for a range of "
+            raise yoke.Refusal("INTERNAL_ERROR", f"{self.url} sent {len(data)} bytes for a range of "
                                     f"{end - self.pos + 1}.")
         buffer[:len(data)] = data
         self.pos += len(data)
@@ -208,7 +205,7 @@ def _h5():
         import h5py
         import hdf5plugin  # noqa: F401  (the bitshuffle filter Breakthrough Listen's files are packed with)
     except ImportError:
-        raise interface.Refusal("INVALID_REQUEST", "Reading Breakthrough Listen's files needs h5py and hdf5plugin: "
+        raise yoke.Refusal("INVALID_REQUEST", "Reading Breakthrough Listen's files needs h5py and hdf5plugin: "
                                 "sudo apt install python3-h5py python3-hdf5plugin (or pip install \".[seti]\").")
     return h5py
 
@@ -218,7 +215,7 @@ def channels(fch1, foff, nchans, low, high):
     a, b = sorted(((low - fch1) / foff, (high - fch1) / foff))
     first, last = max(0, int(math.floor(a))), min(nchans, int(math.ceil(b)) + 1)
     if first >= last:
-        raise interface.Refusal("INVALID_REQUEST", f"{low:g} to {high:g} MHz is outside this file's band "
+        raise yoke.Refusal("INVALID_REQUEST", f"{low:g} to {high:g} MHz is outside this file's band "
                                 f"({min(fch1, fch1 + foff * nchans):.3f} to {max(fch1, fch1 + foff * nchans):.3f} MHz).")
     return first, last
 
@@ -429,7 +426,7 @@ def judge(looks):
 def cadence(sources, low, high, say=print, read=read_slice, keep=None):
     """The six looks searched, then judged together."""
     if len(sources) != 6:
-        raise interface.Refusal("INVALID_REQUEST", "A cadence is six looks: ON, OFF, ON, OFF, ON, OFF.")
+        raise yoke.Refusal("INVALID_REQUEST", "A cadence is six looks: ON, OFF, ON, OFF, ON, OFF.")
     scans, looks = [], []
     for k, source in enumerate(sources):
         answer, hits, s = look(source, low, high, say=lambda *_: None, read=read, keep=keep)
@@ -474,18 +471,18 @@ def blocks(source):
 
 
 def sweep_store(target, session):
-    return config.DATA / "cache" / "seti" / f"{target}-{session}.json"
+    return yoke.DATA / "sweeps" / f"{target}-{session}.json"
 
 
 def sweep(target, count=1, say=print, get=requests.get, run_cadence=None, block_list=None):
     """Search the target's first whole cadence `count` blocks further than
     the runs before got, keeping each block's answer, so the whole band is
-    covered over many runs (cloudy days): what is done, and every candidate
+    covered over many runs: what is done, and every candidate
     found so far."""
     found = find(target, get=get, say=lambda *_: None)
     session = next((s for s in found["sessions"] if s["complete"]), None)
     if not session:
-        raise interface.Refusal("INVALID_REQUEST", f"No whole ON-OFF cadence of {target} is listed.")
+        raise yoke.Refusal("INVALID_REQUEST", f"No whole ON-OFF cadence of {target} is listed.")
     pattern = "".join("A" if sc["on"] else "B" for sc in session["scans"])
     urls = [sc["url"] for sc in session["scans"][pattern.index("ABABAB"):][:6]]
     path = sweep_store(target, session["session"])
@@ -502,7 +499,7 @@ def sweep(target, count=1, say=print, get=requests.get, run_cadence=None, block_
                                 "events": [e for e in answer["events"] if e["label"] == "candidate"],
                                 "searched": datetime.now(timezone.utc).isoformat(timespec="seconds")}
         path.parent.mkdir(parents=True, exist_ok=True)
-        records.write(path, kept)
+        yoke.write(path, kept)
         say(f"  block {k + 1} of {len(kept['blocks'])}, {low:.3f} to {high:.3f} MHz: {answer['candidates']} "
             f"candidate(s), {answer['interference']} interference, {answer['unconfirmed']} unconfirmed")
     done = kept["done"]
@@ -587,10 +584,10 @@ def inject(path, snrs=INJECT_SNRS, count=INJECT_COUNT, seed=0, say=print, read=r
 # --- the benchmark: the same slices through turboSETI ----------------------------
 # turboSETI (github.com/UCBerkeleySETI/turbo_seti) is Breakthrough Listen's
 # own narrowband search. It is not an Ubuntu package, so it lives in its own
-# environment that sees the system's h5py (install.sh, the seti extra);
+# environment that sees the system's h5py;
 # TURBOSETI_PYTHON is that environment's python.
-TURBOSETI_PYTHON = Path(os.environ.get("TY_TURBOSETI_PYTHON",
-                                       Path.home() / ".local/share/telescopeyoke/seti-venv/bin/python"))
+TURBOSETI_PYTHON = Path(os.environ.get("SSY_TURBOSETI_PYTHON",
+                                       Path.home() / ".local/share/signalsearchyoke/seti-venv/bin/python"))
 _TURBO = """
 import sys
 from turbo_seti.find_doppler.find_doppler import FindDoppler
@@ -613,14 +610,14 @@ def read_dat(text):
 def turboseti(path, run_it=subprocess.run):
     """turboSETI's hits on a slice file, at the same limits as ours."""
     if not TURBOSETI_PYTHON.exists():
-        raise interface.Refusal("INVALID_REQUEST", f"turboSETI is not installed: python3 -m venv "
+        raise yoke.Refusal("INVALID_REQUEST", f"turboSETI is not installed: python3 -m venv "
                                 f"--system-site-packages {TURBOSETI_PYTHON.parent.parent} && "
                                 f"{TURBOSETI_PYTHON.parent}/pip install turbo_seti")
     with tempfile.TemporaryDirectory() as out:
         done = run_it([str(TURBOSETI_PYTHON), "-c", _TURBO, str(path), str(MAX_DRIFT), str(SNR_MIN), out],
                       capture_output=True, text=True, timeout=3600)
         if done.returncode:
-            raise interface.Refusal("INTERNAL_ERROR", f"turboSETI failed on {path}: {done.stderr.strip()[-400:]}")
+            raise yoke.Refusal("INTERNAL_ERROR", f"turboSETI failed on {path}: {done.stderr.strip()[-400:]}")
         dat = next(Path(out).glob("*.dat"), None)
         return read_dat(dat.read_text()) if dat else []
 
@@ -671,11 +668,11 @@ def benchmark(paths, say=print, turbo=turboseti):
 def run(args, say=print):
     if args.action == "find":
         if len(args.what) != 1:
-            raise interface.Refusal("INVALID_REQUEST", "find takes one target, as Breakthrough Listen names it (KIC8462852).")
+            raise yoke.Refusal("INVALID_REQUEST", "find takes one target, as Breakthrough Listen names it (KIC8462852).")
         return find(args.what[0], say=say)
     if args.action == "sweep":
         if len(args.what) != 1:
-            raise interface.Refusal("INVALID_REQUEST", "sweep takes one target (KIC8462852).")
+            raise yoke.Refusal("INVALID_REQUEST", "sweep takes one target (KIC8462852).")
         return sweep(args.what[0], args.blocks, say=say)
     if args.action == "inject":
         return [inject(p, say=say) for p in args.what][-1] if len(args.what) == 1 else \
@@ -683,11 +680,11 @@ def run(args, say=print):
     if args.action == "benchmark":
         return benchmark(args.what, say=say)
     if args.low is None or args.high is None:
-        raise interface.Refusal("INVALID_REQUEST", "Give the slice: --from MHZ --to MHZ (a few MHz at most: "
+        raise yoke.Refusal("INVALID_REQUEST", "Give the slice: --from MHZ --to MHZ (a few MHz at most: "
                                 "each MHz is about 360,000 channels).")
     if args.action == "search":
         if len(args.what) != 1:
-            raise interface.Refusal("INVALID_REQUEST", "search takes one look: a file here or its URL.")
+            raise yoke.Refusal("INVALID_REQUEST", "search takes one look: a file here or its URL.")
         return look(args.what[0], args.low, args.high, say=say, keep=args.keep)[0]
     return cadence(args.what, args.low, args.high, say=say, keep=args.keep)
 
@@ -702,7 +699,7 @@ def main():
     ap.add_argument("--keep", help="search, cadence: save each slice read in this folder (for benchmark)")
     ap.add_argument("--json", action="store_true", help="answer in JSON")
     args = ap.parse_args()
-    interface.main("seti", lambda: run(args), args.json)
+    yoke.main("seti", lambda: run(args), args.json)
 
 
 if __name__ == "__main__":

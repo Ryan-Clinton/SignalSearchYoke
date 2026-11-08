@@ -3,7 +3,7 @@
 `seti.py` searches Breakthrough Listen's published radio recordings for
 narrowband signals, in the spirit of SETI@home: a slice of the band at a
 time, with the test that tells our own interference from a signal coming
-from the target. It uses no telescope of ours; it runs on cloudy days.
+from the target.
 
 ## What the data are
 
@@ -14,8 +14,8 @@ OFF, ON, OFF). The finest product of each look, `.gpuspec.0000.h5`, splits
 the band into channels about 2.8 Hz wide, one spectrum every 18 seconds,
 and is about 15 GB. The files are HDF5, stored in blocks and packed with
 bitshuffle, so `seti.py` reads only the blocks of the slice asked for, over
-the web with HTTP range requests (it needs `python3-h5py` and
-`python3-hdf5plugin`, in `install.sh`).
+the web with HTTP range requests (it needs h5py and hdf5plugin:
+`requirements.txt`, or Ubuntu's `python3-h5py` and `python3-hdf5plugin`).
 
 ## The commands
 
@@ -54,9 +54,9 @@ cadence N blocks further than the runs before got, one block at a time:
 each block is one chunk of the files (one coarse channel of 1,048,576
 channels, 2.93 MHz), so a block is read in the fewest pieces. Tabby's
 25 May 2017 cadence is 308 blocks, 1818 to 2721 MHz. Each block's answer
-is kept (`cache/seti/TARGET-SESSION.json`), so the band is covered over
-many cloudy days, and every candidate found in any block is listed with
-it. The cloudy-day skill starts a few blocks each time.
+is kept (`data/sweeps/TARGET-SESSION.json`), so the band is covered over
+many runs, and every candidate found in any block is listed with
+it.
 
 ## Checked against turboSETI
 
@@ -67,8 +67,8 @@ and through turboSETI, Breakthrough Listen's own, at the same limits
 (10 times the noise, drifts to 4 Hz/s), and lists what both find and
 what only one does. turboSETI is not an Ubuntu package: it is installed
 in its own environment that sees the system's h5py
-(`python3 -m venv --system-site-packages ~/.local/share/telescopeyoke/seti-venv`,
-then its `pip install turbo_seti`; `TY_TURBOSETI_PYTHON` names another).
+(`python3 -m venv --system-site-packages ~/.local/share/signalsearchyoke/seti-venv`,
+then its `pip install turbo_seti`; `SSY_TURBOSETI_PYTHON` names another).
 
 On a made-up flat band with two tones (3 November 2026) both found both.
 On a sloping band turboSETI found neither: it measures the noise over the
@@ -98,8 +98,7 @@ look were in an OFF look too, and 98 were not in every ON look.
 
 ## Is the search right?
 
-Measured on real data before the sweep is let loose (the cloudy-day
-skill holds it until this section says so).
+Measured on real data before the sweep was let loose.
 
 **Signals planted in real noise** (`./seti.py inject`; 3 November 2026,
 the OFF look of Tabby's 2017 cadence, scan 32, 2266.75 to 2269.60 MHz,
@@ -171,6 +170,4 @@ KIC 8462852 was observed by Green Bank in May 2017, among other times;
 `./seti.py find KIC8462852` lists them. The whole cadence is on 25 May
 2017 (session AGBT17A_999_68, scans 31 to 36: three looks at the star,
 each followed by one at KIC8462852_OFF); the archive files the OFF looks
-under their own name, so `find` reads them from the session's folder. It is the
-same star the telescope watches (`starwatch.py tabby`), so the optical and
-radio searches look at one target.
+under their own name, so `find` reads them from the session's folder.

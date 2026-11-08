@@ -1,0 +1,4 @@
+numpy
+requests
+h5py>=3.8
+hdf5plugin>=4.0
