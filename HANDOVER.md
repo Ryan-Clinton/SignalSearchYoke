@@ -20,6 +20,8 @@ KIC 8462852.
 | `check.py` | the sweeps' candidates checked for signs of interference |
 | `yoke.py` | the data folder, the `--json` envelope, writing a record whole |
 | `docs/seti.md` | how the search works, and everything measured so far |
+| `docs/overhaul.md` | the plan to bring the search up to the published searches' standard (8 Nov 2026) |
+| `docs/research/` | the research behind it: other pipelines, vetting, sensitivity, speed |
 | `schemas/seti.schema.json` | the shape of `seti.py`'s `--json` answers |
 | `data/` | sweep records and candidate checks, not in git (below) |
 | `docs/leads/` | a report for each candidate `check.py` has looked into (none yet) |
