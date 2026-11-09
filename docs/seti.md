@@ -910,8 +910,10 @@ from 2,744 hits; pickles kept nothing with its masks, and 1 window at
 level 2 (3 at level 1) without them. Every window pickles kept holds
 interference events here (OFF S/N 6.0 to 7.4 along the track); with this
 search's tracks blanked, none passes its level 1 (`pipelines.py
-followup`), and in two of them a fast, wide, short band in another ON
-look, outside both drift searches, supplied pickles' second ON look. On
+followup`: track-removal evidence, not a subtraction), and in two of them
+a fast, wide, short band in another ON look (its movement only apparent,
+from two or three spectra; what it is not established), outside both
+drift searches, supplied pickles' second ON look. On
 turboSETI's own statistics 10 of this search's 11 candidates are under its
 cut in every ON look; the eleventh clears it in two ON looks but is
 dropped by its top-hit rule for a larger line 2.1 kHz away. All 11 are

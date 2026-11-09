@@ -124,12 +124,18 @@ with its bands masked (0 kept), 6,424 unmasked (3 at level 1, 1 at level
   interference (OFF S/N 6.0 to 7.4 along the track). Matching by window
   (2.86 kHz) is not matching a signal, so `pipelines.py followup` scores
   each look's window as pickles does, then again with this search's tracks
-  there blanked: all 3 then fail level 1, so those tracks are what lifted
-  them. In the two at 2107 MHz, ON look 2's kurtosis is something else: a
-  band about 64 channels wide, 22-24% over the level, in that look's first
-  two or three spectra only, moving 11 to 29 Hz/s, outside both drift
-  searches. pickles' median test joined it with a track here in ON look 3:
-  two signals, not one in two ON looks.
+  there blanked: all 3 then fail level 1. That is track-removal evidence,
+  not signal subtraction (the median put in their place changes the
+  distribution scored): the tracks are enough to carry each window over
+  level 1, not shown to be all that is in it. In the two at 2107 MHz, ON
+  look 2's kurtosis is something else: a band about 64 channels wide,
+  22-24% over the level, in that look's first two or three spectra only,
+  with an apparent movement of about 11 to 29 Hz/s (approximate, from two
+  or three spectra), outside both drift searches. pickles' median test
+  joined it with a track here in ON look 3: two different features, not
+  one in two ON looks. What the band is (drifting interference, a short
+  wideband burst, the instrument) is not established; it is a target for
+  step 9.
 - turboSETI measured at every candidate on its own statistics (its
   comp_stats over the coarse channel, (sum - median) / stddev), not only
   through the 0.227 scale: 10 are under its cut in every ON look (at most
@@ -174,6 +180,20 @@ So the comparison is done in two parts, each measured on its own:
   the comparison can be read either way. A claim that one pipeline finds
   more holds only where the recovery intervals at matched rates do not
   overlap.
+- **A recovery is a match in frequency and drift both** (±6 Hz, ±0.05
+  Hz/s, the same for every pipeline), never a hit somewhere near the
+  planting. A match that the same block without the planting already had
+  (the same frequency and drift there before) is a false association,
+  counted apart from the recoveries and not as one.
+- **Clean and crowded bands apart:** every rate and recovery is given for
+  the blocks in clean bands and for those in crowded ones (by the band's
+  hit density), as well as together.
+- **pickles by the windows it keeps,** not an SNR cut: its kurtosis score
+  is not a dedoppler detector's. A planting is found by pickles if a
+  window holding it passes level 1 (and, apart, level 2) where the same
+  window without the planting did not; its false windows are counted the
+  same way, per block. It is compared with the others on what each keeps
+  and finds, not on a matched SNR.
 
 **Done when:** a matched-recovery table is in `docs/seti.md`, with each
 pipeline's false-candidate curve, the cut each needed for the chosen rate

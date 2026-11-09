@@ -348,6 +348,9 @@ def other_pipelines(r):
                 "**pickles' windows.** Each look's window scored as pickles scores it (Fisher kurtosis of the "
                 "window's spectra), then again with every track this search found there, shadow hits included, "
                 f"blanked (±{fu['track_half_channels']} channels along each track, set to the look's median). "
+                "This is track-removal evidence, not a subtraction of the signals: the median put in their place "
+                "changes the distribution being scored, so it shows these tracks are enough to carry the window "
+                "over level 1, not that they are all that is in it; the last column is the check on the rest. "
                 "In each picture, left: the window as read; right: the tracks blanked; looks 1 to 6 from the top.",
                 "",
                 "| window (MHz) | level | ON kurtosis | with this search's tracks blanked | level 1 then | "
@@ -368,7 +371,8 @@ def other_pipelines(r):
                     left.append(f"ON look {int(pos) // 2 + 1}: a band about 64 channels wide, up to "
                                 f"{100 * peak:.0f}% over the look's level, in spectra "
                                 + ", ".join(str(x["spectrum"] + 1) for x in strong) + " only"
-                                + (f", moving about {rate:.0f} Hz/s across the window" if rate else "")
+                                + (f", an apparent movement of about {rate:.0f} Hz/s across the window (from "
+                                   f"{len(strong)} spectra, so approximate)" if rate else "")
                                 + (": outside both drift searches (±4 Hz/s)" if rate is None or rate > 4 else ""))
             out.append(f"| {w['f_mhz']:.6f} ([waterfalls](../pipelines/{Path(w['png']).name})) | {w['level']} | "
                        + ", ".join(f"{x:.2f}" for x in ks[0::2]) + " | "
@@ -378,10 +382,11 @@ def other_pipelines(r):
         fails = [w for w in fu["pickles_windows"] if not w["level1_tracks_blanked"]]
         out += ["", f"With this search's tracks blanked, {len(fails)} of the {len(fu['pickles_windows'])} windows "
                 "no longer pass pickles' level 1: the tracks this search found, each called interference here, "
-                "are what lifted them. Where a window was lifted by two things in different ON looks (a track here "
-                "in one, a fast, wide, short band in another), pickles' median test joined two signals that this "
-                "search keeps apart; the fast band is outside what this search, or turboSETI, looks for "
-                "(comparable.md step 9).", ""]
+                "are enough to lift them. Where a window was lifted by two things in different ON looks (a track here "
+                "in one, a fast, wide, short band in another), pickles' median test joined two different features that "
+                "this search keeps apart. What the band is (drifting interference, a short wideband burst, the "
+                "instrument) is not established from two or three spectra; it is outside what this search, or "
+                "turboSETI, looks for, and a target for comparable.md step 9.", ""]
         eq = fu["pickles_equivalence"]
         out += [f"**pickles run as published.** On the blocks with these windows "
                 f"({', '.join(str(e['block']) for e in eq)}), pickles' own pickler_wrapper with nothing supplied "
@@ -404,7 +409,7 @@ def other_pipelines(r):
     out.append(f"Of this search's {len(p['our_candidates'])} candidates, none was kept by either of the others; "
                "pickles masks every one as published, and unmasked none reaches level 1. Of what the others kept, "
                "nothing is a candidate here: each window pickles kept holds tracks this search calls interference"
-               + (", and those tracks are what lift it" if fu and all(not w["level1_tracks_blanked"]
+               + (", and those tracks are enough to lift it" if fu and all(not w["level1_tracks_blanked"]
                                                                        for w in fu["pickles_windows"]) else "")
                + ". This compares the pipelines at their own cuts, far apart in depth; matched depth is step 4.")
     out.append("")
