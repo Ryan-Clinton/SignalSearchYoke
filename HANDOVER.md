@@ -106,7 +106,7 @@ py -3 -m venv $env:LOCALAPPDATA\signalsearchyoke\seti-venv
 
 `SSY_TURBOSETI_PYTHON` names another python. On the laptop where this was
 built, turboSETI is in `~/.local/share/telescopeyoke/seti-venv` (the old
-name); the desktop has no turboSETI environment.
+name); the Windows PC has none yet.
 
 ## Results so far (details in docs/seti.md)
 
@@ -152,18 +152,21 @@ name); the desktop has no turboSETI environment.
 - **Laptop** (where this was built): Intel i7-7700HQ, 4 cores, 22 GB,
   Ubuntu; Python 3.14 with numpy, requests, h5py and hdf5plugin from
   Ubuntu's packages.
-- **Desktop** (`ssh desktop` from the laptop): AMD Ryzen 9 3950X, 16
-  cores, 35 GB; no Python environment with these libraries set up yet.
+- **Windows PC** (the desktop; `ssh desktop` from the laptop), where the
+  project lives and runs now: AMD Ryzen 9 3950X, 16 cores, 40 GB, GTX 1080,
+  Windows 11. `C:\Projects\SignalSearchYoke`, a clone of the GitHub
+  repository with the laptop's `data/` copied in on 8 November 2026;
+  Python 3.12 in `.venv` with the four requirements from pip. Everything
+  above runs there from PowerShell (`.venv\Scripts\python seti.py ...`);
+  the hit store, chunk indexes and reference block are in its `data/`.
+  Other programs there (a llama-server, WSL, Chrome) hold much of its
+  memory commit: on 9 November 2026 a sweep ran out with 5.5 GB of 51 GB
+  commit free; it now peaks at about 1.9 GB.
+  The laptop is `ssh laptop` from it. No turboSETI environment yet.
 - **brokerblitzer**, the always-on server: a KVM VPS, AMD EPYC Milan, 6
   vCPUs at 2.0 GHz, 7.7 GB RAM with no swap, 221 GB free SSD, Ubuntu
   24.04. It builds and serves ryanclinton.uk and runs sungrazeryoke's
   comet hunt.
-
-- **Windows PC** (`C:\Projects\SignalSearchYoke`, set up 8 November
-  2026): a clone of the GitHub repository with the laptop's `data/`
-  copied in; Python 3.12 in `.venv` with the four requirements from
-  pip. `seti.py find` and `check.py` run there. The laptop is
-  `ssh laptop` from it. No turboSETI environment yet.
 
 ## GitHub
 

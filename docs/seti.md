@@ -33,6 +33,10 @@ How it reads (`reading.py`, 8 November 2026):
   429 and 5xx, with at most `--threads` requests in flight (6 by default,
   never more than 8). One look's block: 8.5 s, 50 MB, 16 requests, where
   the old 4 MB read buffer moved 147 MB in 35 requests in 91 s.
+- Every range request carries the index's ETag (`If-Match`), so a file
+  changed on the server mid-run is refused (412) and its index dropped,
+  never read as a mix of two versions. The archive honours it (checked 9
+  November 2026: 206 for the right ETag, 412 for a wrong one).
 
 ## The commands
 
@@ -88,6 +92,21 @@ channels, 2.93 MHz), so a block is read in the fewest pieces. Tabby's
   a block, so a block is in the store whole or not at all, and the
   `blocks` table says where the next run starts. Rejected hits are the
   evidence later checks (recurrence, look-alikes) work from.
+- **A block searched again keeps its history.** Its earlier hits and
+  events are not deleted but marked superseded by the new run, and the
+  checks made on them stay; each new event names the earlier event at the
+  same place and drift it replaces, so a candidate's checks follow it
+  through a re-search. Each run records the search's version
+  (`SEARCH_VERSION` in `seti.py`). The current results are the rows not
+  superseded. (Tested 9 November 2026 on a copy of the store: block 0
+  searched again, its 6 old hits and its event kept as superseded, the new
+  event linked to the old.)
+- **NULL means not measured**, never zero: `flagged_fraction` is NULL
+  until Phase 3's spectral kurtosis, and says nothing about interference
+  until then. `power` and `noise` are in the file's own data units
+  (uncalibrated spectrometer output, not Jy): `noise` one spectrum's
+  robust standard deviation at the hit's channel, `power` SNR × √16 ×
+  noise. Physical units come with Phase 3's calibration.
 - **A readable record** is written from the store after each run
   (`data/sweeps/TARGET-SESSION.json`): each block's counts and candidates,
   which `check.py` reads. The counts of the 12 blocks searched before the
@@ -126,7 +145,7 @@ the cadence, 8 November 2026):
 | search, six looks side by side | 18.9 to 24.0 s |
 | each block, end to end | 21.6 s mean after the first (38.5 s, nothing to overlap) |
 | CPU | about 100 s a block, about 5 of the 16 cores |
-| peak memory | 4.2 GB |
+| peak memory | 4.2 GB (1.9 GB since 9 November: the noise is measured a spectrum at a time) |
 
 The run is limited by the search, not the network. At 4 requests in
 flight the fetch took 19.6 to 21.7 s, at 8 16.2 to 17.3 s (3 blocks

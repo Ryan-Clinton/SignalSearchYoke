@@ -87,10 +87,27 @@ def head(url):
     return int(reply.headers["Content-Length"]), reply.headers.get("ETag", "")
 
 
-def get_range(url, start, end):
-    """Bytes start to end (inclusive) of the file at url, exactly those."""
+class Changed(yoke.Refusal):
+    """The file on the server is no longer the one its index was built from."""
+
+
+def get_range(url, start, end, etag=None):
+    """Bytes start to end (inclusive) of the file at url, exactly those;
+    with `etag`, only from that version of the file. The archive honours
+    If-Match on range requests (412 for another ETag, checked 9 November
+    2026), so chunks of two versions of a file can never be mixed. (Never
+    If-Range: on a mismatch it answers with the whole 15 GB file.)"""
+    headers = {"Range": f"bytes={start}-{end}"}
+    if etag:
+        headers["If-Match"] = etag
     with _gate:
-        reply = session().get(url, headers={"Range": f"bytes={start}-{end}"}, timeout=TIMEOUT)
+        reply = session().get(url, headers=headers, timeout=TIMEOUT)
+    if reply.status_code == 412:
+        index_path(url).unlink(missing_ok=True)
+        with _index_lock:
+            _indexes.pop(url, None)
+        raise Changed("INTERNAL_ERROR", f"{url} has changed on the server since its chunk index was built "
+                                        f"(ETag {etag}); the index is dropped and will be rebuilt on the next run.")
     reply.raise_for_status()
     # Only the bytes asked for will do: a server that ignores the range answers
     # 200 with the file from its start, which read as the slice would be wrong
@@ -113,8 +130,8 @@ class Remote(io.RawIOBase):
     small cache: HDF5's many small index reads cost one request each for a
     new block, not a 4 MB fetch each."""
 
-    def __init__(self, url, size=None):
-        self.url, self.pos, self.fetched, self.requests = url, 0, 0, 0
+    def __init__(self, url, size=None, etag=None):
+        self.url, self.etag, self.pos, self.fetched, self.requests = url, etag, 0, 0, 0
         self.size = size if size is not None else head(url)[0]
         self.cache = OrderedDict()
 
@@ -149,7 +166,7 @@ class Remote(io.RawIOBase):
                 runs.append([b, b])
         for a, z in runs:
             start, end = a * CACHE_BLOCK, min((z + 1) * CACHE_BLOCK, self.size) - 1
-            data = get_range(self.url, start, end)
+            data = get_range(self.url, start, end, self.etag)
             self.fetched += len(data)
             self.requests += 1
             for b in range(a, z + 1):
@@ -199,7 +216,7 @@ def _attr(v):
 def build_index(url, size, etag):
     """Every chunk's place in the file, from its own HDF5 index."""
     h5py = h5()
-    remote = Remote(url, size)
+    remote = Remote(url, size, etag)
     started = time.monotonic()
     with h5py.File(remote, "r") as f:
         data = f["data"]
@@ -308,7 +325,7 @@ def read_many(requests_by_url, threads_hint=None):
 
     def fetch(task):
         url, t, c0, offset, size, mask = task
-        return url, t, c0, get_range(url, offset, offset + size - 1), mask
+        return url, t, c0, get_range(url, offset, offset + size - 1, indexes[url].get("etag")), mask
 
     with ThreadPoolExecutor(max_workers=threads_hint or _gate_size) as pool:
         fetched = list(pool.map(fetch, tasks))

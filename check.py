@@ -116,7 +116,9 @@ def run(args, say=print):
         r = check(lead)
         yoke.write(records_dir() / f"{r['lead']}.json", r)
         store.save_check(db, r["lead"], "bands and zero drift", r["verdict"],
-                         {"band": r["band"], "signs": r["likely_because"]}, CHECK_VERSION, event_id=lead.get("event_id"),
+                         {"band": r["band"], "signs": r["likely_because"],
+                          "supersedes_event_id": lead.get("supersedes_event_id")},
+                         CHECK_VERSION, event_id=lead.get("event_id"),
                          strength="indicated" if r["likely_because"] else None)
         REPORTS.mkdir(parents=True, exist_ok=True)
         (REPORTS / f"{r['lead']}.md").write_text(report(r), encoding="utf-8")

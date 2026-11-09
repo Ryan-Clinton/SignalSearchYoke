@@ -218,7 +218,15 @@ one run); `check.py` writes `checks`, empty until there is a candidate.
 The 12 old blocks were searched again with the same counts as before, and
 the ±200 Hz query finds 140 pairs across files. `power`, `noise` and the
 flags are filled; `flagged_fraction` waits for Phase 3's spectral
-kurtosis.
+kurtosis, and is NULL (not measured), never 0, until then.
+
+**Before Phase 3's re-search (done 9 November 2026):** a re-searched
+block keeps its earlier hits and events, marked superseded by the new run,
+with the checks made on them; each new event links to the one it
+replaces; each run records the search's version. Phase 3 must raise
+`SEARCH_VERSION`. Phase 3 also states `power` and `noise` in physical
+units once the calibration exists; until then they are the file's data
+units, as `store.py` says.
 
 ### Phase 3: a correct search
 

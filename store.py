@@ -6,6 +6,24 @@ targets and sessions, look-alikes, the OFF test below the threshold), so
 none is thrown away. One transaction per block: a block is in the store
 whole, or not at all, and the `blocks` table is the sweep's resume ledger.
 
+A block searched again (a changed search) does not delete its earlier
+hits and events: they are marked `superseded_run` (the run that replaced
+them) and kept, with the checks made on them. The current results are the
+rows whose `superseded_run` is NULL. Each new event names the event it
+replaces (`supersedes_event_id`: the earlier current event at the same
+place and drift), so a check made on a candidate follows it through a
+re-search. Each run records its `search_version`.
+
+NULL means not measured, never zero or false: `flagged_fraction` is NULL
+until the spectral-kurtosis flags exist, and a NULL there says nothing
+about interference. `power` and `noise` are in the file's own data units
+(Breakthrough Listen's uncalibrated spectrometer output, not Jy):
+`noise` is one spectrum's robust standard deviation at the hit's channel
+(1.4826 x the median absolute deviation, the median over the look's
+spectra), and `power` is SNR x sqrt(spectra) x noise, the excess summed
+along the line. They become physical units only with the calibration of
+Phase 3.
+
     sqlite3 data/ssy.sqlite "select * from blocks"
 
 JSON stays for --json answers and the human-readable sweep record.
@@ -18,7 +36,7 @@ from datetime import datetime, timezone
 
 import yoke
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS runs (
@@ -31,7 +49,8 @@ CREATE TABLE IF NOT EXISTS runs (
     host TEXT,
     python TEXT,
     libraries TEXT,               -- JSON: numpy, h5py, hdf5plugin versions
-    params TEXT                   -- JSON: every search parameter
+    params TEXT,                  -- JSON: every search parameter
+    search_version TEXT           -- results of different versions are not comparable
 );
 CREATE TABLE IF NOT EXISTS files (
     file_id INTEGER PRIMARY KEY,
@@ -87,14 +106,15 @@ CREATE TABLE IF NOT EXISTS hits (
     drift_err_hz_s REAL,          -- half a drift step
     drift_norm REAL,              -- drift over frequency, 1/s (x 1e9: nHz/Hz/s)
     snr REAL,
-    power REAL,                   -- raw units summed along the line, over the band shape
-    noise REAL,                   -- raw units, one spectrum, at the channel
+    power REAL,                   -- file's data units: SNR x sqrt(spectra) x noise, the excess along the line
+    noise REAL,                   -- file's data units: one spectrum's robust std at the channel (median over spectra)
     width_channels INTEGER,
     smear REAL,                   -- channels crossed within one spectrum: |drift| x tsamp / channel width
     near_edge INTEGER,            -- within 5% of a coarse channel's end
     near_dc INTEGER,              -- within the drift's reach of a coarse channel's middle
-    flagged_fraction REAL,        -- spectral kurtosis flags (not measured yet)
-    origin TEXT NOT NULL          -- search, shadow, injected
+    flagged_fraction REAL,        -- spectral kurtosis flags; NULL = not measured (not zero)
+    origin TEXT NOT NULL,         -- search, shadow, injected
+    superseded_run INTEGER        -- NULL: current; else the run whose re-search replaced it
 );
 CREATE INDEX IF NOT EXISTS hits_frequency ON hits (f_start_mhz);
 CREATE INDEX IF NOT EXISTS hits_block ON hits (session, block_idx);
@@ -108,7 +128,9 @@ CREATE TABLE IF NOT EXISTS events (
     f_start_mhz REAL,
     drift_hz_s REAL,
     snr REAL,
-    looks TEXT                    -- JSON: per look, found or not, and the matched hit's SNR and drift
+    looks TEXT,                   -- JSON: per look, found or not, and the matched hit's SNR and drift
+    superseded_run INTEGER,       -- NULL: current; else the run whose re-search replaced it
+    supersedes_event_id INTEGER   -- the earlier event at the same place this one replaces
 );
 CREATE INDEX IF NOT EXISTS events_block ON events (session, block_idx);
 CREATE TABLE IF NOT EXISTS event_hits (
@@ -157,22 +179,38 @@ def connect(where=None):
     db.execute("PRAGMA journal_mode=WAL")
     db.execute("PRAGMA foreign_keys=ON")
     db.executescript(SCHEMA)
+    _migrate(db)
     db.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
     return db
+
+
+MIGRATIONS = [("runs", "search_version", "TEXT"), ("hits", "superseded_run", "INTEGER"),
+              ("events", "superseded_run", "INTEGER"), ("events", "supersedes_event_id", "INTEGER")]
+
+
+def _migrate(db):
+    """Columns added since a store was made, added to it; nothing removed."""
+    with db:
+        for table, column, kind in MIGRATIONS:
+            if column not in {r[1] for r in db.execute(f"PRAGMA table_info({table})")}:
+                db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {kind}")
+        db.execute("CREATE INDEX IF NOT EXISTS hits_current ON hits (session, block_idx, superseded_run)")
+        db.execute("CREATE INDEX IF NOT EXISTS events_current ON events (session, block_idx, superseded_run)")
 
 
 def now():
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def start_run(db, command, params):
+def start_run(db, command, params, search_version=None):
     p = yoke.provenance()
     with db:
         cur = db.execute(
-            "INSERT INTO runs (started_utc, command, git_commit, uncommitted_changes, host, python, libraries, params)"
-            " VALUES (?,?,?,?,?,?,?,?)",
+            "INSERT INTO runs (started_utc, command, git_commit, uncommitted_changes, host, python, libraries, params,"
+            " search_version) VALUES (?,?,?,?,?,?,?,?,?)",
             (now(), command, p["git_commit"], p["uncommitted_changes"], socket.gethostname(),
-             platform.python_version(), json.dumps(p["libraries"]), json.dumps(params, default=yoke.jsonable)))
+             platform.python_version(), json.dumps(p["libraries"]), json.dumps(params, default=yoke.jsonable),
+             search_version))
     return cur.lastrowid
 
 
@@ -250,17 +288,19 @@ def _hit_row(run_id, file_id, session, block_idx, h, origin="search"):
             None if h.get("near_dc") is None else int(h["near_dc"]), h.get("flagged_fraction"), origin)
 
 
-def save_block(db, run_id, session, block_idx, f_lo, f_hi, file_ids, looks_hits, events, timing):
-    """One block's hits (all six looks) and cadence results, replacing any
-    earlier search of it, in one transaction."""
+def save_block(db, run_id, session, block_idx, f_lo, f_hi, file_ids, looks_hits, events, timing, same=None):
+    """One block's hits (all six looks) and cadence results, in one
+    transaction. An earlier search of the block is kept, marked superseded
+    by this run; `same(old_event_row, new_event)` says which earlier event
+    a new one replaces."""
     with db:
-        old = [r[0] for r in db.execute("SELECT event_id FROM events WHERE session=? AND block_idx=?",
-                                        (session, block_idx))]
-        if old:
-            marks = ",".join("?" * len(old))
-            db.execute(f"DELETE FROM event_hits WHERE event_id IN ({marks})", old)
-            db.execute(f"DELETE FROM events WHERE event_id IN ({marks})", old)
-        db.execute("DELETE FROM hits WHERE session=? AND block_idx=?", (session, block_idx))
+        earlier = [dict(r) for r in db.execute(
+            "SELECT event_id, f_start_mhz, drift_hz_s, label FROM events"
+            " WHERE session=? AND block_idx=? AND superseded_run IS NULL", (session, block_idx))]
+        db.execute("UPDATE events SET superseded_run=? WHERE session=? AND block_idx=? AND superseded_run IS NULL",
+                   (run_id, session, block_idx))
+        db.execute("UPDATE hits SET superseded_run=? WHERE session=? AND block_idx=? AND superseded_run IS NULL",
+                   (run_id, session, block_idx))
         ids = []
         for file_id, hits in zip(file_ids, looks_hits):
             these = []
@@ -279,12 +319,15 @@ def save_block(db, run_id, session, block_idx, f_lo, f_hi, file_ids, looks_hits,
                 hit = looks_hits[pos][m] if m is not None else None
                 looks.append({"position": pos, "found": m is not None,
                               "snr": hit and hit["snr"], "drift_hz_s": hit and hit["drift_hz_s"]})
+            before = next((o for o in earlier if same and same(o, e)), None)
+            if before:
+                earlier.remove(before)
             cur = db.execute(
                 "INSERT INTO events (run_id, session, block_idx, seed_hit_id, label, f_start_mhz, drift_hz_s, snr,"
-                " looks) VALUES (?,?,?,?,?,?,?,?,?)",
+                " looks, supersedes_event_id) VALUES (?,?,?,?,?,?,?,?,?,?)",
                 (run_id, session, block_idx, ids[0][matches[0]] if matches[0] is not None else None, e["label"],
-                 e["frequency_mhz"], e["drift_hz_s"], e["snr"], json.dumps(looks)))
-            e["event_id"] = cur.lastrowid
+                 e["frequency_mhz"], e["drift_hz_s"], e["snr"], json.dumps(looks), before and before["event_id"]))
+            e["event_id"], e["supersedes_event_id"] = cur.lastrowid, before and before["event_id"]
             for pos, m in enumerate(matches):
                 if m is not None:
                     db.execute("INSERT INTO event_hits (event_id, position, hit_id) VALUES (?,?,?)",
@@ -316,5 +359,7 @@ def save_check(db, lead, name, result, evidence, version, event_id=None, strengt
 
 
 def candidates(db, session):
+    """The current candidates of a session (not those of a superseded search)."""
     return [dict(r) for r in db.execute(
-        "SELECT * FROM events WHERE session=? AND label='candidate' ORDER BY snr DESC", (session,))]
+        "SELECT * FROM events WHERE session=? AND label='candidate' AND superseded_run IS NULL ORDER BY snr DESC",
+        (session,))]

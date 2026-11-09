@@ -74,6 +74,9 @@ HEADERS = reading.HEADERS
 MJD_UNIX = 40587.0              # the MJD of 1970-01-01
 EDGE_FRACTION = 0.05            # a hit this near a coarse channel's end (as a share of it) is flagged near_edge
 TILE = 131072                   # channels summed at a time: 16 spectra of them fit the processor's cache
+# The search's version, kept with every run: change it whenever what the
+# search finds can change, so results of different versions are told apart.
+SEARCH_VERSION = "1 (brute-force drift sum, block MAD noise, run-chained hits; 8 Nov 2026)"
 
 
 def _utc(mjd):
@@ -307,9 +310,13 @@ def flatten(spectra, block=BLOCK, details=False):
     # edges the band rolls off and the noise with it, and one figure for
     # the whole spectrum made hits of the quieter edges (3 November 2026,
     # Tabby's 2017 data: four of five hits only this search found).
-    middle = np.repeat(_block_medians(out, block), block, axis=1)[:, :n_f]
-    spreads = 1.4826 * _block_medians(np.abs(out - middle), block)
-    del middle
+    # One spectrum at a time: whole-look temporaries cost 2 x 134 MB a look,
+    # and six looks are searched at once.
+    spreads = np.empty((n_t, len(starts)))
+    for t in range(n_t):
+        row = out[t:t + 1]
+        middle = np.repeat(_block_medians(row, block), block, axis=1)[:, :n_f]
+        spreads[t] = 1.4826 * _block_medians(np.abs(row - middle), block)[0]
     for t in range(n_t):
         spread = spreads[t]
         spread[spread <= 0] = np.median(spread[spread > 0]) if (spread > 0).any() else 1.0
@@ -632,6 +639,16 @@ def _cadence_files(db, target, get, say):
     return session["session"], [sc["url"] for sc in scans], scans
 
 
+def _same_event(old, new, width_hz=2.79, seconds=300.0):
+    """Whether an earlier event and a new one of a re-searched block are
+    the same signal: the frequency within the cadence's matching window
+    and the drift within its tolerance (as `judge` matches looks)."""
+    drift = new["drift_hz_s"]
+    window = (WINDOW_CHANNELS * width_hz + abs(drift) * seconds) / 1e6
+    tolerance = max(0.5 * abs(drift), 2 * width_hz / seconds)
+    return abs(old["f_start_mhz"] - new["frequency_mhz"]) <= window and abs(old["drift_hz_s"] - drift) <= tolerance
+
+
 def export(db, target, session, block_list):
     """The readable sweep record, data/sweeps/TARGET-SESSION.json, from the
     store: each block searched, with its counts and its candidates (what
@@ -646,9 +663,10 @@ def export(db, target, session, block_list):
     for k, b in store.done_blocks(db, session).items():
         events = []
         for e in db.execute("SELECT * FROM events WHERE session=? AND block_idx=? AND label='candidate'"
-                            " ORDER BY snr DESC", (session, k)):
+                            " AND superseded_run IS NULL ORDER BY snr DESC", (session, k)):
             looks = json.loads(e["looks"])
-            events.append({"event_id": e["event_id"], "frequency_mhz": e["f_start_mhz"], "drift_hz_s": e["drift_hz_s"],
+            events.append({"event_id": e["event_id"], "supersedes_event_id": e["supersedes_event_id"],
+                           "frequency_mhz": e["f_start_mhz"], "drift_hz_s": e["drift_hz_s"],
                            "snr": e["snr"], "label": e["label"],
                            "in_on": [lk["found"] for lk in looks if lk["position"] % 2 == 0],
                            "in_off": [lk["found"] for lk in looks if lk["position"] % 2 == 1]})
@@ -679,7 +697,8 @@ def sweep(target, count=1, say=print, get=requests.get):
         block_list = blocks(indexes[0])
         done = store.done_blocks(db, session)
         todo = [k for k in range(len(block_list)) if k not in done][:count]
-        run_id = store.start_run(db, f"sweep {target} --blocks {count} --threads {reading.threads()}", search_params())
+        run_id = store.start_run(db, f"sweep {target} --blocks {count} --threads {reading.threads()}", search_params(),
+                                 SEARCH_VERSION)
         log = _log()
 
         def fetch(k):
@@ -704,7 +723,7 @@ def sweep(target, count=1, say=print, get=requests.get):
                 now = time.monotonic()
                 timing.update(wall_s=round(now - last_end, 1), threads=reading.threads())
                 last_end = now
-                store.save_block(db, run_id, session, k, low, high, file_ids, looks, events, timing)
+                store.save_block(db, run_id, session, k, low, high, file_ids, looks, events, timing, same=_same_event)
                 cpu = round(_cpu_seconds() - cpu0, 1)
                 hits = sum(len(h) for h in looks)
                 log.info(f"{target} {session} block {k} {low:.3f}-{high:.3f} MHz: {timing['bytes'] / 1e6:.0f} MB, "
@@ -806,7 +825,8 @@ def inject(path, snrs=INJECT_SNRS, count=INJECT_COUNT, seed=0, say=print, read=r
         # method is named: these are one channel a spectrum, with no Doppler
         # smearing, so they overstate what is found above 0.15 Hz/s.
         db = store.connect()
-        run_id = store.start_run(db, f"inject {path}", dict(search_params(), snrs=list(snrs), count=count, seed=seed))
+        run_id = store.start_run(db, f"inject {path}", dict(search_params(), snrs=list(snrs), count=count, seed=seed),
+                                 SEARCH_VERSION)
         store.save_injections(db, run_id, path, "plant: one channel a spectrum, no smearing", planted_rows)
         store.finish_run(db, run_id)
         db.close()
