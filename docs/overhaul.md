@@ -544,9 +544,15 @@ stating everything Section 5 of the sensitivity notes lists:
   - the cut, cadence rules, every check and its version.
 - **What it achieved:**
   - completeness by SNR and drift, through the whole pipeline;
-  - S_min and EIRP_min at the cut and at 50% and 90% completeness, with the
-    1 Hz transmitter width stated;
-  - CWTFM, for comparison with published searches only. No limit on the
+  - S_min and EIRP_min at 50% and 90% completeness, measured, leading;
+    at the cut only as the nominal radiometer-equation threshold, labelled
+    so (the faintest planted signals are S_in 15, not 10); the 1 Hz
+    transmitter width stated;
+  - the usable band: the band searched less the notch and every block
+    with a look stopped at the hit limit, those blocks listed; "complete"
+    only when every block is searched and none is cut short;
+  - CWTFM from the usable band, for comparison with published searches
+    only. No limit on the
     fraction of stars with transmitters: for one star, Margot 2023's form
     gives at best 0.95/(η·D) at 95% confidence, which says nothing. That
     waits for a defined sample of many stars (Phase 9).

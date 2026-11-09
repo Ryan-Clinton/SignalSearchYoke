@@ -749,11 +749,16 @@ def price(say=print):
         others = [{"frequency_mhz": h["frequency_mhz"], "drift_hz_s": h["drift_hz_s"], "snr": h["snr"],
                    "mjd": lk.tstart, "target": sc["target"], "shadow": bool(h.get("shadow"))}
                   for lk, sc in zip(looks, answer["scans"]) if not lk.on for h in lk.hits]
+        # Check 6's density: each OFF look's hits over the whole slice searched.
+        background = [{"mjd": lk.tstart, "searched_hz": (high - low) * 1e6,
+                       "hits": [(h["drift_hz_s"], bool(h.get("shadow"))) for h in lk.hits]}
+                      for lk in looks if not lk.on]
         ours = []
         for e in events:
             row = {k: e.get(k) for k in ("label", "frequency_mhz", "drift_hz_s", "snr", "off_snr_max", "on_snr_min")}
             if e["label"] == "candidate":
-                v = vetting.vet(e, looks, PRICE_TARGET, others, hits, report_dir=None, lead=None)
+                v = vetting.vet(e, looks, PRICE_TARGET, others, hits, report_dir=None, lead=None,
+                                background=background)
                 row["verdict"] = v["verdict"]
                 row["checks"] = [{k: c[k] for k in ("n", "name", "result", "strength")} for c in v["checks"]
                                  if c["strength"]]

@@ -102,7 +102,13 @@ HDF5 file in Breakthrough Listen's layout), for `inject` and
    recurrence, look-alikes, harmonics and intermodulation, crowding, the
    report. Each says shown, indicated or coincidence possible, with its
    chance; none deletes a candidate. Records in `data/checks/`, reports in
-   `docs/leads/`.
+   `docs/leads/`. Checks version 3: recurrence (check 6) takes its chance
+   from every queried file's hits within 1.5 MHz of the candidate, over the
+   band searched there, not from the hits picked for matching.
+5. `seti.py report` (`report.py`): the result page. Limits are measured
+   (50% and 90% of planted signals kept) and quoted over the usable band:
+   the notch and every block with a look stopped at the hit limit left out
+   and listed; the SNR-10 figure is labelled nominal.
 
 ## turboSETI
 

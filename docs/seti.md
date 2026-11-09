@@ -215,7 +215,11 @@ channels, and whether it is complete. The search picks at most 2,000 hits
 a look; if it stops there, the look is marked not complete with the
 number of line starts still over SNR 5, the block is marked not complete,
 and nothing later may treat its hits as the whole list. No look of the 18
-swept blocks reached the limit (most had about 250 hits).
+blocks swept first reached the limit (most had about 250 hits); in the
+whole sweep the crowded blocks do (34 of the first 654 block-looks, in 10
+blocks near 1918 to 1960 MHz). The result page lists those blocks and
+leaves them out of the usable band and the limits: their candidates and
+interference stand, but a signal there may have gone unpicked.
 
 **Against turboSETI** (`measure.py scale`; turboSETI 2.3.2): 30 slow
 signals (|drift| < 0.15 Hz/s, S_in 60 to 300) planted in one look of each
@@ -412,7 +416,7 @@ hits, is not small; the chance is recorded), or none.
 | 3 | known Green Bank bands (16 bands: GNSS, Iridium, Inmarsat, ADS-B, cellular, space links, the S-band notch filter, Wi-Fi) | indicated |
 | 4 | zero or very low drift (under one drift step, 0.0102 Hz/s) | indicated |
 | 5 | drift against the Earth's (rotation and orbit, toward the target, at Green Bank) | recorded only |
-| 6 | recurrence at other targets and times in the store | shown: a hit at the cut within 3 days, drift agreeing, that chance would give under 5% of the time; indicated: the same from shadow hits, or many matches against few expected; else coincidence possible |
+| 6 | recurrence at other targets and times in the store | shown: a hit at the cut within 3 days, drift agreeing, that chance would give under 5% of the time, by the files' measured hit density near the candidate; indicated: the same from shadow hits, or many matches against few expected; else coincidence possible |
 | 7 | look-alikes: the same drift over frequency (or its mirror) in the cadence, and whether they show in OFF looks | indicated, or coincidence possible |
 | 8 | harmonics (×2 to ×20, ÷2 to ÷20), clock spacings (2.000004 to 133.33 MHz) and intermodulation (a·f1 ± b·f2 of strong zero-drift hits), within 1 kHz | indicated, or coincidence possible |
 | 9 | crowding: hits in the MHz around it against the band's median | indicated at 10 times |
@@ -465,11 +469,17 @@ this cadence's OFF looks now, more as other sessions and targets are
 searched. The store is asked, file by file, for the same window check 6
 tests (100 Hz plus the drift's travel over the time between, within a
 day; `check.recurrence_hits`, since 9 November 2026; before, a fixed ±12
-kHz, which a fast signal hours away could fall outside). The chance rates
-of checks 6 to 8 assume a uniform density of hits; interference clusters,
-so a small chance is a sign, not proof of one transmitter
-([comparable.md](comparable.md), step 6, replaces it with the measured
-occupancy).
+kHz, which a fast signal hours away could fall outside). Those hits were
+picked for lying near the candidate, so their own spread cannot give the
+chance of a match: check 6 (checks version 3) takes it from every file it
+looks in, matched or not, as that file's hits within 1.5 MHz of the
+candidate over the band its session searched there
+(`check.recurrence_background`), with the share whose drift agrees counted,
+not assumed uniform over ±4 Hz/s. Without that background check 6 never
+says "shown". The density is still flat within the 3 MHz, and checks 7 and
+8 still assume a uniform one; interference clusters, so a small chance is a
+sign, not proof of one transmitter ([comparable.md](comparable.md), step 6,
+measures the occupancy by frequency and drift).
 
 ## Checked against turboSETI
 

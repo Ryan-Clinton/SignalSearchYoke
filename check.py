@@ -30,6 +30,7 @@ import vetting
 import yoke
 
 REPORTS = yoke.ROOT / "docs" / "leads"
+BACKGROUND_MHZ = 1.5   # check 6's density: hits within this of the candidate, in the band searched
 
 
 def lead_id(target, session, f_mhz):
@@ -84,6 +85,13 @@ def _event(db, row, where):
     return e
 
 
+def recurrence_files(db, session):
+    """The files check 6 looks in: the session's OFF looks and every look of
+    other sessions."""
+    return db.execute("SELECT file_id, tstart_mjd, target, session FROM files"
+                      " WHERE is_on = 0 OR session != ? OR is_on IS NULL", (session,)).fetchall()
+
+
 def recurrence_hits(db, e, looks, session):
     """The store's hits check 6 could match: for each file at another
     target or time, the same window vetting.py's check 6 tests (100 Hz, plus
@@ -93,18 +101,41 @@ def recurrence_hits(db, e, looks, session):
     f, drift = e["frequency_mhz"], e["drift_hz_s"]
     t0 = looks[e.get("seed_position", 0)].tstart
     out = []
-    for fl in db.execute("SELECT file_id, tstart_mjd, target, session FROM files"
-                         " WHERE is_on = 0 OR session != ? OR is_on IS NULL", (session,)).fetchall():
+    for fl in recurrence_files(db, session):
         dt = ((fl["tstart_mjd"] or t0) - t0) * 86400
         within = abs(dt) < 86400
         reach = (vetting.RECUR_HZ + (abs(drift) * abs(dt) if within else 0.0)) / 1e6
         moved = f + (drift * dt / 1e6 if within else 0.0)
-        for h in db.execute("SELECT hit_id, f_start_mhz, drift_hz_s, snr, origin FROM hits WHERE file_id=?"
+        for h in db.execute("SELECT hit_id, file_id, f_start_mhz, drift_hz_s, snr, origin FROM hits WHERE file_id=?"
                             " AND superseded_run IS NULL AND (f_start_mhz BETWEEN ? AND ? OR f_start_mhz BETWEEN ? AND ?)",
                             (fl["file_id"], moved - reach, moved + reach, f - reach, f + reach)):
-            out.append({"hit_id": h["hit_id"], "frequency_mhz": h["f_start_mhz"], "drift_hz_s": h["drift_hz_s"],
+            out.append({"hit_id": h["hit_id"], "file_id": h["file_id"], "frequency_mhz": h["f_start_mhz"], "drift_hz_s": h["drift_hz_s"],
                         "snr": h["snr"], "mjd": fl["tstart_mjd"], "target": fl["target"], "session": fl["session"],
                         "shadow": h["origin"] == "shadow"})
+    return out
+
+
+def recurrence_background(db, e, file_ids):
+    """Check 6's background: for every file the matches could come from
+    (matched or not, so none drops out of the expected count), its
+    hits (matching or not) within BACKGROUND_MHZ of the candidate and the
+    band searched there (its session's searched blocks; failing those, the
+    span its hits cover, which overstates the density)."""
+    f = e["frequency_mhz"]
+    lo, hi = f - BACKGROUND_MHZ, f + BACKGROUND_MHZ
+    out = []
+    for fid in sorted(file_ids):
+        fl = db.execute("SELECT session, tstart_mjd FROM files WHERE file_id=?", (fid,)).fetchone()
+        hits = db.execute("SELECT f_start_mhz, drift_hz_s, origin FROM hits WHERE file_id=? AND superseded_run IS NULL"
+                          " AND f_start_mhz BETWEEN ? AND ?", (fid, lo, hi)).fetchall()
+        blocks = db.execute("SELECT f_lo_mhz, f_hi_mhz FROM blocks WHERE session=? AND status='done'"
+                            " AND f_hi_mhz > ? AND f_lo_mhz < ?", (fl["session"], lo, hi)).fetchall()
+        if blocks:
+            searched = sum(min(b["f_hi_mhz"], hi) - max(b["f_lo_mhz"], lo) for b in blocks)
+        else:
+            searched = (max(h["f_start_mhz"] for h in hits) - min(h["f_start_mhz"] for h in hits)) if len(hits) > 1 else 0.0
+        out.append({"mjd": fl["tstart_mjd"], "searched_hz": max(searched, 0.0) * 1e6,
+                    "hits": [(h["drift_hz_s"], h["origin"] == "shadow") for h in hits]})
     return out
 
 
@@ -117,11 +148,15 @@ def check_event(db, row, say=print, report_dir=REPORTS):
     own = {h for h in (r["hit_id"] for r in db.execute("SELECT hit_id FROM event_hits WHERE event_id=?",
                                                          (row["event_id"],)))}
     others = [h for h in recurrence_hits(db, e, looks, session) if h.pop("hit_id") not in own]
+    for h in others:
+        h.pop("file_id")
+    background = recurrence_background(db, e, [fl["file_id"] for fl in recurrence_files(db, session)])
     session_hits = [{"frequency_mhz": h["f_start_mhz"], "drift_hz_s": h["drift_hz_s"], "snr": h["snr"]}
                     for h in db.execute("SELECT f_start_mhz, drift_hz_s, snr FROM hits WHERE session=? AND"
                                         " superseded_run IS NULL AND origin='search'", (session,))]
     lead = lead_id(target["name"], session, e["frequency_mhz"])
-    result = vetting.vet(e, looks, target, others, session_hits, report_dir=report_dir, lead=lead)
+    result = vetting.vet(e, looks, target, others, session_hits, report_dir=report_dir, lead=lead,
+                         background=background)
     for c in result["checks"]:
         store.save_check(db, lead, f"{c['n']}. {c['name']}", c["result"], c["evidence"], vetting.VERSION,
                          event_id=row["event_id"], strength=c["strength"])

@@ -6,7 +6,7 @@ BLISS, SETI@home's final analysis, UCLA's) and hold up. Written from three
 research notes of the same day, in `docs/research/`:
 `comparable-pipelines.md`, `published-searches-of-this-star.md` and
 `instrument-and-calibration.md`, and from a reading of the code as it
-stands (search version 4, checks version 2). It follows
+stands (search version 4, checks version 2; check 6 since moved to version 3). It follows
 [overhaul.md](overhaul.md), whose Phases 0 to 7 are done and Phase 8 (the
 Tabby's star result) is under way; this replaces that plan's Phase 9.
 
@@ -27,7 +27,7 @@ owner's go.
 | **discovery completeness** (does a planted signal rank high enough to be looked at?) | **not measured** | SETI@home: top-100 rank, power at 80% uncovered |
 | **pipelines compared at matched sensitivity** | **no** (SNR scale only) | UCLA: equal injected power and tolerances |
 | **interference history across sessions** | **one cadence's OFF looks** | SETI@home: 14 years of frequency zones; Price: like events at other stars |
-| **chance rates** | **uniform density** | SETI@home: empirical score distributions |
+| **chance rates** | **check 6: each file's hits near the candidate; checks 7, 8: uniform** | SETI@home: empirical score distributions |
 | **flux scale** | **assumed SEFD 10 Jy** | assumed too (Price, Lebofsky); 12.5 Jy from the Proposer's Guide |
 | signal types | steady linear drift only | SETI@home: pulses, triplets, Gaussians, ±100 Hz/s; BLIPSS, Gajjar: periodic and pulsed |
 | scale | one cadence | Painter 2025: 9,684 cadences; Price 2020: 1,327 stars |
@@ -102,19 +102,28 @@ with each disagreement explained.
 ### Step 4: compare the pipelines at matched sensitivity
 
 The SNR scale (turboSETI's is 0.227 of this search's) says nothing about
-which finds more at the same false-alarm rate. On the five saved cadences:
+which finds more at the same false-alarm rate. Five cadences cannot set
+that rate: one distinct false candidate in five gives 0.005 to 1.1 a
+block, and a cut tuned until two such counts match would follow the noise.
+So the comparison is done in two parts, each measured on its own:
 
-- the same planted signals (the Phase 6 set) through turboSETI's pipeline
-  and this one;
-- each pipeline's cut set so both give the same false candidates on the
-  wrong-ON choices (step 6's measurement), then recovery compared by drift
-  and strength: Margot et al. 2023's metric (equal injected power, equal
-  tolerances: ±6 Hz, ±0.05 Hz/s);
-- reported as recovery against injected flux for each, and the signals one
-  finds and the other misses.
+- **Each pipeline's false candidates as a function of its cut,** on the
+  blocks of step 7 (at least 100, wrong-ON choices, blocks as the unit, by
+  band), with intervals. Its cut is set where that curve gives a chosen
+  rate (say 0.1 a block), and the interval on the cut is carried forward.
+- **Recovery at those cuts,** from one planting larger than Phase 6's
+  (about 10,000 signals over the same blocks, the same signals through
+  both): Margot et al. 2023's metric (equal injected power, equal
+  tolerances: ±6 Hz, ±0.05 Hz/s), by drift and strength, as recovery
+  against injected flux, with the signals one finds and the other misses.
+- At the published cuts as well (turboSETI SNR 10, this search's 10), so
+  the comparison can be read either way. A claim that one pipeline finds
+  more holds only where the recovery intervals at matched rates do not
+  overlap.
 
-**Done when:** a matched-recovery table is in `docs/seti.md`, with the
-cut each pipeline needed for the same false-candidate rate.
+**Done when:** a matched-recovery table is in `docs/seti.md`, with each
+pipeline's false-candidate curve, the cut each needed for the chosen rate
+and its interval. Needs step 7 first.
 
 ### Step 5: rank, and measure discovery completeness
 
@@ -138,8 +147,12 @@ quotes candidate sensitivity beside detection sensitivity.
 
 ### Step 6: chance rates from the measured sky, not a uniform one
 
-Checks 6 to 8 take a coincidence's chance from a uniform density of hits.
-Interference clusters by service and oscillator. After the sweep, the store
+Check 6 takes its chance from each file's own hits within 1.5 MHz, with
+the drift share counted (checks version 3, 9 November 2026: before, from
+the spread of the hits picked for lying near the candidate, which made the
+chance meaningless). That density is still flat over the 3 MHz, and checks
+7 and 8 take a uniform one. Interference clusters by service and
+oscillator. After the sweep, the store
 holds every hit of 900 MHz: the occupancy (hits at the cut and shadow hits
 per kHz, by drift) is measured from it and the checks draw their expected
 counts from the occupancy where the candidate lies. The OFF test's veto

@@ -40,7 +40,7 @@ import numpy as np
 
 import onoff
 
-VERSION = "2 (9 Nov 2026: check 6 shows recurrence only from a hit at the cut with a small chance)"
+VERSION = "3 (9 Nov 2026: check 6 takes its chance from each file's hits over the band searched near the candidate)"
 C = 299792458.0
 GBT_LAT, GBT_LON = 38.4331, -79.8398            # degrees (north, east)
 EARTH_OMEGA, EARTH_R = 7.2921159e-5, 6.371e6    # rad/s, m
@@ -122,17 +122,79 @@ def at_least(n, expected):
     return max(0.0, 1.0 - total)
 
 
+def _near_any(sorted_values, targets, tol):
+    """Whether any target lies within tol of any of the sorted values."""
+    if not len(sorted_values) or not len(targets):
+        return False
+    i = np.clip(np.searchsorted(sorted_values, targets), 1, len(sorted_values) - 1)
+    gap = np.minimum(np.abs(sorted_values[i] - targets), np.abs(sorted_values[i - 1] - targets))
+    return bool(np.any(gap <= tol))
+
+
+def _recur_window(drift, dt):
+    """The width check 6 accepts a match in, for a file dt seconds away: two
+    windows of 100 Hz plus the drift's travel, one where the drift carries
+    the signal and one where it started (one only, beyond a day)."""
+    within = abs(dt) < 86400
+    reach = RECUR_HZ + (abs(drift) * abs(dt) if within else 0.0)
+    shift = abs(drift * dt) if within else 0.0
+    return 2 * reach + min(shift, 2 * reach)
+
+
+def _drift_agrees(d, drift, step):
+    return abs(d - drift) <= max(2 * step, 0.05 * abs(drift))
+
+
+def _recurrence_expected(f, drift, step, t0, others, background):
+    """Expected matches by chance for check 6: (all, close at the cut, close
+    at any SNR), and how the density was had. `background`: one entry a
+    file, {mjd, searched_hz, hits: [(drift_hz_s, shadow)]}, the file's hits
+    over the band searched around the candidate, matching or not."""
+    if background is not None:
+        e6 = e_cut = e_all = 0.0
+        searched = n_hits = n_agree = 0
+        for b in background:
+            if not b["searched_hz"]:
+                continue
+            dt = (b["mjd"] - t0) * 86400
+            per_hz = _recur_window(drift, dt) / b["searched_hz"]
+            agree = [s for d, s in b["hits"] if _drift_agrees(d, drift, step)]
+            e6 += len(b["hits"]) * per_hz
+            if abs(dt) <= SHOWN_DAYS * 86400:
+                e_cut += sum(1 for s in agree if not s) * per_hz
+                e_all += len(agree) * per_hz
+            searched += b["searched_hz"]
+            n_hits += len(b["hits"])
+            n_agree += len(agree)
+        return e6, e_cut, e_all, {"source": "measured: each file's hits over the band searched near the candidate",
+                                  "files": len(background), "searched_mhz": round(searched / 1e6, 3),
+                                  "hits": n_hits, "drift_agree_share": round(n_agree / n_hits, 4) if n_hits else None}
+    # No background given: the supplied hits' own spread, biased high when
+    # they were chosen for lying near the candidate; never enough for "shown".
+    if not others:
+        return 0.0, 0.0, 0.0, None
+    span_hz = max(1.0, (max(h["frequency_mhz"] for h in others) - min(h["frequency_mhz"] for h in others)) * 1e6)
+    window_hz = float(np.mean([_recur_window(drift, (h["mjd"] - t0) * 86400) for h in others]))
+    share = min(1.0, 2 * max(2 * step, 0.05 * abs(drift)) / (2 * onoff.MAX_DRIFT_NULL))
+    e6 = len(others) * window_hz / span_hz
+    e_cut = sum(1 for h in others if not h.get("shadow")) * window_hz / span_hz * share
+    return e6, e_cut, e6 * share, {"source": "the supplied hits' own spread (no background: at most indicated)"}
+
+
 def _check(n, name, result, strength=None, **evidence):
     return {"n": n, "name": name, "result": result, "strength": strength, "evidence": evidence}
 
 
-def vet(event, looks, target=None, others=(), session_hits=(), report_dir=None, lead=None):
+def vet(event, looks, target=None, others=(), session_hits=(), report_dir=None, lead=None, background=None):
     """The checks on one candidate. `event` as onoff.judge gives it (with
     `matches` and `stamps`); `looks` its cadence (LookInfo or onoff.Look);
     `target` {ra_hours, dec_deg, name}; `others` hits at other targets
     from the store [{frequency_mhz, drift_hz_s, snr, mjd, target, shadow}];
     `session_hits` every current hit at the cut of the session (frequency,
-    drift, snr, position) for harmonics, intermodulation and crowding."""
+    drift, snr, position) for harmonics, intermodulation and crowding;
+    `background` the hits of each file `others` came from over the band
+    searched near the candidate, for check 6's chance (see
+    `_recurrence_expected`; check.recurrence_background builds it)."""
     f, drift = event["frequency_mhz"], event["drift_hz_s"]
     l0 = looks[event.get("seed_position", 0)]
     step = l0.step
@@ -190,27 +252,21 @@ def vet(event, looks, target=None, others=(), session_hits=(), report_dir=None, 
             matches_.append(dict(h, days=round(abs(dt) / 86400, 3), drift_agrees=agree))
     close = [m for m in matches_ if m["days"] <= SHOWN_DAYS and m["drift_agrees"]]
     close_cut = [m for m in close if not m.get("shadow")]
-    # The chance of as many by accident: the hits' density over the span
-    # they were drawn from, times the window each match had (100 Hz plus the
-    # drift's travel, either side) and, for a close match, the share of the
-    # ±4 Hz/s drift range its drift tolerance covers.
-    span_hz = max(1.0, (max((h["frequency_mhz"] for h in others), default=f) -
-                        min((h["frequency_mhz"] for h in others), default=f)) * 1e6)
-    window = [2 * (RECUR_HZ + (abs(drift) * abs((h["mjd"] - l0.tstart) * 86400)
-                               if abs((h["mjd"] - l0.tstart) * 86400) < 86400 else 0.0)) for h in others]
-    window_hz = float(np.mean(window)) if window else 0.0
-    agree_share = min(1.0, 2 * max(2 * step, 0.05 * abs(drift)) / (2 * onoff.MAX_DRIFT_NULL))
-    expected6 = len(others) * window_hz / span_hz if others else 0.0
-    cut_others = [h for h in others if not h.get("shadow")]
-    expected_close = len(cut_others) * window_hz / span_hz * agree_share if others else 0.0
+    # The chance of as many by accident. The hits in `others` were picked for
+    # lying near the candidate, so their own spread says nothing of how
+    # crowded the sky is there. The density comes from `background`: each
+    # file's hits over the band searched around the candidate, whether they
+    # match or not, with the share whose drift agrees measured, not assumed.
+    expected6, expected_close, expected_close_all, how = _recurrence_expected(
+        f, drift, step, l0.tstart, others, background)
     chance6 = at_least(len(matches_), expected6)
     chance_close = at_least(len(close_cut), expected_close)
     # "Shown" needs a match at the cut, close in time, drift agreeing, that
-    # chance would rarely give; shadow hits (SNR 5 to 10) or a crowded band
-    # give at most "indicated".
-    if close_cut and chance_close < CHANCE_SMALL:
+    # chance would rarely give, against a measured background; shadow hits
+    # (SNR 5 to 10), a crowded band or no background give at most "indicated".
+    if close_cut and chance_close < CHANCE_SMALL and background is not None:
         strength6 = "shown"
-    elif (close and at_least(len(close), expected6 * agree_share) < CHANCE_SMALL) or \
+    elif (close and at_least(len(close), expected_close_all) < CHANCE_SMALL) or \
             (matches_ and chance6 < CHANCE_SMALL):
         strength6 = "indicated"
     else:
@@ -222,7 +278,7 @@ def vet(event, looks, target=None, others=(), session_hits=(), report_dir=None, 
                          strength6, matches=matches_[:20], hits_searched=len(others),
                          expected_by_chance=round(expected6, 4), chance=chance6,
                          close_at_cut=len(close_cut), expected_close_at_cut=round(expected_close, 5),
-                         chance_close=chance_close))
+                         chance_close=chance_close, background=how))
 
     # 7. look-alikes in the same cadence: the same drift over frequency
     nu = drift / (f * 1e6)
@@ -265,6 +321,7 @@ def vet(event, looks, target=None, others=(), session_hits=(), report_dir=None, 
     freqs = np.array([h["frequency_mhz"] for h in session_hits]) if session_hits else np.array([])
     strong0 = np.array([h["frequency_mhz"] for h in session_hits
                         if abs(h["drift_hz_s"]) < step and h["snr"] >= 20]) if session_hits else np.array([])
+    strong_sorted = np.sort(strong0)
     lo_band = float(freqs.min()) if len(freqs) else f - 1
     hi_band = float(freqs.max()) if len(freqs) else f + 1
 
@@ -282,11 +339,13 @@ def vet(event, looks, target=None, others=(), session_hits=(), report_dir=None, 
                 if ok.any():
                     found.append(f"{clock:g} MHz spacing")
             if len(strong0) >= 2:
+                # a·f1 − b·f2 = x or a·f1 + b·f2 = x: for each f1 the f2 it
+                # needs, looked up in the sorted list (the same test as every
+                # pair, without the N×N tables a whole sweep makes too big).
                 for a in (1, 2, 3):
                     for b in (1, 2, 3):
-                        s = a * strong0[:, None] - b * strong0[None, :]
-                        t = a * strong0[:, None] + b * strong0[None, :]
-                        if np.any(np.abs(s - x) <= tol_mhz) or np.any(np.abs(t - x) <= tol_mhz):
+                        need = np.concatenate([(a * strong_sorted - x) / b, (x - a * strong_sorted) / b])
+                        if _near_any(strong_sorted, need, tol_mhz / b):
                             found.append(f"{a}f1+-{b}f2")
         return found
     rel = relations(f)

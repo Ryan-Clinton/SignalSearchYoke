@@ -95,7 +95,14 @@ def build(target, session):
     lo = min((b["f_lo_mhz"] for b in current), default=None)
     hi = max((b["f_hi_mhz"] for b in current), default=None)
     covered = sum(b["f_hi_mhz"] - b["f_lo_mhz"] for b in current)
-    notch = sum(max(0.0, min(b["f_hi_mhz"], NOTCH_MHZ[1]) - max(b["f_lo_mhz"], NOTCH_MHZ[0])) for b in current)
+    in_notch = lambda b: max(0.0, min(b["f_hi_mhz"], NOTCH_MHZ[1]) - max(b["f_lo_mhz"], NOTCH_MHZ[0]))  # noqa: E731
+    notch = sum(in_notch(b) for b in current)
+    # A block with a look that stopped at the hit limit has no full list of
+    # its hits: searched, but no limit is claimed for it.
+    cut_short = sorted({lk["block_idx"] for lk in looks if lk["complete"] == 0})
+    short_blocks = [b for b in current if b["block_idx"] in cut_short]
+    short_mhz = sum(b["f_hi_mhz"] - b["f_lo_mhz"] - in_notch(b) for b in short_blocks)
+    usable = covered - notch - short_mhz
     t = TARGETS.get(target)
     comp = json.load(open(yoke.DATA / "measurements" / "completeness.json"))
     cells = comp["tables"]["by_cell"]
@@ -115,7 +122,7 @@ def build(target, session):
         sens.append(row)
     cut_flux = flux(seti.SNR_MIN)
     mid = (lo + hi) / 2 if lo else None
-    nu_rel = covered / mid if mid else None
+    nu_rel = usable / mid if mid else None
     cut_eirp = eirp(cut_flux, t["distance_pc"]) if t else None
     zeta = 1000 * 0.5 / ARECIBO_W
     null_tracks = sum(b["off_null_tracks"] or 0 for b in current)
@@ -128,6 +135,12 @@ def build(target, session):
         "blocks_total": n_blocks, "blocks_current": len(current), "blocks_older": len(blocks) - len(current),
         "from_mhz": lo, "to_mhz": hi, "covered_mhz": round(covered, 3), "notch_mhz": round(notch, 3),
         "looks_incomplete": sum(1 for lk in looks if lk["complete"] == 0), "looks": len(looks),
+        "blocks_cut_short": [{"block_idx": b["block_idx"], "f_lo_mhz": b["f_lo_mhz"], "f_hi_mhz": b["f_hi_mhz"],
+                              "looks": sum(1 for lk in looks if lk["block_idx"] == b["block_idx"]
+                                           and lk["complete"] == 0)}
+                             for b in short_blocks],
+        "cut_short_mhz": round(short_mhz, 3), "usable_mhz": round(usable, 3),
+        "frequency_complete": len(current) == n_blocks, "complete": len(current) == n_blocks and not short_blocks,
         "channel_hz": width_hz, "tsamp_s": tsamp, "spectra": n_t, "span_s": span,
         "drift_step_hz_s": width_hz / span, "snr_min": seti.SNR_MIN, "max_drift_hz_s": seti.MAX_DRIFT,
         "hits_at_cut": hit_counts.get("search", 0), "shadow_hits": hit_counts.get("shadow", 0),
@@ -141,6 +154,8 @@ def build(target, session):
         "sefd_jy": injection.SEFD_JY, "cut_flux_jy_hz": cut_flux, "cut_eirp_w": cut_eirp,
         "sensitivity": sens, "nu_rel": nu_rel,
         "cwtfm": zeta * cut_eirp / (1 * nu_rel) if cut_eirp and nu_rel else None,
+        "cwtfm_90": (zeta * sens[0]["eirp_90_w"] / nu_rel if t and nu_rel and sens and sens[0]["how_90"] != "above"
+                     else None),
         "transmitter_rate": 1 / nu_rel if nu_rel else None,
         "completeness": comp["tables"], "false_summary": comp.get("false_summary"),
         "completeness_provenance": comp.get("provenance"),
@@ -175,11 +190,17 @@ def markdown(r):
              f"{r['session']}` from the hit store and the measurements in `data/measurements/` "
              f"({yoke.provenance()['created_utc']}). Search version {r['search_version']}; checks version "
              f"{r['checks_version']}.", ""]
-    done = r["blocks_current"] == r["blocks_total"]
+    done = r["frequency_complete"]
+    short = r["blocks_cut_short"]
     lines += ["## In brief", ""]
     lines += [f"- **Searched:** {r['blocks_current']} of {r['blocks_total']} blocks "
               f"({r['covered_mhz']:.1f} MHz, {r['from_mhz']:.3f} to {r['to_mhz']:.3f} MHz)"
               + ("" if done else " — **the sweep is not complete; this report is partial**") + ".",
+              f"- **Usable for limits:** {r['usable_mhz']:.1f} MHz: the band searched less the receiver's notch "
+              f"({r['notch_mhz']:.1f} MHz) and {len(short)} block(s) where a look stopped at the hit limit "
+              f"({r['cut_short_mhz']:.1f} MHz, listed below)"
+              + (". Every block of the band is searched, but not every one completely" if done and short else "")
+              + ".",
               f"- **Found:** {r['hits_at_cut']:,} hits at SNR {r['snr_min']:g} or more in the six looks "
               f"({r['shadow_hits']:,} more from SNR 5 kept as shadow hits); {sum(r['events'].values()):,} events: "
               f"{r['events']['candidate']} candidate(s), {r['events']['interference']:,} interference, "
@@ -190,9 +211,16 @@ def markdown(r):
         verdicts[key] = verdicts.get(key, 0) + 1
     lines.append("- **After the checks:** " + (", ".join(f"{n} {k}" for k, n in sorted(verdicts.items()))
                                                if verdicts else "no candidate to check") + ".")
-    lines.append(f"- **Sensitivity:** S_min {r['cut_flux_jy_hz']:.1f} Jy Hz at the cut (SNR {r['snr_min']:g}), "
-                 f"EIRP_min {_w(r['cut_eirp_w'])} at {t.get('distance_pc', '?')} pc for a transmitter narrower "
-                 f"than 1 Hz, with an assumed SEFD of {r['sefd_jy']:g} Jy; higher at fast drifts (below).")
+    slow, fast = (r["sensitivity"][0], r["sensitivity"][-1]) if r["sensitivity"] else (None, None)
+    if slow:
+        lines.append(f"- **Sensitivity, measured** (90% of planted signals kept; assumed SEFD {r['sefd_jy']:g} Jy; "
+                     f"a transmitter narrower than 1 Hz at {t.get('distance_pc', '?')} pc): EIRP "
+                     f"{'≤ ' if slow['how_90'] == 'at or below' else ''}{_w(slow.get('eirp_90_w'))} at "
+                     f"{slow['drift_hz_s'][0]:g} to {slow['drift_hz_s'][1]:g} Hz/s, "
+                     f"{_w(fast.get('eirp_90_w'))} at {fast['drift_hz_s'][0]:g} to {fast['drift_hz_s'][1]:g} Hz/s.")
+    lines.append(f"- **Nominal threshold** (the radiometer equation at the cut, SNR {r['snr_min']:g}; not "
+                 f"measured, as the faintest planted signals were S_in 15): S_min {r['cut_flux_jy_hz']:.1f} Jy Hz, "
+                 f"EIRP {_w(r['cut_eirp_w'])}.")
     lines.append("- **No technosignature is claimed.** " + (
         "No candidate came out unexplained." if not any((c["verdict"] or "").startswith("unexplained")
                                                        for c in r["candidates"])
@@ -215,8 +243,13 @@ def markdown(r):
               f"- **Blanked:** one channel in each coarse channel (the spectrometer's spike at its middle): "
               f"{r['blocks_current']} of {r['blocks_current'] * 1048576:,} channels. Nothing else is masked; "
               f"spectral kurtosis is recorded, never used to drop.",
-              f"- **Looks cut short:** {r['looks_incomplete']} of {r['looks']} block-looks reached the "
-              f"2,000-hit limit (their hits are not all there).",
+              f"- **Looks cut short:** {r['looks_incomplete']} of {r['looks']} block-looks stopped at the "
+              f"2,000-hit limit (shadow hits included) with lines at SNR 5 or more left unpicked, in "
+              f"{len(short)} block(s): "
+              + (", ".join(f"{b['block_idx']} ({b['f_lo_mhz']:.3f} to {b['f_hi_mhz']:.3f} MHz, {b['looks']} look(s))"
+                           for b in short) or "none")
+              + ". Their candidates and interference stand, but a signal there may have gone unpicked, so they "
+                "are left out of the usable band and of the limits.",
               f"- **SEFD:** {r['sefd_jy']:g} Jy, Price et al. 2020's figure for Green Bank at S-band: assumed, "
               f"not measured here; every flux and EIRP below scales with it.", ""]
     lines += ["## The search", "",
@@ -269,19 +302,25 @@ def markdown(r):
         cell = lambda p: (f"{'≤' if s[f'how_{p}'] == 'at or below' else '>' if s[f'how_{p}'] == 'above' else ''}"  # noqa: E731
                           f"{s[f's_in_{p}']:g}, {s[f'flux_{p}_jy_hz']:.0f} Jy Hz, {_w(s.get(f'eirp_{p}_w'))}")
         lines.append(f"| {s['drift_hz_s'][0]:g} to {s['drift_hz_s'][1]:g} | {cell(50)} | {cell(90)} |")
-    lines += ["", f"At the cut (SNR {r['snr_min']:g}): S_min {r['cut_flux_jy_hz']:.1f} Jy Hz "
-              f"({r['cut_flux_jy_hz']:.1f}×10⁻²⁶ W m⁻²), EIRP_min {_w(r['cut_eirp_w'])}. The strengths between "
+    lines += ["", "The limits hold over the usable band only (the notch and the blocks cut short left out). "
+              f"Nominal, at the cut (SNR {r['snr_min']:g}; the radiometer equation, not a measured rate): S_min "
+              f"{r['cut_flux_jy_hz']:.1f} Jy Hz ({r['cut_flux_jy_hz']:.1f}×10⁻²⁶ W m⁻²), EIRP_min "
+              f"{_w(r['cut_eirp_w'])}. The strengths between "
               "the four planted are interpolated (in log S_in); \"≤\" means already reached at the faintest "
               "planted, \">\" not reached at the brightest.", "",
-              f"For comparison with published searches only: CWTFM {r['cwtfm']:.3g} (Enriquez et al. 2017, "
-              f"Eq. 11; N_star 1, ν_rel {r['nu_rel']:.3f}), transmitter rate {r['transmitter_rate']:.2f}. No limit "
+              f"For comparison with published searches only: CWTFM {r['cwtfm']:.3g} at the nominal threshold, as "
+              f"published searches quote it (Enriquez et al. 2017, Eq. 11; N_star 1, ν_rel {r['nu_rel']:.3f} from "
+              f"the usable {r['usable_mhz']:.1f} MHz)"
+              + (f", {r['cwtfm_90']:.3g} at the measured 90% EIRP for slow drifts" if r.get("cwtfm_90") else "")
+              + f"; transmitter rate {r['transmitter_rate']:.2f}. No limit "
               "on the share of stars with transmitters is drawn from one star: at best 0.95/(η·D) at 95% "
               "confidence (Margot et al. 2023), which says nothing.", "",
               f"In context: Harp et al. 2016 (ATA, 1 to 10 GHz, Oct to Nov 2015) set narrowband limits of "
-              f"{HARP_2016_W[0]:.0e} to {HARP_2016_W[1]:.0e} W at 454 pc; at the cut here, about "
-              f"{HARP_2016_W[0] / (r['cut_eirp_w'] or 1):.0f} to {HARP_2016_W[1] / (r['cut_eirp_w'] or 1):.0f} "
-              f"times deeper, over {r['from_mhz']:.0f} to {r['to_mhz']:.0f} MHz only and for slow drifts "
-              "(at 2 to 4 Hz/s and 90% kept, see the table).", ""]
+              f"{HARP_2016_W[0]:.0e} to {HARP_2016_W[1]:.0e} W at 454 pc (drifts to ±1 Hz/s); here, at 90% kept "
+              f"for drifts under {r['sensitivity'][0]['drift_hz_s'][1]:g} Hz/s, about "
+              f"{HARP_2016_W[0] / (r['sensitivity'][0].get('eirp_90_w') or 1):.0f} to "
+              f"{HARP_2016_W[1] / (r['sensitivity'][0].get('eirp_90_w') or 1):.0f} times deeper, over the usable "
+              f"part of {r['from_mhz']:.0f} to {r['to_mhz']:.0f} MHz only; less at faster drifts (the table).", ""]
     lines += ["## Validation", ""]
     if r["voyager"]:
         v = r["voyager"]
