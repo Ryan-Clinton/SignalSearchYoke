@@ -797,8 +797,9 @@ signals were made with holds for these files (gpuspec, until now
 unverified). The fit is not perfect (χ²/dof 3.7; residuals under 1% of the
 peak in every channel), and the far wings run above sinc² beyond 5 channels
 (0.0017 of the peak at 10 to 20 channels against sinc²'s 0.0005), which the
-carrier's own phase noise could give: they are not separable here. Phase
-6's completeness needs no new run.
+carrier's own phase noise could give: they are not separable here. One
+observation (19 September 2016); that the 2017 files were processed the
+same way is taken, not shown. Phase 6's completeness needs no new run.
 
 **The SEFD** (`measure.py sefd`, `data/measurements/sefd.json`). The
 archive has no flux calibrator from the 2017 session. It has 3C295, a
@@ -822,7 +823,14 @@ https://bldata.berkeley.edu/bl_tess/s_band/; the one not used,
 `…_44040_3C295_0130`. Full checksums and ETags in `sefd.json`.
 
 So **SEFD 10.65 Jy**, against the 10 Jy assumed: every flux and EIRP on
-the result page is now 6.5% higher than before. Over 50 MHz bins it runs
+the result page is now 6.5% higher than before. The 16-84% figures are a
+spread over frequency, not an uncertainty. Carried to the 2017 cadence
+(another epoch and elevation, one pair, so neither the transfer nor the
+repeatability is measured), it is the best estimate within a bracket of
+10 to 12.5 Jy, the published values for this receiver (Price et al. 2020's
+10 Jy; 25 K at 2.0 K/Jy): the result page gives every EIRP limit with that
+range too (0.94 to 1.17 times the value). A bracket of published values,
+not a statistical interval. Over 50 MHz bins it runs
 from 9.8 to 11.5 Jy (13.5 at the band's top edge). In the notch the ON/OFF
 ratio is 1.07, as a filter that removes the source should leave it. Not
 measured: the 2017 cadence's own (another epoch; the cadence was at about
@@ -838,8 +846,9 @@ of one coarse channel, compressed: a chunk of zeros (rawspec's fill for
 lost data) would be a few kB. All 29,568 chunks of the six looks are 3.07
 to 3.35 MB (the smallest 97% of its file's median): no spectrum of any
 coarse channel is zeros, and no node is missing (`zz`) or dropped (`oo`).
-Read from the chunk indexes alone, no data. Packets lost within a spectrum
-lower its power without zeroing it and are not seen this way.
+Read from the chunk indexes alone, no data. This finds no whole spectrum
+of zeros; it does not show every sample intact: packets lost within a
+spectrum lower its power without zeroing it and are not seen this way.
 
 **A stored-data fault found on the way:** the files table held each
 file's position divided by about 3,600 (`store._sexagesimal` unpacked the
@@ -847,7 +856,10 @@ HDF5 header's decimal hours as sigproc's packed hhmmss). Only check 5 (the
 drift against the Earth's, which never sets a strength) read it, so no
 verdict changed; its evidence did. Fixed in `store.py` (9 November 2026),
 the stored rows put right from each row's own header (KIC 8462852 at 20.1043
-h, +44.4568°; its OFF looks a degree north), and `check.py --all` run again.
+h, +44.4568°; its OFF looks a degree north), and `check.py --all` run again. The result page now
+lists each look's stored position against its own header, its distance
+from the first look, its elevation (57 to 61°) and the Earth's drift there,
+and says so in bold if any position and header disagree.
 
 ## Tabby's star
 

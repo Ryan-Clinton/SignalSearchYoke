@@ -87,7 +87,8 @@ is measured, or the range is carried through; zero spectra are counted.
 **Done** (9 November 2026; `instrument.py`, docs/seti.md, "The instrument,
 measured"): the response is sinc² (Voyager 1, Δχ² 1,950 over Hann); the
 SEFD 10.65 Jy (3C295, one steady pair of two; the 3C123 pair above is the
-L-band setup); no spectrum of zeros and no missing node in the cadence,
+L-band setup), carried to 2017 as the best estimate within the published
+bracket of 10 to 12.5 Jy, every EIRP limit given with that range; no spectrum of zeros and no missing node in the cadence,
 from the chunk indexes. About 400 MB read in all. Still open: the 2017
 cadence's own SEFD (no calibrator in that session), a second steady pair
 for repeatability, packets lost within a spectrum (needs the data read: a

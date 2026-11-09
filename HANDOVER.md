@@ -156,18 +156,14 @@ the default place.
   turboSETI found nothing this search missed. The sweep was let loose on
   that evidence, 3 November 2026.
 - **The sweep of Tabby's 25 May 2017 cadence** (session AGBT17A_999_68,
-  scans 31 to 36, 308 blocks, 1818-2721 MHz): 18 blocks done,
-  1818.46-1871.19 MHz, searched again on 9 November 2026 with search
-  version 3 (the new cadence test): 0 candidates, 118 interference events
-  (every ON look now seeds events), 4 unconfirmed; 287 hits at the cut
-  (version 1 found 123) and 28,321 shadow hits; every look complete; no
-  candidate for the checks. Block 6 (1836-1839
-  MHz) alone has 190 hits, all interference. The version 1 results are
-  kept in the store, marked superseded. About 34 s a block on the Windows
-  PC (the search, not the network, sets the pace; 31 s with version 3):
-  about 2.7 hours for the whole cadence (about 3 s more a block from
-  version 4's random OFF tracks). The next sweep searches these 18 blocks
-  again with version 4 first. Every hit is in `data/ssy.sqlite`; the readable record is
+  scans 31 to 36, 308 blocks, 1818-2721 MHz), search version 4, started
+  9 November 2026 about 07:55 UTC on the Windows PC: 128 blocks done by
+  10:24 UTC (1818-2193 MHz). Quiet blocks take about 35 s; the crowded
+  ones near 2190 MHz (the 2200-2290 MHz space downlink band begins there)
+  take 6 to 15 minutes, so the end is hours later than the 2.7 hours
+  first expected. Its results (the result page, `docs/results/`) are
+  committed when it finishes; the earlier 18-block runs are superseded.
+  Every hit is in `data/ssy.sqlite`; the readable record is
   `data/sweeps/KIC8462852-AGBT17A_999_68.json`.
 - **The reference block** (block 153, all six looks) is in
   `data/reference/`, with the first search's answer (8 November 2026).

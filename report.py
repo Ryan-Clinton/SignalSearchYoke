@@ -26,6 +26,8 @@ TARGETS = {
 PC_M = 3.0857e16
 NOTCH_MHZ = (2300.0, 2360.0)        # Green Bank's S-band notch filter (Price et al. 2020)
 ARECIBO_W = 1e13                    # CWTFM's normalisation (Enriquez et al. 2017, Eq. 11)
+SEFD_BRACKET_JY = (10.0, 12.5)      # Price et al. 2020's 10 Jy; 25 K at 2.0 K/Jy (Price 2020 Table 1, GBT
+                                    # Proposer's Guide): the bracket the 2019 calibration is carried to 2017 in
 HARP_2016_W = (4e15, 7e15)          # ATA, 1-10 GHz, narrowband EIRP limit at 454 pc
 PRICE_2020 = "Price et al. 2020, AJ 159, 86"
 
@@ -164,6 +166,8 @@ def build(target, session):
                                                             "not_kept_because")} for p in sefd_rec["pairs"]],
         "cadence_elevation_deg": [round(instrument.elevation(f["tstart_mjd"], f["ra_hours"], f["dec_degrees"]), 1)
                                   for f in files if f["ra_hours"] is not None],
+        "sefd_bracket_jy": [min(SEFD_BRACKET_JY[0], sefd), max(SEFD_BRACKET_JY[1], sefd)],
+        "positions": _positions(files, (lo + hi) / 2 if lo else None),
         "response": instrument.load("response"), "dropped": instrument.load("dropped"),
         "edge_channels": int(seti.MAX_DRIFT * span / width_hz) + math.ceil(seti.MAX_DRIFT * tsamp / width_hz) + 4,
         "on_min": onoff.ON_MIN, "off_max": onoff.OFF_MAX, "max_hits": searching.MAX_HITS,
@@ -215,7 +219,14 @@ def search_space(r):
            "- **Seen in total power** (both polarisations summed): any polarisation.",
            ("- **With the channel response measured on Voyager 1's carrier** (`measure.py response`): "
             f"{resp['best']} fits best, by χ² {resp['chi2_margin_over_next']:g} over the next "
-            f"(χ²/dof {resp['fits'][resp['best']]['chi2_per_dof']:g}), the response the planted signals used."
+            f"(χ²/dof {resp['fits'][resp['best']]['chi2_per_dof']:g}), the response the planted signals used. "
+            "Not a perfect fit: residuals up to "
+            f"{100 * max(abs(v) for v in resp['fits'][resp['best']]['residual_over_peak_by_channel'].values()):.1f}% "
+            "of the peak, and the far wings above sinc² (at 10 to 20 channels "
+            f"{next(w['observed'] for w in resp['wings'] if w['channels'][0] == 10):.4f} of the peak against "
+            f"{next(w['sinc2'] for w in resp['wings'] if w['channels'][0] == 10):.4f}), which the carrier's own phase "
+            "noise could give. One observation, of September 2016; other sessions' processing is taken to be the "
+            "same, not shown to be."
             if resp else "- **With the sinc² channel response assumed** (an unwindowed FFT, as in rawspec)."),
            "", "It cannot see:", "",
            f"- drifts beyond ±{r['max_drift_hz_s']:g} Hz/s (the `.0002` product could reach about 2.7 kHz/s: "
@@ -230,12 +241,43 @@ def search_space(r):
            "- anything outside the half-hour of the cadence or the beam (about 5.8′ wide at 2.3 GHz, centred on "
            "the star).", ""]
     if drop:
-        out += [f"**Dropped data** (`measure.py dropped`, from the files' chunk indexes): "
-                f"{drop['zero_like_chunks']} spectra of zeros in any coarse channel of the six looks, "
+        out += [f"**Dropped data** (`measure.py dropped`, from the files' chunk indexes): a test for spectra "
+                "of zeros, which compress to almost nothing, found "
+                f"{drop['zero_like_chunks']} in any coarse channel of the six looks, and "
                 f"{drop['missing_or_dropped_nodes']} missing or dropped nodes (no `zz` or `oo` in the names); the "
                 "smallest chunk is "
-                f"{100 * min(lk['smallest_over_median'] for lk in drop['looks']):.0f}% of its file's median. Packets "
-                "lost within a spectrum lower its power without zeroing it, and are not seen this way.", ""]
+                f"{100 * min(lk['smallest_over_median'] for lk in drop['looks']):.0f}% of its file's median. This "
+                "does not show that every sample is intact: packets lost within a spectrum lower its power without "
+                "zeroing it, and are not seen this way.", ""]
+    return out
+
+
+def _positions(files, f_mhz):
+    """Each look's pointing: as stored, as its own header gives it (they must
+    agree: a fault once stored them about 3,600 times too small), its
+    distance from the first look's, its elevation, and the drift the Earth
+    gives a signal fixed in the sky there at mid-band."""
+    import instrument
+    import store
+    import vetting
+    out = []
+    first = files[0]
+    for f in files:
+        a = json.loads(f["attrs"] or "{}")
+        ra_h, dec_h = store._coordinate(a.get("src_raj")), store._coordinate(a.get("src_dej"))
+        ok = (ra_h is not None and f["ra_hours"] is not None and abs(ra_h - f["ra_hours"]) < 1e-6
+              and abs(dec_h - f["dec_degrees"]) < 1e-6)
+        d1, r1 = math.radians(first["dec_degrees"]), math.radians(first["ra_hours"] * 15)
+        d2, r2 = math.radians(f["dec_degrees"]), math.radians(f["ra_hours"] * 15)
+        apart = math.degrees(math.acos(min(1.0, math.sin(d1) * math.sin(d2)
+                                           + math.cos(d1) * math.cos(d2) * math.cos(r1 - r2))))
+        mid = f["tstart_mjd"] + (f["n_spectra"] or 16) * (f["tsamp_s"] or 18.25) / 2 / 86400
+        out.append({"position": f["cadence_position"], "ra_hours": round(f["ra_hours"], 5),
+                    "dec_deg": round(f["dec_degrees"], 5), "matches_header": ok,
+                    "from_first_deg": round(apart, 4),
+                    "elevation_deg": round(instrument.elevation(mid, f["ra_hours"], f["dec_degrees"]), 1),
+                    "earth_drift_hz_s": round(vetting.expected_drift(f_mhz, mid, f["ra_hours"], f["dec_degrees"])[0], 4)
+                    if f_mhz else None})
     return out
 
 
@@ -287,7 +329,13 @@ def markdown(r):
                      f"a transmitter narrower than 1 Hz at {t.get('distance_pc', '?')} pc): EIRP "
                      f"{'≤ ' if slow['how_90'] == 'at or below' else ''}{_w(slow.get('eirp_90_w'))} at "
                      f"{slow['drift_hz_s'][0]:g} to {slow['drift_hz_s'][1]:g} Hz/s, "
-                     f"{_w(fast.get('eirp_90_w'))} at {fast['drift_hz_s'][0]:g} to {fast['drift_hz_s'][1]:g} Hz/s.")
+                     f"{_w(fast.get('eirp_90_w'))} at {fast['drift_hz_s'][0]:g} to {fast['drift_hz_s'][1]:g} Hz/s"
+                     + (f"; with the SEFD anywhere in {r['sefd_bracket_jy'][0]:g} to {r['sefd_bracket_jy'][1]:g} Jy, "
+                        f"{_w(slow.get('eirp_90_w') * r['sefd_bracket_jy'][0] / r['sefd_jy'])} to "
+                        f"{_w(slow.get('eirp_90_w') * r['sefd_bracket_jy'][1] / r['sefd_jy'])} and "
+                        f"{_w(fast.get('eirp_90_w') * r['sefd_bracket_jy'][0] / r['sefd_jy'])} to "
+                        f"{_w(fast.get('eirp_90_w') * r['sefd_bracket_jy'][1] / r['sefd_jy'])}"
+                        if r["sefd_measured"] and slow.get("eirp_90_w") and fast.get("eirp_90_w") else "") + ".")
     lines.append(f"- **Nominal threshold** (the radiometer equation at the cut, SNR {r['snr_min']:g}; not "
                  f"measured, as the faintest planted signals were S_in 15): S_min {r['cut_flux_jy_hz']:.1f} Jy Hz, "
                  f"EIRP {_w(r['cut_eirp_w'])}.")
@@ -307,6 +355,18 @@ def markdown(r):
         lines.append(f"| {f['cadence_position'] + 1} | {'ON' if f['is_on'] else 'OFF'} | {f['target']} | "
                      f"{seti._utc(f['tstart_mjd'])} | [{f['url'].rsplit('/', 1)[-1]}]({f['url']}) | "
                      f"`{(f['etag'] or '').strip(chr(34))}` |")
+    pos = r["positions"]
+    lines += ["", "Where each look pointed (stored, checked against its own header), and the drift the Earth "
+              f"gives a signal fixed in that direction at {(r['from_mhz'] + r['to_mhz']) / 2:.0f} MHz:", "",
+              "| # | RA (h) | Dec (°) | matches its header | from look 1 (°) | elevation (°) | Earth's drift (Hz/s) |",
+              "|---|---|---|---|---|---|---|"]
+    for p in pos:
+        lines.append(f"| {p['position'] + 1} | {p['ra_hours']:.5f} | {p['dec_deg']:+.5f} | "
+                     f"{'yes' if p['matches_header'] else '**NO**'} | {p['from_first_deg']:.3f} | "
+                     f"{p['elevation_deg']:.1f} | {p['earth_drift_hz_s']:+.4f} |")
+    if not all(p["matches_header"] for p in pos):
+        lines += ["", "**The stored positions do not match the headers: check 5 and the elevations are wrong "
+                  "until the files' rows are written again.**"]
     lines += ["", f"- **Band:** {r['from_mhz']:.3f} to {r['to_mhz']:.3f} MHz searched; of it {r['notch_mhz']:.1f} MHz "
               f"lies in the receiver's notch filter ({NOTCH_MHZ[0]:g} to {NOTCH_MHZ[1]:g} MHz), searched but "
               f"with its sensitivity not measured and left out of the limits below.",
@@ -321,8 +381,8 @@ def markdown(r):
               + ". Their candidates and interference stand, but a signal there may have gone unpicked, so they "
                 "are left out of the usable band and of the limits.",
               (f"- **SEFD:** {r['sefd_jy']:g} Jy, measured with the flux calibrator 3C295 in the same S-band "
-               f"setup (`measure.py sefd`; 16-84% over the band {r['sefd_16_84_jy'][0]:g} to "
-               f"{r['sefd_16_84_jy'][1]:g} Jy; pairs "
+               f"setup (`measure.py sefd`; across the band's coarse channels, 16-84%, {r['sefd_16_84_jy'][0]:g} "
+               f"to {r['sefd_16_84_jy'][1]:g} Jy: a spread over frequency, not an uncertainty; pairs "
                + ", ".join(f"{p['utc']} UTC at {p['elevation_on_deg']:g}° elevation: {p['sefd_jy_median']:g} Jy"
                            for p in r["sefd_pairs"] if p["kept"])
                + "".join(f"; one of {p['utc']} UTC not used ({p['sefd_jy_median']:g} Jy: "
@@ -332,8 +392,11 @@ def markdown(r):
                  "3C48, 3C123, 3C138, 3C147, 3C196, 3C286, 3C295, 3C353, 3C380 and others queried): same receiver "
                  "and setup, other epoch; "
                  "the cadence's elevation was "
-               + ", ".join(f"{e:g}°" for e in r["cadence_elevation_deg"]) + ". Every flux and EIRP below scales "
-                 "with it." if r["sefd_measured"] else
+               + ", ".join(f"{e:g}°" for e in r["cadence_elevation_deg"]) + ". One pair, so its repeatability "
+                 "is not measured either. The limits below use it as the best estimate, and carry it to 2017 within "
+                 f"a bracket of {r['sefd_bracket_jy'][0]:g} to {r['sefd_bracket_jy'][1]:g} Jy (Price et al. "
+                 "2020's 10 Jy; 25 K at the Proposer's Guide's 2.0 K/Jy): a range of published values, not a "
+                 "statistical interval. Every flux and EIRP below scales with it." if r["sefd_measured"] else
                f"- **SEFD:** {r['sefd_jy']:g} Jy, Price et al. 2020's figure for Green Bank at S-band: assumed, "
                "not measured here; every flux and EIRP below scales with it."), ""]
     lines += ["## The search", "",
@@ -387,6 +450,11 @@ def markdown(r):
         cell = lambda p: (f"{'≤' if s[f'how_{p}'] == 'at or below' else '>' if s[f'how_{p}'] == 'above' else ''}"  # noqa: E731
                           f"{s[f's_in_{p}']:g}, {s[f'flux_{p}_jy_hz']:.0f} Jy Hz, {_w(s.get(f'eirp_{p}_w'))}")
         lines.append(f"| {s['drift_hz_s'][0]:g} to {s['drift_hz_s'][1]:g} | {cell(50)} | {cell(90)} |")
+    if r["sefd_measured"]:
+        lines += ["", f"With the SEFD's bracket ({r['sefd_bracket_jy'][0]:g} to {r['sefd_bracket_jy'][1]:g} Jy, "
+                  "above), every flux and EIRP in this table lies between "
+                  f"{r['sefd_bracket_jy'][0] / r['sefd_jy']:.2f} and {r['sefd_bracket_jy'][1] / r['sefd_jy']:.2f} "
+                  "times the value given."]
     lines += ["", "The limits hold over the usable band only (the notch and the blocks cut short left out). "
               f"Nominal, at the cut (SNR {r['snr_min']:g}; the radiometer equation, not a measured rate): S_min "
               f"{r['cut_flux_jy_hz']:.1f} Jy Hz ({r['cut_flux_jy_hz']:.1f}×10⁻²⁶ W m⁻²), EIRP_min "
