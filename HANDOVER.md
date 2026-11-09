@@ -57,6 +57,7 @@ settings file.
 ./seti.py report KIC8462852 AGBT17A_999_68        the result page of a swept cadence (Phase 8)
 ./pipelines.py run KIC8462852                      turboSETI and pickles over the swept cadence (about 2 hours; resumes)
 ./pipelines.py compare KIC8462852                  each pipeline's events against the others' (then the report again)
+./pipelines.py followup KIC8462852                 taken to the signal: pickles' windows with our tracks blanked, turboSETI's own SNR
 ./measure.py WHAT [FILE...]                       desmear, pairs, kurtosis, false, scale, noise, cadence, vetting, setigen, voyager, price,
                                                   response, sefd, dropped TARGET SESSION
 ```
@@ -162,7 +163,8 @@ the default place.
   scans 31 to 36, 308 blocks, 1818-2721 MHz), search version 4: done,
   9 November 2026, 07:52 to 12:55 UTC on the Windows PC. 11 candidates;
   `check.py` (checks version 3) calls 2 interference and 9 likely
-  interference, none unexplained. Usable band 801.3 MHz (the notch and 14
+  interference (indicated, not identified), none unexplained. Searched
+  completely 861.3 MHz; usable band 801.3 MHz (the notch and 14
   blocks cut short at the hit limit left out); EIRP at 90% kept
   3.1×10¹⁴ W (slow drifts) to 9.5×10¹⁴ W (2-4 Hz/s). The result page is
   `docs/results/KIC8462852-AGBT17A_999_68.md`, the candidates' reports

@@ -10,6 +10,7 @@ Nothing here is measured afresh: every number comes from the store
 (data/ssy.sqlite) or data/measurements/, and the report says which.
 """
 import json
+from pathlib import Path
 import math
 
 import yoke
@@ -172,6 +173,8 @@ def build(target, session):
         "positions": _positions(files, (lo + hi) / 2 if lo else None),
         "response": instrument.load("response"), "dropped": instrument.load("dropped"),
         "pipelines": (lambda x: x if x and x.get("session") == session else None)(_load("pipelines")),
+        "pipelines_followup": (lambda x: x if x and x.get("session") == session else None)(
+            _load("pipelines-followup")),
         "edge_channels": int(seti.MAX_DRIFT * span / width_hz) + math.ceil(seti.MAX_DRIFT * tsamp / width_hz) + 4,
         "on_min": onoff.ON_MIN, "off_max": onoff.OFF_MAX, "max_hits": searching.MAX_HITS,
         "cut_flux_jy_hz": cut_flux, "cut_eirp_w": cut_eirp,
@@ -304,7 +307,7 @@ def other_pipelines(r):
            "",
            "| pipeline | lines found | kept as events or candidates |", "|---|---|---|",
            f"| this search | {p['ours']['hits']:,} hits at SNR 10 | {p['ours']['candidates']} candidates, "
-           "none unexplained by the checks |",
+           "each with interference evidence (none unexplained) |",
            f"| turboSETI | {t['hits']:,} hits at its SNR 10 | {t['events']} events |",
            f"| pickles, masked | {k['masked']['level0']:,} hotspots | {k['masked']['level1']} at level 1, "
            f"{k['masked']['level2']} at level 2 |",
@@ -313,9 +316,14 @@ def other_pipelines(r):
            f"turboSETI's SNR is about {p['turbo_scale']:g} of this search's for the same signal, so its cut of 10 "
            "is about 44 here: the two lists of hits differ mainly in depth. No line was kept by all three. "
            "This search's candidates, in the others:", "",
-           "| candidate (MHz) | SNR | turboSETI | pickles |", "|---|---|---|---|"]
+           "| candidate (MHz) | SNR | turboSETI (its own statistics at the line, each ON look) | pickles |",
+           "|---|---|---|---|"]
+    fu = r.get("pipelines_followup")
+    local = {round(c["f_mhz"], 6): c for c in (fu or {}).get("turboseti_local", [])}
     for o in p["our_candidates"]:
-        out.append(f"| {o['f_mhz']:.6f} | {o['snr']:.1f} | {o['turboseti']} | {o['pickles']} |")
+        c = local.get(round(o["f_mhz"], 6))
+        out.append(f"| {o['f_mhz']:.6f} | {o['snr']:.1f} | {_turbo_reason(c) if c else o['turboseti']} | "
+                   f"{o['pickles']} |")
     out += ["", "What the others kept at level 1 or more, or as events, in this search:", "",
             "| pipeline | MHz | kept | here |", "|---|---|---|---|"]
     for e in p["their_events"]:
@@ -329,27 +337,102 @@ def other_pipelines(r):
         out.append(f"| {e['pipeline']} | {e['f_mhz']:.6f} | {kept} | {here} |")
     if not p["their_events"]:
         out.append("| (none) | | | |")
-    pk = [e for e in p["their_events"] if e["pipeline"] == "pickles"]
-    two_of_three = [e for e in pk if min(e["k_on"]) < 0.5]
-    unexplained = [e for e in p["their_events"] if not e["ours"] or any(x["label"] == "unconfirmed" for x in e["ours"])]
-    weak = [o for o in p["our_candidates"] if o["turboseti_expected_snr"] < 10]
-    out += [""]
-    if pk:
-        out.append(f"pickles' level 1 asks for the median ON kurtosis, so a line in two of the three ON looks passes: "
-                   f"{len(two_of_three)} of its {len(pk)} kept window(s) have an ON look under 0.5"
-                   + (" (each its first), where this search finds the line under S/N 5 along the track: here they "
-                      "need all three, so they would be unconfirmed even without the OFF evidence." if two_of_three
-                      and all(e["k_on"][0] < 0.5 for e in two_of_three) else "."))
-        out.append("")
-    out.append(("Nothing either of the others kept is missed here: every window or event of theirs is an event here, "
-                "called interference by the OFF looks along its track. " if not unexplained else
-                f"{len(unexplained)} of what the others kept has no event here or only an unconfirmed one (the "
-                "table). ")
-               + f"Of this search's {len(p['our_candidates'])} candidates, {len(weak)} are under turboSETI's cut on "
-                 "its scale; pickles masks every one as published, and unmasked finds none at level 1. All are "
-                 "explained here as interference by the checks.")
+    weak = [c for c in local.values() if max(lk["files"][0]["line"]["snr"] for lk in c["looks"]) < 10]
+    out += ["", "A pickles window's frequency is its first, highest channel; the window runs 2.86 kHz below it, so "
+            "an event here 1 to 3 kHz below that frequency lies inside it. Matching by window says only that both "
+            "saw something in the same 2.86 kHz; what pickles saw in each is taken to the signal below.", ""]
+    if fu:
+        out += ["### Taken to the signal", "",
+                "`pipelines.py followup` (data/measurements/pipelines-followup.json) re-reads the blocks these "
+                "windows and candidates are in.", "",
+                "**pickles' windows.** Each look's window scored as pickles scores it (Fisher kurtosis of the "
+                "window's spectra), then again with every track this search found there, shadow hits included, "
+                f"blanked (±{fu['track_half_channels']} channels along each track, set to the look's median). "
+                "In each picture, left: the window as read; right: the tracks blanked; looks 1 to 6 from the top.",
+                "",
+                "| window (MHz) | level | ON kurtosis | with this search's tracks blanked | level 1 then | "
+                "what is left |", "|---|---|---|---|---|---|"]
+        for w in fu["pickles_windows"]:
+            ks, ka = w["k_here"], w["k_tracks_blanked"]
+            left = []
+            for pos, rows in sorted(w["residual"].items(), key=lambda x: int(x[0])):
+                if int(pos) % 2:
+                    continue
+                rest = sorted(x["excess"] for x in rows)[len(rows) // 2]
+                strong = sorted((x for x in rows if x["excess"] > 3 * max(rest, 0.01)), key=lambda x: x["spectrum"])
+                if strong:
+                    peak = max(x["excess"] for x in rows)
+                    rate = (abs(strong[-1]["channel"] - strong[0]["channel"]) * 2.794
+                            / ((strong[-1]["spectrum"] - strong[0]["spectrum"]) * 18.25)
+                            if len(strong) > 1 else None)
+                    left.append(f"ON look {int(pos) // 2 + 1}: a band about 64 channels wide, up to "
+                                f"{100 * peak:.0f}% over the look's level, in spectra "
+                                + ", ".join(str(x["spectrum"] + 1) for x in strong) + " only"
+                                + (f", moving about {rate:.0f} Hz/s across the window" if rate else "")
+                                + (": outside both drift searches (±4 Hz/s)" if rate is None or rate > 4 else ""))
+            out.append(f"| {w['f_mhz']:.6f} ([waterfalls](../pipelines/{Path(w['png']).name})) | {w['level']} | "
+                       + ", ".join(f"{x:.2f}" for x in ks[0::2]) + " | "
+                       + ", ".join(f"{x:.2f}" for x in ka[0::2])
+                       + f" | {'passes' if w['level1_tracks_blanked'] else 'fails'} | "
+                       + ("; ".join(left) or "nothing standing out") + " |")
+        fails = [w for w in fu["pickles_windows"] if not w["level1_tracks_blanked"]]
+        out += ["", f"With this search's tracks blanked, {len(fails)} of the {len(fu['pickles_windows'])} windows "
+                "no longer pass pickles' level 1: the tracks this search found, each called interference here, "
+                "are what lifted them. Where a window was lifted by two things in different ON looks (a track here "
+                "in one, a fast, wide, short band in another), pickles' median test joined two signals that this "
+                "search keeps apart; the fast band is outside what this search, or turboSETI, looks for "
+                "(comparable.md step 9).", ""]
+        eq = fu["pickles_equivalence"]
+        out += [f"**pickles run as published.** On the blocks with these windows "
+                f"({', '.join(str(e['block']) for e in eq)}), pickles' own pickler_wrapper with nothing supplied "
+                "and the run here give "
+                + ("identical score tables" if all(e["identical"] for e in eq) else "**different score tables**")
+                + " (" + ", ".join(f"{e['rows_published']} rows" for e in eq) + "). Its masks are off in both: "
+                "with them on, these blocks have no hotspots and the published code stops (line 630). pickles "
+                "writes the scores and flags only; the level cuts are taken from Painter et al. 2025's text.", ""]
+        zero = [c for c in local.values() if abs(c["drift_hz_s"]) < 1e-9]
+        out += ["**turboSETI's own statistics** (the table's turboSETI column). At each candidate, in each ON "
+                "look: turboSETI's noise (find_doppler's comp_stats, the median and the 5-95% trimmed standard "
+                "deviation of the time-summed spectrum over the whole coarse channel), the line's SNR on it, the "
+                "largest line within its top-hit window (±784 channels, 2.19 kHz: a hit is kept only if nothing "
+                "there is larger), and turboSETI run again at SNR 3 with its smallest drift as set (0.00001 Hz/s) "
+                f"and at 0. {len(weak)} of the {len(local)} candidates are under its cut of 10 in every ON look on "
+                "its own statistics. "
+                + (f"{len(zero)} have zero drift, which turboSETI as set never searches (find_doppler.py: a drift "
+                   "is searched only above min_drift); with min_drift 0 it reports none of them either, so that "
+                   "is not what decides here." if zero else ""), ""]
+    out.append(f"Of this search's {len(p['our_candidates'])} candidates, none was kept by either of the others; "
+               "pickles masks every one as published, and unmasked none reaches level 1. Of what the others kept, "
+               "nothing is a candidate here: each window pickles kept holds tracks this search calls interference"
+               + (", and those tracks are what lift it" if fu and all(not w["level1_tracks_blanked"]
+                                                                       for w in fu["pickles_windows"]) else "")
+               + ". This compares the pipelines at their own cuts, far apart in depth; matched depth is step 4.")
     out.append("")
     return out
+
+
+def _turbo_reason(c):
+    """Why turboSETI kept no event at a candidate, from its own statistics there."""
+    looks = c["looks"]
+    snrs = [lk["files"][0]["line"]["snr"] for lk in looks]
+    text = "SNR " + ", ".join(f"{x:.1f}" for x in snrs)
+    over = [lk for lk in looks if lk["files"][0]["line"]["snr"] >= 10]
+    if not over:
+        noisy = max(lk["files"][0]["stddev_over_median"] / lk["files"][1]["stddev_over_median"] for lk in looks)
+        return text + ": under its cut of 10 in every ON look" + (
+            f" (its noise here {noisy:.1f} times a quiet block's: the notch's slope)" if noisy > 2 else "")
+    hidden = [lk for lk in over
+              if lk["files"][0]["largest_beside"]["snr_zero_drift"] > lk["files"][0]["line"]["snr"]]
+    parts = [text + f": over its cut in {len(over)} ON look(s)"]
+    if hidden:
+        b = max(hidden, key=lambda lk: lk["files"][0]["largest_beside"]["snr_zero_drift"])
+        b = b["files"][0]["largest_beside"]
+        parts.append(f"there dropped by its top-hit rule for a larger line within 2.19 kHz (SNR up to "
+                     f"{b['snr_zero_drift']:,.0f}, {abs(b['offset_hz']) / 1e3:.1f} kHz away); not reported even at "
+                     "SNR 3")
+    if len(over) < len(looks):
+        parts.append("and under it in the other, so never in every ON look as its event stage asks")
+    return "; ".join(parts)
 
 
 def _load(name):
@@ -378,6 +461,8 @@ def markdown(r):
     lines += [f"- **Searched:** {r['blocks_current']} of {r['blocks_total']} blocks "
               f"({r['covered_mhz']:.1f} MHz, {r['from_mhz']:.3f} to {r['to_mhz']:.3f} MHz)"
               + ("" if done else " — **the sweep is not complete; this report is partial**") + ".",
+              f"- **Searched completely** (no look stopped at the hit limit): {r['covered_mhz'] - r['cut_short_mhz']:.1f} "
+              f"MHz, the notch included.",
               f"- **Usable for limits:** {r['usable_mhz']:.1f} MHz: the band searched less the receiver's notch "
               f"({r['notch_mhz']:.1f} MHz) and {len(short)} block(s) where a look stopped at the hit limit "
               f"({r['cut_short_mhz']:.1f} MHz, listed below)"
@@ -410,9 +495,13 @@ def markdown(r):
     lines.append(f"- **Nominal threshold** (the radiometer equation at the cut, SNR {r['snr_min']:g}; not "
                  f"measured, as the faintest planted signals were S_in 15): S_min {r['cut_flux_jy_hz']:.1f} Jy Hz, "
                  f"EIRP {_w(r['cut_eirp_w'])}.")
+    shown = sum((c["verdict"] or "").startswith("interference") for c in r["candidates"])
+    likely = sum((c["verdict"] or "").startswith("likely interference") for c in r["candidates"])
     lines.append("- **No technosignature is claimed.** " + (
-        "No candidate came out unexplained." if not any((c["verdict"] or "").startswith("unexplained")
-                                                       for c in r["candidates"])
+        f"Every candidate carries evidence of interference: {shown} shown to be interference, {likely} likely "
+        "interference (indicated: a weight of evidence such as zero drift, a known band or crowding, not an "
+        "identification); none came out unexplained. No transmitter is identified."
+        if not any((c["verdict"] or "").startswith("unexplained") for c in r["candidates"])
         else "Unexplained candidates are listed below; unexplained is the end of these checks, not a detection."))
     lines += ["", "## The observation", ""]
     if r["target_info"]:

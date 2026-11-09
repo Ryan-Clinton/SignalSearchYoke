@@ -576,8 +576,8 @@ a second person could repeat it from the report alone.
 
 **Done, 9 November 2026:** all 308 blocks searched (search version 4),
 [results/KIC8462852-AGBT17A_999_68.md](results/KIC8462852-AGBT17A_999_68.md)
-written from it: 11 candidates, every one explained by the checks (2
-interference, 9 likely interference); usable band 801.3 MHz; EIRP at 90%
+written from it: 11 candidates, each with evidence of interference (2
+shown, 9 likely interference: indicated, not identified); usable band 801.3 MHz; EIRP at 90%
 kept 3.1×10¹⁴ to 9.5×10¹⁴ W. It is complete in coverage, not in depth:
 14 blocks were cut short at the hit limit and are left out of the limits.
 

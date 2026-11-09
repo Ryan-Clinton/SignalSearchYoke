@@ -120,18 +120,35 @@ the result page, "Other pipelines on the same cadence"). On all 308 blocks
 of the 2017 cadence: turboSETI 2,744 hits, 0 events; pickles 77 hotspots
 with its bands masked (0 kept), 6,424 unmasked (3 at level 1, 1 at level
 2); this search 11 candidates. No line was kept by all three.
-- The 3 windows pickles kept (masks off) are each an event here, called
-  interference: OFF S/N 6.0 to 7.4 along the track. Each is weak in the
-  first ON look (kurtosis under 0.1, S/N under 5 here); pickles' median
-  test passes a line in two ON looks of three.
-- 10 of this search's 11 candidates are under turboSETI's cut on its scale
-  (SNR 2.3 to 3.5 there). The eleventh (2197.16 MHz, about 15.5 on its
-  scale) sits beside interference up to SNR 8,300 in its coarse channel,
-  which raises the noise turboSETI measures over the whole channel.
+- The 3 windows pickles kept (masks off) each hold events here called
+  interference (OFF S/N 6.0 to 7.4 along the track). Matching by window
+  (2.86 kHz) is not matching a signal, so `pipelines.py followup` scores
+  each look's window as pickles does, then again with this search's tracks
+  there blanked: all 3 then fail level 1, so those tracks are what lifted
+  them. In the two at 2107 MHz, ON look 2's kurtosis is something else: a
+  band about 64 channels wide, 22-24% over the level, in that look's first
+  two or three spectra only, moving 11 to 29 Hz/s, outside both drift
+  searches. pickles' median test joined it with a track here in ON look 3:
+  two signals, not one in two ON looks.
+- turboSETI measured at every candidate on its own statistics (its
+  comp_stats over the coarse channel, (sum - median) / stddev), not only
+  through the 0.227 scale: 10 are under its cut in every ON look (at most
+  SNR 6.1). The eleventh, 2197.16 MHz, is SNR 19.1 and 15.7 in ON looks 1
+  and 2 but dropped by its top-hit rule (a larger line, SNR 213 to 297,
+  2.1 kHz away, inside its ±2.19 kHz window), and 0.2 in ON look 3. The
+  noise there is not raised much (1.38 times a quiet block's in ON look 1,
+  1.03 to 1.05 in the others): the earlier reading, that interference
+  raised its noise, was wrong. Six candidates have zero drift, which
+  turboSETI as set never searches (min_drift 0.00001 Hz/s); run with 0 it
+  reports none of them either.
 - pickles' published masks cover all 11 candidates' frequencies; unmasked,
   7 are hotspots and none reaches level 1 (6 on OFF kurtosis, 1 on ON).
 - pickles' code fails on a block with no hotspots (an undefined name at
-  line 630); the name is supplied, its code otherwise run as published.
+  line 630); the name is supplied. On blocks 49 and 98 the published code
+  and the run here give identical score tables (18 and 76 rows). pickles
+  writes scores only: the level cuts are from the paper's text.
+- The comparison as first written (948ad77) is kept in git; its record is
+  `data/measurements/pipelines-baseline-2026-11-09.json`.
 
 Not shown: that the pipelines agree at matched depth (step 4), since
 turboSETI's cut is about SNR 44 on this search's scale.

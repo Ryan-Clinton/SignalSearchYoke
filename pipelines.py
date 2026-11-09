@@ -18,11 +18,13 @@ block.json is done, so a run that stops goes on where it stopped.
 
     python pipelines.py run KIC8462852 [--blocks N]
     python pipelines.py compare KIC8462852     each pipeline's events against the others'
+    python pipelines.py followup KIC8462852    what drives each pickles window; turboSETI's own noise at a candidate
 """
 import argparse
 import csv
 import hashlib
 import json
+import math
 import re
 import shutil
 import subprocess
@@ -31,6 +33,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+import numpy as np
 import requests
 
 import seti
@@ -284,6 +287,173 @@ def compare(target, say=print):
     return record
 
 
+QUIET_BLOCK = 153       # the reference block: a quiet coarse channel of every look, for turboSETI's noise there
+TRACK_HALF = 3          # channels either side of a track blanked when testing what drives a pickles window
+
+
+def _kurtosis(x):
+    """Fisher's kurtosis, biased (scipy.stats.kurtosis's default, as pickles uses it)."""
+    x = np.asarray(x, dtype=np.float64).ravel()
+    d = x - x.mean()
+    m2 = (d * d).mean()
+    return float((d ** 4).mean() / (m2 * m2) - 3.0) if m2 > 0 else float("nan")
+
+
+def _window_png(panels, path, yscale=8):
+    """Waterfalls, six looks each, side by side (each a list of (16, n) arrays): greyscale, no dependencies."""
+    import struct
+    import zlib
+    cols = []
+    for looks in panels:
+        st = np.asarray(looks, dtype=np.float64)
+        lo, hi = np.percentile(st, 1), np.percentile(st, 99.7)
+        norm = np.clip((st - lo) / max(hi - lo, 1e-12), 0, 1)
+        rows = [np.kron((norm[k] * 255).astype(np.uint8), np.ones((yscale, 1), np.uint8)) for k in range(len(st))]
+        gap = np.full((3, st.shape[2]), 0, np.uint8)
+        col = rows[0]
+        for r in rows[1:]:
+            col = np.vstack([col, gap + 255, r])
+        cols.append(255 - col)
+    sep = np.full((cols[0].shape[0], 12), 255, np.uint8)
+    img = cols[0]
+    for c in cols[1:]:
+        img = np.hstack([img, sep, c])
+    raw = b"".join(b"\x00" + img[r].tobytes() for r in range(img.shape[0]))
+
+    def chunk(kind, data):
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF)
+    Path(path).write_bytes(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", img.shape[1], img.shape[0],
+                                                                           8, 0, 0, 0, 0))
+                           + chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b""))
+    return path
+
+
+def followup(target, say=print):
+    """The comparison taken to the signal: for each window pickles kept, which
+    of this search's tracks make its kurtosis (each look's window scored as
+    pickles scores it, then again with every track this search found there
+    blanked), with the waterfalls and what is left in each look; for every
+    candidate of this search, what turboSETI's own statistics give at the
+    line in each ON look, the largest line its top-hit rule weighs beside it,
+    and what it reports there at a low cut with and without its smallest
+    drift; and
+    pickles' score table with and without the one change made to run it.
+    Re-reads only the blocks needed; writes data/measurements/pipelines-followup.json
+    and docs/pipelines/*.png."""
+    p = yoke.DATA / "measurements" / "pipelines.json"
+    comp = json.loads(p.read_text(encoding="utf-8"))
+    db = store.connect()
+    session, urls = store.cadence_files(db, target)
+    block_list = seti.blocks(seti.reading.prepare(urls[:1])[0])
+    windows = [e for e in comp["their_events"] if e["pipeline"] == "pickles"]
+    # Every candidate measured on turboSETI's own statistics, not only through the 0.227 scale.
+    loud = comp["our_candidates"]
+
+    def block_of(f):
+        return next(k for k, (lo, hi) in enumerate(block_list) if lo <= f < hi)
+
+    need = sorted({block_of(w["f_mhz"] - 1e-6) for w in windows} | {block_of(o["f_mhz"]) for o in loud}
+                  | ({QUIET_BLOCK} if loud else set()))
+    keep = ROOT / "followup" / f"{target}-{session}"
+    slices, paths = {}, {}
+    for k in need:
+        paths[k] = [keep / f"block_{k:03d}" / f"{i}_{Path(u).name.replace('.h5', '')}.h5" for i, u in enumerate(urls)]
+        if all(q.exists() for q in paths[k]):
+            # Saved by an earlier follow-up: read from disk, not the archive.
+            slices[k] = [seti.read_slice(q, -1e12, 1e12) for q in paths[k]]
+            continue
+        got = seti.read_looks(urls, *block_list[k])
+        slices[k] = [got[u] for u in urls]
+        paths[k] = [seti.save(got[u], q) for u, q in zip(urls, paths[k])]
+        say(f"  block {k} read ({block_list[k][0]:.3f}-{block_list[k][1]:.3f} MHz)")
+    pics = yoke.ROOT / "docs" / "pipelines"
+    pics.mkdir(parents=True, exist_ok=True)
+    out_windows = []
+    for w in windows:
+        k = block_of(w["f_mhz"] - 1e-6)
+        looks = slices[k]
+        fch1, foff, tsamp = looks[0]["fch1"], looks[0]["foff"], looks[0]["tsamp"]
+        lower = int(round((w["f_mhz"] - fch1) / foff))
+        cut = [s["spectra"][:, lower:lower + PICKLES_CHANNELS].astype(np.float64) for s in looks]
+        hits = db.execute("SELECT h.*, f.cadence_position FROM hits h JOIN files f USING(file_id) WHERE h.session=? "
+                          "AND h.superseded_run IS NULL AND h.block_idx=? AND h.f_start_mhz BETWEEN ? AND ?",
+                          (session, k, w["to_mhz"] - 0.002, w["f_mhz"] + 0.002)).fetchall()
+        blanked = [c.copy() for c in cut]
+        n_t = cut[0].shape[0]
+        touched = [0] * 6
+        for h in hits:
+            pos = h["cadence_position"]
+            c = blanked[pos]
+            med = float(np.median(cut[pos]))
+            for t in range(n_t):
+                ch = (h["f_start_mhz"] + h["drift_hz_s"] * t * tsamp / 1e6 - fch1) / foff - lower
+                a, b = int(math.floor(ch)) - TRACK_HALF, int(math.ceil(ch)) + TRACK_HALF + 1
+                if b > 0 and a < c.shape[1]:
+                    c[t, max(a, 0):min(b, c.shape[1])] = med
+                    touched[pos] += 1
+        k_before = [_kurtosis(c / max(np.max(x) for x in cut)) for c in cut]
+        k_after = [_kurtosis(c / max(np.max(x) for x in blanked)) for c in blanked]
+        on_med = lambda ks: sorted([ks[0], ks[2], ks[4]])[1]  # noqa: E731
+        # Where a look keeps its kurtosis with this search's tracks gone, what is left: each spectrum's
+        # strongest 64-channel excess over the look's own level in each channel, and where it is.
+        residual = {}
+        for pos in range(6):
+            if k_after[pos] < 0.25:
+                continue
+            level = np.median(blanked[pos], axis=0)
+            excess = blanked[pos] / np.where(level > 0, level, 1) - 1
+            smooth = np.array([np.convolve(row, np.ones(64) / 64, "same") for row in excess])
+            residual[pos] = [{"spectrum": t, "excess": round(float(smooth[t].max()), 3),
+                              "channel": int(smooth[t].argmax())} for t in range(n_t)]
+        name = f"pickles-{w['f_mhz']:.6f}.png"
+        _window_png([cut, blanked], pics / name)
+        out_windows.append({
+            "f_mhz": w["f_mhz"], "to_mhz": w["to_mhz"], "level": w["level"], "block": k,
+            "k_published": w["k_on"][:1] + w["k_off"][:1] + w["k_on"][1:2] + w["k_off"][1:2] + w["k_on"][2:] + w["k_off"][2:],
+            "k_here": k_before, "k_tracks_blanked": k_after,
+            "level1_here": on_med(k_before) >= 0.5 and max(k_before[1::2]) <= 0.25,
+            "level1_tracks_blanked": on_med(k_after) >= 0.5 and max(k_after[1::2]) <= 0.25,
+            "residual": residual,
+            "tracks": [{"position": h["cadence_position"], "f_mhz": h["f_start_mhz"], "drift_hz_s": h["drift_hz_s"],
+                        "snr": h["snr"], "shadow": h["origin"] == "shadow"} for h in hits],
+            "png": f"docs/pipelines/{name}"})
+        say(f"  pickles window {w['f_mhz']:.6f}: ON kurtosis {[round(x, 2) for x in k_before[0::2]]} -> "
+            f"{[round(x, 2) for x in k_after[0::2]]} with {len(hits)} track(s) of this search blanked")
+    out_loud = []
+    for o in loud:
+        k = block_of(o["f_mhz"])
+        rows = []
+        members = {r["position"]: r["f_start_mhz"] for r in db.execute(
+            "SELECT eh.position, h.f_start_mhz FROM event_hits eh JOIN hits h USING(hit_id) WHERE eh.event_id=?",
+            (o["event_id"],))}
+        for i in (0, 2, 4):
+            tmp = keep / f"turbo_local_{o['f_mhz']:.6f}_{i}.json"
+            # Each look at its own hit's start where it has one, else the event's.
+            _tool("turbo_local.py", tmp, members.get(i, o["f_mhz"]), o["drift_hz_s"], 3, paths[k][i],
+                  paths[QUIET_BLOCK][i])
+            rows.append({"position": i, **json.loads(tmp.read_text(encoding="utf-8"))})
+        out_loud.append({**{x: o[x] for x in ("event_id", "f_mhz", "drift_hz_s", "snr", "turboseti_expected_snr")},
+                         "block": k, "quiet_block": QUIET_BLOCK, "looks": rows})
+        say(f"  turboSETI at {o['f_mhz']:.6f}: SNR on its own statistics "
+            + ", ".join(f"{r['files'][0]['line']['snr']:.1f}" for r in rows)
+            + "; noise (stddev/median) here " + ", ".join(f"{r['files'][0]['stddev_over_median']:.2e}" for r in rows)
+            + ", quiet " + ", ".join(f"{r['files'][1]['stddev_over_median']:.2e}" for r in rows))
+    source, _ = pickles_source()
+    checks = []
+    for k in sorted({w["block"] for w in out_windows}):
+        tmp = keep / f"pickles_check_{k:03d}.json"
+        _tool("pickles_check.py", source, tmp, *paths[k])
+        checks.append({"block": k, **json.loads(tmp.read_text(encoding="utf-8"))})
+        say(f"  pickles as published against as run, block {k}: {checks[-1]}")
+    db.close()
+    record = {"target": target, "session": session, "pickles_windows": out_windows, "turboseti_local": out_loud,
+              "pickles_equivalence": checks, "track_half_channels": TRACK_HALF,
+              "levels_from": "Painter et al. 2025's text: pickles.py writes the scores and flags only, no level cuts",
+              "kind": "measured"}
+    yoke.write(yoke.DATA / "measurements" / "pipelines-followup.json", record, stamp=True)
+    return record
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -292,11 +462,15 @@ def main(argv=None):
     r.add_argument("--blocks", type=int, help="at most this many blocks (default: all left)")
     c = sub.add_parser("compare", help="every event of each pipeline set against the others' (pipelines.json)")
     c.add_argument("target")
+    f = sub.add_parser("followup", help="the comparison taken to the signal: pickles' windows, turboSETI's own noise")
+    f.add_argument("target")
     args = ap.parse_args(argv)
     if args.cmd == "run":
         run(args.target, args.blocks)
     elif args.cmd == "compare":
         compare(args.target)
+    elif args.cmd == "followup":
+        followup(args.target)
 
 
 if __name__ == "__main__":

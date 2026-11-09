@@ -907,9 +907,12 @@ its bands masked and unmasked) were run over all 308 blocks on the
 sweep's own slices (`pipelines.py run`, about two hours), and set against
 this search's events (`pipelines.py compare`). turboSETI kept 0 events
 from 2,744 hits; pickles kept nothing with its masks, and 1 window at
-level 2 (3 at level 1) without them. Every window pickles kept is an
-interference event here, seen along its track in an OFF look at S/N 6.0
-to 7.4 and in only two of the three ON looks; this search's 11 candidates
-are under turboSETI's cut on its scale (10) or beside strong interference
-in the coarse channel (1), and inside pickles' masks (all). The result
-page has each one.
+level 2 (3 at level 1) without them. Every window pickles kept holds
+interference events here (OFF S/N 6.0 to 7.4 along the track); with this
+search's tracks blanked, none passes its level 1 (`pipelines.py
+followup`), and in two of them a fast, wide, short band in another ON
+look, outside both drift searches, supplied pickles' second ON look. On
+turboSETI's own statistics 10 of this search's 11 candidates are under its
+cut in every ON look; the eleventh clears it in two ON looks but is
+dropped by its top-hit rule for a larger line 2.1 kHz away. All 11 are
+inside pickles' masks. The result page has each one.
