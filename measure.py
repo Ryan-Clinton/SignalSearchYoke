@@ -13,6 +13,8 @@ against turboSETI's. Each answer is kept in data/measurements/.
                                     through the search and the cadence test
     ./measure.py vetting            a lone planted signal and a planted look-alike family through the checks
     ./measure.py setigen            the planted signals against setigen's (run in turboSETI's environment)
+    ./measure.py voyager            Voyager 1's carrier and sidebands, against turboSETI's published hits
+    ./measure.py price              Price et al. 2020's HIP 91699 S-band event, by their pipeline and by ours
 
 FILE is a slice saved by `seti.py search --keep` (data/reference/ has six
 looks of block 153 and data/reference/blocks/ four more blocks).
@@ -628,16 +630,171 @@ def setigen_check(say=print):
     return record
 
 
+# --- Phase 7: real signals --------------------------------------------------------------
+
+VOYAGER_URL = "http://blpd0.ssl.berkeley.edu/Voyager_data/Voyager1.single_coarse.fine_res.h5"
+# turboSETI's README, its example output for this file (max_drift 4, snr 25): carrier, then the two sidebands.
+VOYAGER_PUBLISHED = [{"frequency_mhz": 8419.297028, "drift_hz_s": -0.373093, "snr": 245.707984, "what": "carrier"},
+                     {"frequency_mhz": 8419.319368, "drift_hz_s": -0.392226, "snr": 30.612128, "what": "sideband"},
+                     {"frequency_mhz": 8419.274374, "drift_hz_s": -0.392226, "snr": 31.220652, "what": "sideband"}]
+PRICE_TARGET = {"name": "HIP91699", "ra_hours": 18.699606, "dec_deg": 31.830281}   # from the files' headers
+PRICE_SLICE = (2200.0, 2200.6)          # MHz: Price et al. 2020, Fig. 8 and Appendix A: events at 2200.04-2200.5
+
+
+def _fetch(url, path, say):
+    """A small public file kept in data/validation/, read once; its ETag kept beside it."""
+    import requests
+    path = Path(path)
+    if path.exists():
+        return path
+    path.parent.mkdir(parents=True, exist_ok=True)
+    say(f"reading {url}")
+    with requests.get(url, stream=True, timeout=120, headers=seti.reading.HEADERS) as r:
+        r.raise_for_status()
+        part = path.with_suffix(".part")
+        with open(part, "wb") as f:
+            for block in r.iter_content(1 << 20):
+                f.write(block)
+        part.replace(path)
+        path.with_suffix(".etag").write_text(r.headers.get("ETag", ""), encoding="utf-8")
+    return path
+
+
+def voyager(say=print):
+    """Voyager 1 (Enriquez et al. 2017's check of turboSETI): the carrier
+    and its two data sidebands found at turboSETI's published frequencies
+    and drifts, the drift against the Earth's toward Voyager (check 5's
+    arithmetic: Voyager's own acceleration is far below a drift step), and
+    the SNR set against turboSETI's on the same file."""
+    import vetting
+    path = _fetch(VOYAGER_URL, yoke.DATA / "validation" / "Voyager1.single_coarse.fine_res.h5", say)
+    answer, hits, s = seti.look(path, -1e12, 1e12, say=lambda *_: None)
+    cut = seti.at_cut(hits)
+    h5py = seti.reading.h5()
+    with h5py.File(path, "r") as f:
+        a = f["data"].attrs
+        ra, dec, tstart = float(a["src_raj"]), float(a["src_dej"]), float(a["tstart"])
+    n_t = s["spectra"].shape[0]
+    mid = tstart + (n_t - 1) * s["tsamp"] / 2 / 86400
+    earth = vetting.expected_drift(8419.297, mid, ra, dec)
+    theirs = seti.turboseti(path)
+    width = abs(s["foff"]) * 1e6
+    step = width / ((n_t - 1) * s["tsamp"])
+    rows = []
+    for pub in VOYAGER_PUBLISHED:
+        near = lambda h: abs(h["frequency_mhz"] - pub["frequency_mhz"]) * 1e6 <= 3 * width  # noqa: E731
+        ours = max((h for h in cut if near(h)), key=lambda h: h["snr"], default=None)
+        turbo = max((h for h in theirs if near(h)), key=lambda h: h["snr"], default=None)
+        rows.append({"what": pub["what"], "published": pub,
+                     "ours": {k: ours[k] for k in ("frequency_mhz", "drift_hz_s", "snr", "box_channels")} if ours else None,
+                     "turboseti_here": turbo,
+                     "ours_minus_published_hz": round((ours["frequency_mhz"] - pub["frequency_mhz"]) * 1e6, 2) if ours else None,
+                     "drift_minus_published_steps": round((ours["drift_hz_s"] - pub["drift_hz_s"]) / step, 2) if ours else None,
+                     "turboseti_snr_over_ours": round(turbo["snr"] / ours["snr"], 3) if ours and turbo else None})
+        say(f"{pub['what']:>8}: published {pub['frequency_mhz']:.6f} MHz {pub['drift_hz_s']:+.4f} Hz/s SNR "
+            f"{pub['snr']:.1f}; ours " + (f"{ours['frequency_mhz']:.6f} MHz {ours['drift_hz_s']:+.4f} Hz/s SNR "
+                                          f"{ours['snr']:g}" if ours else "NOT FOUND")
+            + (f"; turboSETI here {turbo['frequency_mhz']:.6f} {turbo['drift_hz_s']:+.4f} SNR {turbo['snr']:.1f}"
+               if turbo else ""))
+    # The sidebands are each a band of power ~322 Hz wide between two lines;
+    # a narrowband search tiles it with hits at other drifts.
+    lines = [h for h in cut if any(abs(h["drift_hz_s"] - r["ours"]["drift_hz_s"]) <= 2 * step
+                                   for r in rows if r["ours"])]
+    say(f"Earth's drift toward Voyager 1 at mid-scan: {earth[0]:+.4f} Hz/s (rotation {earth[1]:+.4f}, orbit "
+        f"{earth[2]:+.4f}); {len(cut)} hits at the cut, {len(lines)} at the carrier's drift (within 2 steps), "
+        f"{len(cut) - len(lines)} at other drifts inside the sidebands' bands of power")
+    record = {"file": VOYAGER_URL, "etag": path.with_suffix(".etag").read_text(encoding="utf-8").strip()
+              if path.with_suffix(".etag").exists() else None,
+              "rows": rows, "earth_drift_hz_s": [round(x, 5) for x in earth], "drift_step_hz_s": round(step, 5),
+              "hits_at_cut": len(cut), "hits_at_signal_drifts": len(lines),
+              "hits": sorted(({k: h[k] for k in ("frequency_mhz", "drift_hz_s", "snr", "box_channels")} for h in cut),
+                             key=lambda h: h["frequency_mhz"]),
+              "turboseti_hits": theirs, "kind": "measured"}
+    _keep("voyager", record)
+    return record
+
+
+def price(say=print):
+    """Price et al. 2020 (1,327 stars): one S-band event they show, HIP 91699's
+    at 2200.04-2200.5 MHz (their Fig. 8, judged interference by eye: similar
+    events in OFF looks). Their hit and event lists are not published, so the
+    comparison is with their pipeline run here: turboSETI at ±4 Hz/s, SNR 10,
+    its event pipeline at filter threshold 3 (tools/turbo_events.py), on the
+    same slices of each S-band cadence of the star; and this project's search,
+    cadence test and checks, with the cadence's OFF looks given to check 6 as
+    the store gives them."""
+    import csv
+    import vetting
+    low, high = PRICE_SLICE
+    found = seti.find(PRICE_TARGET["name"], say=lambda *_: None)
+    sessions = []
+    for sess in found["sessions"]:
+        if not sess["complete"] or sess["scans"][0]["centre_mhz"] < 1900:
+            continue
+        pattern = "".join("A" if sc["on"] else "B" for sc in sess["scans"])
+        scans = sess["scans"][pattern.index("ABABAB"):][:6]
+        keep = yoke.DATA / "validation" / f"{PRICE_TARGET['name']}_{sess['session']}"
+        saved = sorted(keep.glob("*.h5"))
+        sources = [str(p) for p in saved] if len(saved) == 6 else [sc["url"] for sc in scans]
+        answer = seti.cadence(sources, low, high, say=lambda *_: None, keep=None if len(saved) == 6 else keep,
+                              every_hit=True)
+        looks, events = answer.pop("_judged"), answer.pop("_events")
+        hits = [h for lk in looks for h in lk.hits if not h.get("shadow")]
+        others = [{"frequency_mhz": h["frequency_mhz"], "drift_hz_s": h["drift_hz_s"], "snr": h["snr"],
+                   "mjd": lk.tstart, "target": sc["target"], "shadow": bool(h.get("shadow"))}
+                  for lk, sc in zip(looks, answer["scans"]) if not lk.on for h in lk.hits]
+        ours = []
+        for e in events:
+            row = {k: e.get(k) for k in ("label", "frequency_mhz", "drift_hz_s", "snr", "off_snr_max", "on_snr_min")}
+            if e["label"] == "candidate":
+                v = vetting.vet(e, looks, PRICE_TARGET, others, hits, report_dir=None, lead=None)
+                row["verdict"] = v["verdict"]
+                row["checks"] = [{k: c[k] for k in ("n", "name", "result", "strength")} for c in v["checks"]
+                                 if c["strength"]]
+            ours.append(row)
+        # Price et al.'s pipeline on the same six slices.
+        saved = sorted(keep.glob("*.h5"))
+        out = yoke.DATA / "validation" / f"turbo_{PRICE_TARGET['name']}_{sess['session']}"
+        done = subprocess.run([str(seti.TURBOSETI_PYTHON), "-I", str(yoke.ROOT / "tools" / "turbo_events.py"),
+                               str(out), *map(str, saved)], capture_output=True, text=True, timeout=3600)
+        if done.returncode:
+            raise yoke.Refusal("INTERNAL_ERROR", f"turboSETI's event pipeline failed: {done.stderr.strip()[-300:]}")
+        text = (out / "events.csv").read_text(encoding="utf-8")
+        turbo_events = [{"frequency_mhz": float(r["Freq"]), "drift_hz_s": float(r["DriftRate"]), "snr": float(r["SNR"]),
+                         "file": r["FileID"], "in_n_ons": int(r["in_n_ons"])}
+                        for r in csv.DictReader(text.splitlines())] if text.strip() else []
+        turbo_hits = {p.stem: seti.read_dat(p.read_text(encoding="utf-8", errors="replace"))
+                      for p in sorted(out.glob("*.dat"))}
+        cands = [r for r in ours if r["label"] == "candidate"]
+        say(f"{sess['session']} ({scans[0]['utc']} UTC), {low:g}-{high:g} MHz: ours {len(events)} events, "
+            f"{len(cands)} candidate(s)" + "".join(f"\n  candidate {r['frequency_mhz']:.6f} MHz {r['drift_hz_s']:+.4f} "
+                                                   f"Hz/s SNR {r['snr']:g}: {r['verdict']}" for r in cands)
+            + f"\n  turboSETI's pipeline: {len(turbo_events)} event(s)"
+            + "".join(f"\n  event {t['frequency_mhz']:.6f} MHz {t['drift_hz_s']:+.4f} Hz/s SNR {t['snr']:.1f}"
+                      for t in turbo_events))
+        sessions.append({"session": sess["session"], "utc": scans[0]["utc"],
+                         "files": [sc["url"] for sc in scans], "targets": [sc["target"] for sc in answer["scans"]],
+                         "from_mhz": low, "to_mhz": high, "ours": ours, "turboseti_events": turbo_events,
+                         "turboseti_hits": turbo_hits, "scans": answer["scans"]})
+    record = {"paper": "Price et al. 2020, AJ 159, 86", "target": PRICE_TARGET, "sessions": sessions,
+              "published": "No hit or event lists: totals only (S-band 10.12 million hits, 5,102 events, 1,572 groups, "
+                           "0 candidates); HIP 91699 shown among the S-band events judged interference",
+              "kind": "measured"}
+    _keep("price", record)
+    return record
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("what", choices=("desmear", "pairs", "kurtosis", "false", "scale", "noise", "cadence",
-                                     "vetting", "setigen"))
+                                     "vetting", "setigen", "voyager", "price"))
     ap.add_argument("files", nargs="*")
     ap.add_argument("--json", action="store_true", help="answer in JSON")
     args = ap.parse_args()
     work = {"desmear": desmear, "pairs": pairs, "kurtosis": kurtosis, "false": false, "scale": scale,
             "noise": noise, "cadence": cadence, "vetting": lambda _files: vetting_demo(),
-            "setigen": lambda _files: setigen_check()}[args.what]
+            "setigen": lambda _files: setigen_check(), "voyager": lambda _files: voyager(),
+            "price": lambda _files: price()}[args.what]
     yoke.main("measure", lambda: work(args.files), args.json)
 
 

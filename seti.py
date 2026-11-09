@@ -70,6 +70,7 @@ SNR_MIN = searching.SNR_MIN     # the cut, in true noise of the summed lines
 MAX_DRIFT = searching.MAX_DRIFT  # Hz a second either way: the Earth's own turning gives up to about 0.4 at 1-10 GHz
 BLOCK = searching.BLOCK
 WINDOW_CHANNELS = searching.WINDOW_CHANNELS
+GBT_COARSE_MHZ = 187.5 / 64           # Green Bank's coarse channel: 2^20 channels of 2.79 Hz
 CADENCE_DAYS = 0.06             # OFF looks within this long (about 1.5 hours) of the ON looks are the cadence's
 MAX_LISTED = 100                # hits or events listed; the counts are of all of them
 TIMEOUT = 120
@@ -244,7 +245,15 @@ def read_slice(source, low, high):
         spectra = np.asarray(data[:, 0, first:last], dtype=np.float64)
         # A slice saved here keeps where it sat in its file and its coarse
         # channels' width, so its spikes are blanked in the same places.
-        per = int(attrs.get("coarse_channel", (data.chunks or data.shape)[-1]))
+        # Otherwise Green Bank's coarse channels are 187.5/64 MHz wide (2^20
+        # channels at 2.79 Hz); a file's chunks need not be one coarse channel
+        # (the Voyager 1 file's are 16384 channels).
+        if "coarse_channel" in attrs:
+            per = int(attrs["coarse_channel"])
+        elif int(attrs.get("telescope_id", 0)) == 6:
+            per = int(round(GBT_COARSE_MHZ / abs(foff)))
+        else:
+            per = int((data.chunks or data.shape)[-1])
         whole_first = int(attrs.get("first_channel", 0)) + first
     blank_dc(spectra, whole_first, per)
     return {"spectra": spectra, "fch1": fch1 + first * foff, "foff": foff, "tsamp": float(attrs["tsamp"]),
@@ -358,10 +367,10 @@ def cadence(sources, low, high, say=print, read=read_slice, keep=None, every_hit
         done_looks.append(looks[-1])
     events = onoff.judge(looks)
     count = {label: sum(e["label"] == label for e in events) for label in ("candidate", "interference", "unconfirmed")}
-    note = ("A candidate is seen in every ON look where its drift puts it (a hit, or its track at S/N 5 or more) "
-            "and nowhere in the OFF looks (no hit of any strength, no track at S/N 5). It is then checked against "
-            "known interference and the published searches of these data: a candidate is never a signal from anyone "
-            "until all of that is done, and so far every one has been ours.")
+    note = (f"A candidate is seen in every ON look where its drift puts it (a hit, or its track at S/N "
+            f"{onoff.ON_MIN:g} or more) and nowhere in the OFF looks (no hit of any strength, no track at S/N "
+            f"{onoff.OFF_MAX:g}). It is then put through the checks (check.py): a candidate is not a signal from "
+            f"anyone until all of them are done.")
     say(f"{low:g} to {high:g} MHz, {len(events)} event(s) from the ON looks' hits: {count['candidate']} candidate(s), "
         f"{count['interference']} seen in an OFF look too (interference), {count['unconfirmed']} not in every ON look")
     for e in [e for e in events if e["label"] == "candidate"][:10]:
@@ -376,6 +385,7 @@ def cadence(sources, low, high, say=print, read=read_slice, keep=None, every_hit
               "note": note, "kind": "measured"}
     if every_hit:
         answer["_looks"], answer["_events"] = [lk.hits for lk in done_looks], events
+        answer["_judged"] = done_looks          # the looks themselves (their noise maps let go), for the checks
     for lk in done_looks:
         lk.flat = None
     return answer
@@ -590,6 +600,7 @@ def sweep(target, count=1, say=print, get=requests.get):
                                  say=lambda *_: None, every_hit=True)
                 timing["search_s"] = round(time.monotonic() - started, 1)
                 looks, events = answer.pop("_looks"), answer.pop("_events")
+                answer.pop("_judged")
                 now = time.monotonic()
                 timing.update(wall_s=round(now - last_end, 1), threads=reading.threads())
                 last_end = now

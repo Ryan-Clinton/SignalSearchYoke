@@ -645,6 +645,85 @@ with turboSETI on seven real looks from two sessions and finds 98% of
 signals at SNR 15. What it finds is still judged by the cadence, and a
 candidate is still ours until checked.
 
+## Real signals (Phase 7, 9 November 2026)
+
+Planted signals test the pipeline against the model of a signal; these
+test it against real transmitters.
+
+### Voyager 1
+
+`./measure.py voyager` (`data/measurements/voyager.json`). The file
+turboSETI's own documentation uses (Enriquez et al. 2017's check):
+`blpd0.ssl.berkeley.edu/Voyager_data/Voyager1.single_coarse.fine_res.h5`,
+one coarse channel at 8418.5 to 8421.4 MHz, 16 spectra, Green Bank, 19
+September 2016 (50 MB, ETag "5d166dbd-30351eb").
+
+| | turboSETI's README | turboSETI 2.3.2 here | this search |
+|---|---|---|---|
+| carrier | 8419.297028 MHz, −0.3731 Hz/s, SNR 245.7 | 8419.297028, −0.3776, 245.7 | 8419.297031, −0.3776, 1360.5 |
+| sideband | 8419.319368, −0.3922, 30.6 | 8419.319368, −0.3980, 30.6 | 8419.319368, −0.3878, 112.1 |
+| sideband | 8419.274374, −0.3922, 31.2 | 8419.274374, −0.3980, 31.2 | 8419.274374, −0.3776, 112.9 |
+
+- **Found where published:** all three within one channel (3 Hz) and two
+  drift steps (0.02 Hz/s); turboSETI 2.3.2 gives the README's frequencies
+  and SNRs with a slightly different drift (its drift grid has changed
+  since).
+- **The drift is the Earth's:** check 5's arithmetic toward Voyager (RA
+  17.168 h, Dec +12.18°) at mid-scan gives −0.3772 Hz/s (rotation −0.4060,
+  orbit +0.0288); measured −0.3776. Voyager's own acceleration is far
+  below a drift step.
+- **SNR:** turboSETI's is 0.18 of ours on the carrier and 0.27 on the
+  sidebands (0.227 on planted signals, "Checked against turboSETI"): its
+  noise is taken from the summed spectrum around a very bright line.
+- **What the model leaves out: wide signals.** Each sideband is a band of
+  power about 322 Hz wide (115 channels) between two lines at the
+  carrier's drift (the second-order sidebands, at ±67 kHz, are the same).
+  This search records 51 hits at the cut: 17 at the carrier's drift (the
+  lines, and weaker ones a few channels from the carrier), and 34 at
+  −0.93 and −1.55 Hz/s, tiling the bands of power between the lines with
+  wider boxes. turboSETI keeps only the strongest hit within ±600 Hz and
+  records 3. Neither describes a wide signal as one: in a cadence, a wide
+  interferer gives this search many events (each judged on its own, so
+  still interference when it is in the OFF looks), and the crowding check
+  sees it. A wide-signal search is not part of this one.
+
+### Price et al. 2020: HIP 91699
+
+`./measure.py price` (`data/measurements/price.json`). Price et al.
+(2020, 1,327 stars) published totals only (at Green Bank S-band, 10.12
+million hits, 5,102 events, 1,572 event groups, no candidates), not their
+hit or event lists, so no star's hits can be set against theirs. Their
+Fig. 8 shows S-band events at four stars, all judged interference by eye;
+for HIP 91699 the text says the events are short, drifting, and like
+others at 2200.04 to 2200.5 MHz, some in OFF looks. Their pipeline is
+public, so it was run here on the same data: turboSETI at ±4 Hz/s and SNR
+10, its event pipeline at filter threshold 3 (`tools/turbo_events.py`),
+on the 2200.0 to 2200.6 MHz slice of both of HIP 91699's S-band cadences.
+
+| session | Price's pipeline, run here | this search and cadence test | the checks |
+|---|---|---|---|
+| AGBT17A_999_25 (14 March 2017) | no event | no event | |
+| AGBT17A_999_67 (22 May 2017; OFF looks HIP 90977, HIP 91058, HIP 91119) | 1 event: 2200.050356 MHz, −3.83 Hz/s, SNR 153 | 2 candidates: 2200.050412 MHz, −3.98 Hz/s, SNR 291 (from the first ON look) and 2200.047476 MHz, −3.83 Hz/s, SNR 580 (from the second) | both **interference (shown)**: recurrence, in the third OFF look |
+
+- **The same signal is found by both**, in the band and at the drift Price
+  et al. describe, and passes both cadence tests: nothing at its drift in
+  the OFF looks (OFF S/N 3.5 at most here).
+- **Two candidates where turboSETI has one:** the signal's drift is not
+  steady (−3.98, −3.83 and −3.54 Hz/s at the starts of the three ON looks,
+  by this search), so seeds from two ON looks do not join one event.
+  turboSETI reports one, its own table giving it in 2 of the 3 ON looks.
+- **The checks catch it as Price et al. did by eye:** the third OFF look
+  (HIP 91119) has a spray of weaker tracks at 2200.043 MHz drifting −1.4
+  to −3.9 Hz/s (turboSETI's hit there: SNR 10.7 at −2.10); check 6, given
+  the cadence's OFF looks as the store gives them, finds one within two
+  drift steps and calls both candidates interference. Without the store
+  (the OFF looks not given) only check 3 marks them, for the 2200 to 2290
+  MHz space downlink band.
+- **Not reproduced:** the other three stars, and anything beyond this 0.6
+  MHz: with no published hit lists, a fuller comparison is turboSETI against
+  this search on the same data, which "Checked against turboSETI" already
+  does.
+
 ## Tabby's star
 
 KIC 8462852 was observed by Green Bank in May 2017, among other times;

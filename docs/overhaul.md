@@ -508,6 +508,20 @@ is written:
 **Done when:** Voyager 1 is recovered and written up in `docs/seti.md`, and
 the Price reproduction is done or its absence recorded.
 
+**Done, 9 November 2026** (`measure.py voyager`, `measure.py price`,
+`tools/turbo_events.py`; `docs/seti.md`, "Real signals"): Voyager 1's
+carrier and both sidebands found within one channel and two drift steps
+of turboSETI's published hits, the drift matching the Earth's toward
+Voyager (−0.3772 predicted, −0.3776 measured); turboSETI's SNR 0.18 to
+0.27 of ours. Its wide sidebands are tiled with 34 hits at other drifts:
+wide signals are left out of the model. Price et al. published no hit or
+event lists; their pipeline, run here on HIP 91699's two S-band cadences
+at 2200.0 to 2200.6 MHz, finds the event they show (2200.050 MHz,
+−3.83 Hz/s) in one, nothing in the other; this search makes it two
+candidates (its drift is not steady), and the checks call both
+interference (shown) from a look-alike in the third OFF look, as Price
+et al. judged by eye.
+
 ### Phase 8: the result
 
 `seti.py report TARGET SESSION` writes `docs/results/TARGET-SESSION.md`

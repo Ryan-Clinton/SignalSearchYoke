@@ -22,8 +22,9 @@ KIC 8462852.
 | `onoff.py` | the cadence test: events from every ON look's hits, every look measured along the track, the OFF test with no threshold |
 | `vetting.py` | the ten checks on a candidate (after blc1), with strengths, chance rates and a report |
 | `injection.py` | signals planted in whole cadences and followed through search, cadence test and checks |
-| `measure.py` | the search measured on planted signals and real looks: desmearing, close pairs, kurtosis, false hits, the SNR scale against turboSETI, the cadence test, the checks, setigen |
+| `measure.py` | the search measured on planted signals and real looks: desmearing, close pairs, kurtosis, false hits, the SNR scale against turboSETI, the cadence test, the checks, setigen; Voyager 1 and Price et al. 2020's HIP 91699 |
 | `tools/setigen_frame.py` | setigen's planted signals, run in turboSETI's environment, for `measure.py setigen` |
+| `tools/turbo_events.py` | Price et al. 2020's pipeline (turboSETI hits, then its event pipeline at threshold 3) on a cadence's six slices, for `measure.py price` |
 | `store.py` | the hit store, `data/ssy.sqlite`: runs, files, blocks, hits, events, checks, injections |
 | `check.py` | the ten checks run on the store's candidates: records, reports in `docs/leads/` |
 | `yoke.py` | the data folder, the `--json` envelope, writing a record whole |
@@ -49,7 +50,7 @@ settings file.
 ./seti.py inject --legacy FILE                    the old one-channel planting (superseded)
 ./seti.py benchmark FILE...                       saved slices through this search and turboSETI
 ./check.py [--all] [--event ID]                   the ten checks on the store's candidates (or one event)
-./measure.py WHAT [FILE...]                       desmear, pairs, kurtosis, false, scale, noise, cadence, vetting, setigen
+./measure.py WHAT [FILE...]                       desmear, pairs, kurtosis, false, scale, noise, cadence, vetting, setigen, voyager, price
 ```
 
 `search` and `cadence` take `--keep DIR` to save each slice read (a small
@@ -156,14 +157,21 @@ name); the Windows PC has one at the default place.
 
 ## The state on 8 November 2026
 
-- Phases 0 to 6 of [docs/overhaul.md](docs/overhaul.md) are done on the
+- Phases 0 to 7 of [docs/overhaul.md](docs/overhaul.md) are done on the
   Windows PC (9 November 2026): the reference block, fast reading, the hit
   store, a correct search, the cadence test rebuilt (search version 3),
-  the ten checks, and completeness measured through the whole pipeline.
-  Every measurement is in `data/measurements/` and written up in
-  docs/seti.md. Phase 7 (validation on real signals: Voyager 1, a Price
-  2020 star) is next. A sweep searches blocks done by an older search
-  version again first.
+  the ten checks, completeness measured through the whole pipeline, and
+  validation on real signals (Voyager 1; Price et al. 2020's HIP 91699
+  event). Every measurement is in `data/measurements/` and written up in
+  docs/seti.md; the files read for Phase 7 are in `data/validation/`.
+  Phase 8 (the result) needs the whole cadence swept first: about 2.7
+  hours, run only on the owner's go. A sweep searches blocks done by an
+  older search version again first.
+- **Real signals:** Voyager 1's carrier and sidebands found at turboSETI's
+  published frequencies and drifts, the drift the Earth's; wide signals
+  (its 322 Hz sidebands) are tiled with many hits, a known gap. HIP 91699's
+  S-band event (Price et al. 2020) found by both pipelines, and called
+  interference (shown) by check 6 from the third OFF look.
 - **Completeness through everything** (3,257 planted signals, five
   cadences): at S_in 60 (41 Jy Hz with an assumed SEFD of 10 Jy) 97 to 100%
   are kept at every drift to 4 Hz/s; at S_in 30, 100% under 0.5 Hz/s, 52%
