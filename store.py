@@ -223,7 +223,9 @@ MIGRATIONS = [("runs", "search_version", "TEXT"), ("hits", "superseded_run", "IN
               ("events", "seed_position", "INTEGER"), ("events", "off_snr_max", "REAL"),
               ("events", "on_snr_min", "REAL"), ("events", "drift_spread_steps", "REAL"),
               ("events", "drift_flag", "INTEGER"), ("events", "dot_max", "REAL"),
-              ("injections", "outcome", "TEXT"), ("injections", "placed", "TEXT")]
+              ("injections", "outcome", "TEXT"), ("injections", "placed", "TEXT"),
+              ("blocks", "off_null_tracks", "INTEGER"), ("blocks", "off_null_vetoed", "INTEGER"),
+              ("blocks", "off_null_over", "INTEGER")]
 
 
 def _migrate(db):
@@ -337,7 +339,7 @@ def _hit_row(run_id, file_id, session, block_idx, h, origin=None):
 
 
 def save_block(db, run_id, session, block_idx, f_lo, f_hi, file_ids, looks_hits, events, timing, same=None,
-               scans=None):
+               scans=None, off_null=None):
     """One block's hits (all six looks) and cadence results, in one
     transaction. An earlier search of the block is kept, marked superseded
     by this run; `same(old_event_row, new_event)` says which earlier event
@@ -404,13 +406,15 @@ def save_block(db, run_id, session, block_idx, f_lo, f_hi, file_ids, looks_hits,
         db.execute(
             "INSERT OR REPLACE INTO blocks (session, block_idx, f_lo_mhz, f_hi_mhz, status, run_id, bytes, fetch_s,"
             " search_s, wall_s, threads, complete, hits, shadow_hits, candidates, interference, unconfirmed,"
-            " searched_utc) VALUES (?,?,?,?,'done',?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            " searched_utc, off_null_tracks, off_null_vetoed, off_null_over)"
+            " VALUES (?,?,?,?,'done',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (session, block_idx, f_lo, f_hi, run_id, timing.get("bytes"), timing.get("fetch_s"),
              timing.get("search_s"), timing.get("wall_s"), timing.get("threads"),
              None if not scans else int(all(sc.get("complete", True) for sc in scans)),
              sum(1 for hits in looks_hits for h in hits if not h.get("shadow")),
              sum(1 for hits in looks_hits for h in hits if h.get("shadow")),
-             count["candidate"], count["interference"], count["unconfirmed"], now()))
+             count["candidate"], count["interference"], count["unconfirmed"], now(),
+             (off_null or {}).get("tracks"), (off_null or {}).get("vetoed"), (off_null or {}).get("over_off_max")))
 
 
 def save_injections(db, run_id, path, method, rows):

@@ -637,6 +637,7 @@ VOYAGER_URL = "http://blpd0.ssl.berkeley.edu/Voyager_data/Voyager1.single_coarse
 VOYAGER_PUBLISHED = [{"frequency_mhz": 8419.297028, "drift_hz_s": -0.373093, "snr": 245.707984, "what": "carrier"},
                      {"frequency_mhz": 8419.319368, "drift_hz_s": -0.392226, "snr": 30.612128, "what": "sideband"},
                      {"frequency_mhz": 8419.274374, "drift_hz_s": -0.392226, "snr": 31.220652, "what": "sideband"}]
+VOYAGER_SHA256 = "c9a9a54f4140e3754ffb2455fae4eeb2eb70c8207123116ee953e4fce15c36ac"   # read 9 Nov 2026
 PRICE_TARGET = {"name": "HIP91699", "ra_hours": 18.699606, "dec_deg": 31.830281}   # from the files' headers
 PRICE_SLICE = (2200.0, 2200.6)          # MHz: Price et al. 2020, Fig. 8 and Appendix A: events at 2200.04-2200.5
 
@@ -667,7 +668,12 @@ def voyager(say=print):
     arithmetic: Voyager's own acceleration is far below a drift step), and
     the SNR set against turboSETI's on the same file."""
     import vetting
+    import hashlib
     path = _fetch(VOYAGER_URL, yoke.DATA / "validation" / "Voyager1.single_coarse.fine_res.h5", say)
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    if digest != VOYAGER_SHA256:
+        raise yoke.Refusal("INTERNAL_ERROR", f"{path} is not the file measured on 9 Nov 2026 (SHA-256 {digest}, "
+                                             f"expected {VOYAGER_SHA256}): delete it to read it again.")
     answer, hits, s = seti.look(path, -1e12, 1e12, say=lambda *_: None)
     cut = seti.at_cut(hits)
     h5py = seti.reading.h5()
@@ -703,7 +709,7 @@ def voyager(say=print):
     say(f"Earth's drift toward Voyager 1 at mid-scan: {earth[0]:+.4f} Hz/s (rotation {earth[1]:+.4f}, orbit "
         f"{earth[2]:+.4f}); {len(cut)} hits at the cut, {len(lines)} at the carrier's drift (within 2 steps), "
         f"{len(cut) - len(lines)} at other drifts inside the sidebands' bands of power")
-    record = {"file": VOYAGER_URL, "etag": path.with_suffix(".etag").read_text(encoding="utf-8").strip()
+    record = {"file": VOYAGER_URL, "sha256": digest, "etag": path.with_suffix(".etag").read_text(encoding="utf-8").strip()
               if path.with_suffix(".etag").exists() else None,
               "rows": rows, "earth_drift_hz_s": [round(x, 5) for x in earth], "drift_step_hz_s": round(step, 5),
               "hits_at_cut": len(cut), "hits_at_signal_drifts": len(lines),

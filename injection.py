@@ -233,6 +233,28 @@ def tables(rows, n_t, width_hz, tsamp):
     return out
 
 
+def false_summary(rows, apart_mhz=0.003):
+    """False candidates counted fairly: the 19 wrong choices of ON looks in a
+    cadence share its six looks, so they are not 19 independent trials. A
+    signal that passes in several choices is one signal (within apart_mhz);
+    the rate is per real cadence, with the cadences as the independent
+    unit (Garwood interval on the distinct count)."""
+    by_cadence = {}
+    for r in rows:
+        seen = by_cadence.setdefault(r["cadence"], [])
+        for f in r["frequencies"]:
+            if all(abs(f - g) > apart_mhz for g in seen):
+                seen.append(f)
+    distinct = sum(len(v) for v in by_cadence.values())
+    n = max(len(by_cadence), 1)
+    lo, hi = measure.poisson_interval(distinct)
+    return {"judged": len(rows), "candidates_in_judged": sum(r["candidates"] for r in rows),
+            "cadences": len(by_cadence), "distinct_signals": distinct,
+            "per_cadence": round(distinct / n, 4), "per_cadence_interval": (round(lo / n, 4), round(hi / n, 4)),
+            "note": "the 19 choices a cadence share its looks; the interval treats the cadences, not the choices, "
+                    "as independent"}
+
+
 def false_candidates(cadence_files, vet=None, say=print):
     """Candidates where none can be: each cadence's six looks searched once,
     then judged with every other choice of three looks as the ON looks (19

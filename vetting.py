@@ -189,17 +189,40 @@ def vet(event, looks, target=None, others=(), session_hits=(), report_dir=None, 
             agree = abs(h["drift_hz_s"] - drift) <= max(2 * step, 0.05 * abs(drift))
             matches_.append(dict(h, days=round(abs(dt) / 86400, 3), drift_agrees=agree))
     close = [m for m in matches_ if m["days"] <= SHOWN_DAYS and m["drift_agrees"]]
-    density = len(others) / max(1e-9, (max((h["frequency_mhz"] for h in others), default=f) -
-                                       min((h["frequency_mhz"] for h in others), default=f)) or 1.0)
-    expected6 = density * 2 * RECUR_HZ / 1e6 if others else 0.0
+    close_cut = [m for m in close if not m.get("shadow")]
+    # The chance of as many by accident: the hits' density over the span
+    # they were drawn from, times the window each match had (100 Hz plus the
+    # drift's travel, either side) and, for a close match, the share of the
+    # ±4 Hz/s drift range its drift tolerance covers.
+    span_hz = max(1.0, (max((h["frequency_mhz"] for h in others), default=f) -
+                        min((h["frequency_mhz"] for h in others), default=f)) * 1e6)
+    window = [2 * (RECUR_HZ + (abs(drift) * abs((h["mjd"] - l0.tstart) * 86400)
+                               if abs((h["mjd"] - l0.tstart) * 86400) < 86400 else 0.0)) for h in others]
+    window_hz = float(np.mean(window)) if window else 0.0
+    agree_share = min(1.0, 2 * max(2 * step, 0.05 * abs(drift)) / (2 * onoff.MAX_DRIFT_NULL))
+    expected6 = len(others) * window_hz / span_hz if others else 0.0
+    cut_others = [h for h in others if not h.get("shadow")]
+    expected_close = len(cut_others) * window_hz / span_hz * agree_share if others else 0.0
     chance6 = at_least(len(matches_), expected6)
-    strength6 = "shown" if close else ("indicated" if matches_ and chance6 < CHANCE_SMALL else
-                                       "coincidence possible" if matches_ else None)
+    chance_close = at_least(len(close_cut), expected_close)
+    # "Shown" needs a match at the cut, close in time, drift agreeing, that
+    # chance would rarely give; shadow hits (SNR 5 to 10) or a crowded band
+    # give at most "indicated".
+    if close_cut and chance_close < CHANCE_SMALL:
+        strength6 = "shown"
+    elif (close and at_least(len(close), expected6 * agree_share) < CHANCE_SMALL) or \
+            (matches_ and chance6 < CHANCE_SMALL):
+        strength6 = "indicated"
+    else:
+        strength6 = "coincidence possible" if matches_ else None
     checks.append(_check(6, "recurrence at other targets and times",
                          f"{len(matches_)} match(es) in {len(others)} hits elsewhere"
-                         + (f", {len(close)} within {SHOWN_DAYS:g} days with the drift agreeing" if close else ""),
+                         + (f", {len(close)} within {SHOWN_DAYS:g} days with the drift agreeing"
+                            f" ({len(close_cut)} at the cut)" if close else ""),
                          strength6, matches=matches_[:20], hits_searched=len(others),
-                         expected_by_chance=round(expected6, 4), chance=chance6))
+                         expected_by_chance=round(expected6, 4), chance=chance6,
+                         close_at_cut=len(close_cut), expected_close_at_cut=round(expected_close, 5),
+                         chance_close=chance_close))
 
     # 7. look-alikes in the same cadence: the same drift over frequency
     nu = drift / (f * 1e6)

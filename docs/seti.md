@@ -333,7 +333,17 @@ seconds; 2.3 GB peak): the whole cadence would take about 2.9 hours.
   step or 2% of the drift, whichever is more), and the drift difference
   in drift steps over its tolerance (2 steps plus 5% of the drift), are
   added in quadrature; a match is 1 or less. The ±50% drift tolerance of
-  the old test is gone.
+  the old test is gone. Groups join only when every hit of one matches
+  every hit of the other (search version 4), so a chain of near matches
+  (A with B, B with C, but not A with C) is two events, not one; on the
+  six real cadences here this changed no event.
+- **The OFF test's veto rate is measured in every block** (search version
+  4): 32 random tracks, at random places and drifts, measured in the OFF
+  looks as an event is; the share that would be vetoed (S/N 6 or more, or
+  a hit near) is kept with each block in the store (`blocks.off_null_*`).
+  On the five saved cadences and HIP 91699's, 1 of 192 (a hit already
+  there), none at S/N 6; the noise's median best S/N 3.4 to 3.8. A whole
+  cadence's sweep gives about 9,800 such tracks across the band.
 - **Every look is measured along the event's track**, found or not: the
   S/N of the summed line (box included) against the same line 60 to 1,900
   channels to either side, the best within the matching tolerance. In an
@@ -378,6 +388,12 @@ then set at 6, where 2 of the 370 (0.5%) would be vetoed; Phase 6 measures
 it through the whole pipeline. Interference fainter than 6 in an OFF look
 is still caught by any hit there, down to SNR 5.
 
+Measured again with the OFF level at 6 and complete matching (search
+version 4; the same planted signals, `data/measurements/cadence.json`):
+the same 370 found, 367 candidates, 2 vetoed (as expected at 6), 1
+unconfirmed; the 71 in all six looks all interference. The table above
+is the earlier run at 5.
+
 ## The checks (Phase 5, 9 November 2026)
 
 `vetting.py` runs ten checks on each candidate, after Sheikh et al.'s
@@ -396,7 +412,7 @@ hits, is not small; the chance is recorded), or none.
 | 3 | known Green Bank bands (16 bands: GNSS, Iridium, Inmarsat, ADS-B, cellular, space links, the S-band notch filter, Wi-Fi) | indicated |
 | 4 | zero or very low drift (under one drift step, 0.0102 Hz/s) | indicated |
 | 5 | drift against the Earth's (rotation and orbit, toward the target, at Green Bank) | recorded only |
-| 6 | recurrence at other targets and times in the store | shown within 3 days with drift agreeing; else indicated or coincidence possible |
+| 6 | recurrence at other targets and times in the store | shown: a hit at the cut within 3 days, drift agreeing, that chance would give under 5% of the time; indicated: the same from shadow hits, or many matches against few expected; else coincidence possible |
 | 7 | look-alikes: the same drift over frequency (or its mirror) in the cadence, and whether they show in OFF looks | indicated, or coincidence possible |
 | 8 | harmonics (×2 to ×20, ÷2 to ÷20), clock spacings (2.000004 to 133.33 MHz) and intermodulation (a·f1 ± b·f2 of strong zero-drift hits), within 1 kHz | indicated, or coincidence possible |
 | 9 | crowding: hits in the MHz around it against the band's median | indicated at 10 times |
@@ -544,12 +560,17 @@ looks not joined); none at the checks.
 - **False candidates through the whole pipeline:** each cadence's six
   looks searched once, then judged with each of the 19 other choices of
   three looks as the ON looks, where no signal from the target can pass:
-  152 events, **1 candidate in 95 judged cadences** (0.011 a block's
-  cadence, 95% interval 0.0003 to 0.059): a signal at 1937.81 MHz in the
-  first three looks only (interference that came and went), which the
-  checks marked for its band. **None came out unexplained** (at most 0.039
-  a block's cadence, 95%). Over the 308 blocks of a whole cadence, about
-  3 false candidates (0.1 to 18) are to be expected before the checks.
+  152 events, **1 candidate in 95 judged cadences**: a signal at 1937.81
+  MHz in the first three looks only (interference that came and went),
+  which the checks marked for its band. **None came out unexplained.** The
+  19 choices of a cadence share its six looks, so they are not 95
+  independent trials: counted as distinct signals in 5 real cadences, it
+  is 1 in 5, **0.2 a block's cadence (95% interval 0.005 to 1.1)**
+  (`injection.false_summary`). That bound is wide: over the 308 blocks of
+  a whole cadence it allows anywhere from about 1.5 to 340 false
+  candidates before the checks, and says little about how many reach
+  "unexplained". The sweep itself will be the larger sample: every block's
+  events are kept.
 - **Against setigen** (`measure.py setigen`; setigen 2.7.0, Brzycki et al.
   2022): the same tones on an empty frame at 0.05 to −3.5 Hz/s; the
   profiles correlate 0.994 or better in every spectrum, the centroids
@@ -703,22 +724,31 @@ on the 2200.0 to 2200.6 MHz slice of both of HIP 91699's S-band cadences.
 | session | Price's pipeline, run here | this search and cadence test | the checks |
 |---|---|---|---|
 | AGBT17A_999_25 (14 March 2017) | no event | no event | |
-| AGBT17A_999_67 (22 May 2017; OFF looks HIP 90977, HIP 91058, HIP 91119) | 1 event: 2200.050356 MHz, −3.83 Hz/s, SNR 153 | 2 candidates: 2200.050412 MHz, −3.98 Hz/s, SNR 291 (from the first ON look) and 2200.047476 MHz, −3.83 Hz/s, SNR 580 (from the second) | both **interference (shown)**: recurrence, in the third OFF look |
+| AGBT17A_999_67 (22 May 2017; OFF looks HIP 90977, HIP 91058, HIP 91119) | 1 event: 2200.050356 MHz, −3.83 Hz/s, SNR 153 | 2 candidates: 2200.050412 MHz, −3.98 Hz/s, SNR 291 (from the first ON look) and 2200.047476 MHz, −3.83 Hz/s, SNR 580 (from the second) | both **likely interference (indicated)**: the space downlink band, and recurrence in the third OFF look |
 
-- **The same signal is found by both**, in the band and at the drift Price
-  et al. describe, and passes both cadence tests: nothing at its drift in
-  the OFF looks (OFF S/N 3.5 at most here).
-- **Two candidates where turboSETI has one:** the signal's drift is not
-  steady (−3.98, −3.83 and −3.54 Hz/s at the starts of the three ON looks,
-  by this search), so seeds from two ON looks do not join one event.
-  turboSETI reports one, its own table giving it in 2 of the 3 ON looks.
-- **The checks catch it as Price et al. did by eye:** the third OFF look
-  (HIP 91119) has a spray of weaker tracks at 2200.043 MHz drifting −1.4
-  to −3.9 Hz/s (turboSETI's hit there: SNR 10.7 at −2.10); check 6, given
-  the cadence's OFF looks as the store gives them, finds one within two
-  drift steps and calls both candidates interference. Without the store
-  (the OFF looks not given) only check 3 marks them, for the 2200 to 2290
-  MHz space downlink band.
+- **Found by both pipelines**, in the band and at the drift Price et al.
+  describe, and passing both cadence tests: nothing at its drift in the
+  OFF looks (OFF S/N 3.5 at most here). That matches their interference
+  case at this star; it does not show which transmitter it was.
+- **Two candidates, kept as two.** They start 2.94 kHz apart, 694 s
+  apart in time. Carried along −3.98 Hz/s, the first lands 174 Hz (62
+  channels) from the second: a matching distance of 1.47, beyond the 1 at
+  which looks join. They are consistent with one transmitter whose drift
+  changes (−3.98, −3.83 and −3.54 Hz/s at the starts of the three ON
+  looks, by this search), but that is not shown, and nothing here joins
+  them: each is judged, checked and reported on its own. turboSETI's
+  pipeline reports one event, its own table giving it in 2 of the 3 ON
+  looks.
+- **The checks mark them, as Price et al. did by eye, and say how
+  strongly:** the third OFF look (HIP 91119) has a spray of tracks at
+  2200.043 MHz drifting −1.4 to −3.9 Hz/s (turboSETI's hit there: SNR 10.7
+  at −2.10). This search has them all as shadow hits (SNR 5 to 10), so
+  check 6, given the cadence's OFF looks as the store gives them, calls the
+  recurrence **indicated**, not shown: a shadow hit within two drift steps
+  is a sign, not proof of one transmitter. (Before 9 November 2026 a single
+  such shadow hit made it "shown"; "shown" now needs a hit at the cut whose
+  chance match is under 5%.) Without the store only check 3 marks them,
+  for the 2200 to 2290 MHz space downlink band.
 - **Not reproduced:** the other three stars, and anything beyond this 0.6
   MHz: with no published hit lists, a fuller comparison is turboSETI against
   this search on the same data, which "Checked against turboSETI" already

@@ -16,7 +16,10 @@ interference is wherever the telescope points. How it is decided:
    the drift, from the drift errors of planted signals); the distance is
    the root of the sum of their squares, and two hits match at 1 or less.
    Matching is one-to-one, closest first, at most one hit a look in an
-   event, so a strong signal cannot claim two partners.
+   event, so a strong signal cannot claim two partners; and complete:
+   two groups join only when every hit of one matches every hit of the
+   other, so no chain of near matches (A to B, B to C, A not to C) makes
+   one event.
 3. **Every look is measured along the event's track,** found or not: the
    S/N of the summed line, against the same sums 60 to 1,900 channels to
    either side, at the projected place and within the matching tolerance
@@ -46,6 +49,8 @@ import numpy as np
 # OFF look is still caught by any hit there, shadow hits (from SNR 5) too.
 OFF_MAX = 6.0
 ON_MIN = 5.0            # an ON look with no hit must be this bright along the track for a candidate
+NULL_TRACKS = 32        # random tracks a cadence on which the OFF test's veto rate is measured
+MAX_DRIFT_NULL = 4.0    # Hz/s: the random tracks' drifts, as the search's
 REF_OFFSETS = np.concatenate([-np.arange(60, 1960, 60), np.arange(60, 1960, 60)])   # 64 reference lines a side pair
 STAMP_HALF = 16         # channels either side of the track in a stamp
 DRIFT_FLAG_STEPS = 2    # ON looks' drifts further apart than this are flagged (Ma et al.)
@@ -181,6 +186,7 @@ def _events(looks):
             if d <= 1:
                 pairs.append((d, (pa, ia), (pb, ib)))
     pairs.sort(key=lambda p: p[0])
+    close = {frozenset((a, b)) for _, a, b in pairs}
     group = {s: {s[0]: s[1]} for s in seeds}          # each seed starts as its own event
     owner = {s: s for s in seeds}
     for d, a, b in pairs:
@@ -190,11 +196,52 @@ def _events(looks):
         A, B = group[ga], group[gb]
         if set(A) & set(B):                            # one hit a look in an event
             continue
+        if any(frozenset(((pa, ia), (pb, ib))) not in close for pa, ia in A.items() for pb, ib in B.items()):
+            continue                                   # every member matches every other, no chains
         A.update(B)
         for pos, i in B.items():
             owner[(pos, i)] = ga
         del group[gb]
     return list(group.values())
+
+
+def null_off(looks, n=NULL_TRACKS, seed=0):
+    """The OFF test on tracks where no signal was put: n random starts in
+    the first ON look (clear of the slice's ends) at random drifts, each
+    measured in the OFF looks as judge measures an event's (projected and
+    fixed, over the matching window, and any hit within the distance).
+    The share vetoed is how often a real signal at a random place would be
+    called interference by the noise and interference already there:
+    {tracks, vetoed, over_off_max, with_hit, off_snr_max: [...]}."""
+    rng = np.random.default_rng(seed)
+    l0 = looks[0]
+    margin = int(REF_OFFSETS.max()) + 4 * l0.n_t + 64
+    if l0.n_f <= 2 * margin:
+        return {"tracks": 0, "vetoed": 0, "over_off_max": 0, "with_hit": 0, "off_snr_max": []}
+    out = {"tracks": n, "vetoed": 0, "over_off_max": 0, "with_hit": 0, "off_snr_max": []}
+    for _ in range(n):
+        c = int(rng.integers(margin, l0.n_f - margin))
+        drift = float(rng.uniform(-MAX_DRIFT_NULL, MAX_DRIFT_NULL))
+        k = abs(drift) / l0.step
+        top = {"frequency_mhz": l0.fch1 + c * l0.foff, "drift_hz_s": drift, "snr": 0.0,
+               "box_channels": max(1, math.ceil(k / max(l0.n_t - 1, 1)))}
+        best, hit = -np.inf, False
+        for lk in looks:
+            if lk.on:
+                continue
+            dt = (lk.tstart - l0.tstart) * 86400
+            f_tol, d_tol = _tolerance(top, top, l0, lk, dt)
+            s1, _, _ = lk.best_track(lk.channel(top["frequency_mhz"] + drift * dt / 1e6), drift, f_tol, d_tol)
+            s2, _, _ = lk.best_track(lk.channel(top["frequency_mhz"]), drift, f_tol, d_tol)
+            best = max([best] + [x for x in (s1, s2) if x is not None])
+            hit = hit or any(min(distance(top, h, l0, lk), distance(top, h, l0, lk, fixed=True)) <= 1
+                             for h in lk.hits)
+        over = bool(best >= OFF_MAX)
+        out["over_off_max"] += over
+        out["with_hit"] += hit
+        out["vetoed"] += over or hit
+        out["off_snr_max"].append(round(float(best), 2) if np.isfinite(best) else None)
+    return out
 
 
 def judge(looks):

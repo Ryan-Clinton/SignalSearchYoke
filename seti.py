@@ -82,8 +82,9 @@ EDGE_FRACTION = 0.05            # a hit this near a coarse channel's end (as a s
 # 1: brute-force drift sum, block MAD noise per spectrum x sqrt(16), run-chained hits (8 Nov 2026).
 # 2: boxcar desmearing, noise of the summed lines, hits picked and blanked one at a time, shadow hits to
 #    SNR 5, spectral kurtosis flags (9 Nov 2026).
-SEARCH_VERSION = ("3 (search 2; cadence test 2: seeds from every ON look, one-to-one matching by one distance, "
-                  "every look measured along the track, OFF test below the threshold, DOT score; 9 Nov 2026)")
+SEARCH_VERSION = ("4 (search 2; cadence test 3: seeds from every ON look, one-to-one complete matching by one "
+                  "distance, every look measured along the track, OFF test below the threshold, DOT score, the OFF "
+                  "test's veto rate on random tracks; 9 Nov 2026)")
 
 
 def _utc(mjd):
@@ -366,6 +367,7 @@ def cadence(sources, low, high, say=print, read=read_slice, keep=None, every_hit
         looks.append(onoff.Look(hits, s["tstart"], s["fch1"], s["foff"], s["tsamp"], s.pop("flat"), k))
         done_looks.append(looks[-1])
     events = onoff.judge(looks)
+    null = onoff.null_off(looks, seed=int(abs(low) * 1000) % (2 ** 31))
     count = {label: sum(e["label"] == label for e in events) for label in ("candidate", "interference", "unconfirmed")}
     note = (f"A candidate is seen in every ON look where its drift puts it (a hit, or its track at S/N "
             f"{onoff.ON_MIN:g} or more) and nowhere in the OFF looks (no hit of any strength, no track at S/N "
@@ -382,6 +384,9 @@ def cadence(sources, low, high, say=print, read=read_slice, keep=None, every_hit
               "interference": count["interference"], "unconfirmed": count["unconfirmed"],
               "events": [{k: v for k, v in e.items() if k not in ("matches", "stamps")}
                          for e in sorted(events, key=lambda e: (order[e["label"]], -e["snr"]))[:MAX_LISTED]],
+              "off_null": {k: v for k, v in null.items() if k != "off_snr_max"} | {
+                  "off_snr_max_median": float(np.median([x for x in null["off_snr_max"] if x is not None]))
+                  if any(x is not None for x in null["off_snr_max"]) else None},
               "note": note, "kind": "measured"}
     if every_hit:
         answer["_looks"], answer["_events"] = [lk.hits for lk in done_looks], events
@@ -605,7 +610,7 @@ def sweep(target, count=1, say=print, get=requests.get):
                 timing.update(wall_s=round(now - last_end, 1), threads=reading.threads())
                 last_end = now
                 store.save_block(db, run_id, session, k, low, high, file_ids, looks, events, timing, same=_same_event,
-                                 scans=answer["scans"])
+                                 scans=answer["scans"], off_null=answer["off_null"])
                 cpu = round(_cpu_seconds() - cpu0, 1)
                 hits = sum(len(at_cut(h)) for h in looks)
                 shadow = sum(len(h) for h in looks) - hits
@@ -688,6 +693,7 @@ def completeness(files=(), runs=13, false_too=True, say=print, which=None, add=F
             record["false_candidates"] = kept_before["false_candidates"]
     if false_too:
         record["false_candidates"] = injection.false_candidates(groups, vet=hook, say=say)
+        record["false_summary"] = injection.false_summary(record["false_candidates"])
     yoke.write(path, record, stamp=True)
     db = store.connect()
     run_id = store.start_run(db, f"inject --runs {runs}", dict(search_params(), runs=runs), SEARCH_VERSION)
@@ -711,9 +717,12 @@ def completeness(files=(), runs=13, false_too=True, say=print, which=None, add=F
         say(f"  planted in all six looks: {a['kept_as_candidate']} of {a['found_in_a_look']} found kept as candidates")
     if false_too:
         fc = record["false_candidates"]
+        fs = injection.false_summary(fc)
         say(f"  false candidates: {sum(x['candidates'] for x in fc)} in {len(fc)} cadences judged with the wrong "
-            f"ON looks; after the checks, {sum(x['survivors'] for x in fc)} not called interference, "
-            f"{sum(x['unexplained'] for x in fc)} unexplained")
+            f"ON looks ({fs['distinct_signals']} distinct signal(s) in {fs['cadences']} real cadences: "
+            f"{fs['per_cadence']} a cadence, 95% {fs['per_cadence_interval']}); after the checks, "
+            f"{sum(x['survivors'] for x in fc)} not called interference, {sum(x['unexplained'] for x in fc)} "
+            f"unexplained")
     return {k: v for k, v in record.items() if k != "rows"}
 
 

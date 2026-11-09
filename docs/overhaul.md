@@ -518,9 +518,15 @@ wide signals are left out of the model. Price et al. published no hit or
 event lists; their pipeline, run here on HIP 91699's two S-band cadences
 at 2200.0 to 2200.6 MHz, finds the event they show (2200.050 MHz,
 −3.83 Hz/s) in one, nothing in the other; this search makes it two
-candidates (its drift is not steady), and the checks call both
-interference (shown) from a look-alike in the third OFF look, as Price
-et al. judged by eye.
+candidates (kept as two: consistent with one transmitter whose drift
+changes, not shown), and the checks call both likely interference
+(indicated: the band, and look-alike shadow hits in the third OFF look),
+as Price et al. judged by eye. Afterwards: "shown" from recurrence now
+needs a hit at the cut with a small chance; groups of hits join only when
+all match (no chains); false candidates are counted per real cadence
+(0.2, 95% 0.005 to 1.1), not per choice of ON looks; the OFF test's veto
+rate is measured on random tracks in every block of a sweep; the Voyager
+file's SHA-256 is checked.
 
 ### Phase 8: the result
 
@@ -546,7 +552,14 @@ stating everything Section 5 of the sensitivity notes lists:
     waits for a defined sample of many stars (Phase 9).
 - **Validation:** Phase 7's results, and each check not done.
 - **What it found:** hit counts at each stage, every candidate and its
-  disposition.
+  disposition. Candidates are reported one by one, never merged: two
+  thought to be one transmitter are said to be so only with the evidence,
+  as a hypothesis. Those marked only for their band are counted apart
+  from those marked by any other check, and the band marks are not read
+  as a finding about the signal.
+- **The OFF test's veto rate** over the swept band, from the random
+  tracks of every block (`blocks.off_null_*`), against the 0.5% measured
+  on planted signals.
 - **How:** git commit, library versions.
 - **Context:** set against Harp et al. 2016 (ATA, 1–10 GHz, (4–7)×10¹⁵ W).
   Rough expectation: about 2×10¹⁴ W at the cut, before the drift efficiency
