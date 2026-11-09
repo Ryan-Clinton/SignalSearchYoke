@@ -48,16 +48,14 @@ How it reads (`reading.py`, 8 November 2026):
   OFF looks of the same session between them where the archive lists them,
   and gives the `cadence` line for a whole cadence.
 - `search` sums each look's spectra along every drift line up to 4 Hz a
-  second either way (a transmitter on a turning, orbiting planet drifts)
-  and keeps lines 10 times above the noise. The band's smooth shape is
-  taken out first and the noise measured robustly (median and median
-  absolute deviation), so the band's edges and a few bright signals do not
-  make hits. 10 is turboSETI's default number, but not the same threshold:
-  turboSETI's noise estimate runs high (Choza et al. 2024 measured its
-  "SNR 10" at about 33 in true noise on their data), and this search's
-  per-spectrum noise divided by √16 is not true noise either. The two
-  scales are to be measured against each other (docs/overhaul.md, Phase 3);
-  until then no figure here is on the published scale.
+  second either way (a transmitter on a turning, orbiting planet drifts),
+  summing in each spectrum every channel a fast line crosses, and keeps
+  lines 10 times above the noise of the summed lines themselves. The
+  band's smooth shape is taken out first and the noise measured robustly
+  (median and median absolute deviation), so the band's edges and a few
+  bright signals do not make hits. 10 is turboSETI's default number, but
+  not the same threshold: for the same signals turboSETI's SNR is 0.227 of
+  this search's (measured below), so its cut of 10 is about 44 here.
 - `cadence` follows each hit of the first ON look to where its drift puts
   it in the later looks. Found in every ON look and no OFF look, it is a
   candidate; seen in any OFF look, interference; missing from an ON look,
@@ -159,6 +157,144 @@ block's counts the same as recorded (0 candidates, 11 interference, 1
 unconfirmed), now with every hit kept: 73 hits in the six looks. One query
 finds hits within 200 Hz of each other in different looks (140 pairs; the
 first is a steady tone at 1820.000 MHz in all six: interference).
+
+## A correct search (9 November 2026)
+
+`searching.py` is the search since 9 November 2026 (search version 2);
+`measure.py` measures it. Every figure here is from planted signals in real
+looks or from the looks themselves: block 153 (the reference) and blocks 40,
+100, 200 and 280 of the 2017 cadence (1.94, 2.11, 2.40 and 2.64 GHz; block
+200 is in the 2.4 GHz Wi-Fi band), all six looks of each saved in
+`data/reference/`. The answers are in `data/measurements/`.
+
+**How it works now.**
+
+- Each spectrum's band shape is taken out and its noise measured block by
+  block, as before.
+- Every drift line to ±4 Hz/s is summed. A line faster than one channel a
+  spectrum (0.153 Hz/s) sums, in each spectrum, the N channels it crosses
+  (N = ⌈|drift| × 18.25 s / 2.79 Hz⌉, up to 27 at 4 Hz/s): the boxcar
+  desmearing of hyperseti and BLISS.
+- A line's SNR is its sum less the median of the summed lines, over their
+  robust spread, both measured on the summed lines themselves, per block
+  of 1024 channels and per box width.
+- Hits are picked strongest first. Each one's track is blanked, and the
+  lines near it are summed again before the next is picked, so a weak
+  signal beside a strong one is found on its own. A signal lit over far
+  more channels than its box is one hit, marked wide, with its width.
+- Hits from SNR 5 to the cut of 10 are kept as shadow hits: evidence for
+  later checks, never seeds or matches in the cadence test.
+- Each channel's spectral kurtosis is measured; a hit carries the share of
+  its track that is flagged.
+
+**The noise of the summed lines** is √(16 × N) times a spectrum's noise, as
+the old search assumed: the measured spread over √(16N) is 1.00 at the
+median for one channel and 0.97 to 1.00 for 27, in every look measured,
+with the 90th percentile of blocks at 1.05 to 1.18. The "off by up to 3×"
+reported for setigen (issue #32) does not show in these data. What was
+off is the level: the summed lines sit about 0.5 (in a spectrum's noise)
+above zero, per channel of box, because each spectrum's median, not its
+mean, is taken out and the power's distribution is skewed. The old search
+read every SNR about 0.13 high; this one takes the median off.
+
+**Against turboSETI** (`measure.py scale`; turboSETI 2.3.2): 30 slow
+signals (|drift| < 0.15 Hz/s, S_in 60 to 300) planted in one look of each
+of the five blocks, both searches run on the same files, 123 signals found
+by both. turboSETI's SNR is **0.227 of this search's** at the median of
+the five blocks (0.224 to 0.242 across them; quartiles within a block
+about ±5%). turboSETI's cut of 10 is about 44 on this search's scale, so
+the two searches' "SNR 10" are far apart: turboSETI's noise estimate runs
+high, as Choza et al. 2024 found (their factor 3.25 on their data; about
+4.4 here, the inverse of 0.227). It is a measured ratio for these blocks,
+for slow signals: not a constant.
+
+**Desmearing chosen by planted signals** (`measure.py desmear`; four looks
+in four bands, 40 signals in each drift bin and strength, the same planted
+data through each method; found = a hit at the cut within 3 channels and
+its box of the planted start, drift within 3 steps or 10%):
+
+| drift (Hz/s) | S_in | boxcar | scrunch | none |
+|---|---|---|---|---|
+| 0 to 0.15 | 15 | 50% | 50% | 50% |
+| 0 to 0.15 | 30 | 100% | 100% | 100% |
+| 0.15 to 0.5 | 30 | 100% | 100% | 90% |
+| 0.5 to 1 | 30 | 92% | 50% | 2% |
+| 0.5 to 1 | 60 | 100% | 100% | 95% |
+| 1 to 2 | 30 | 22% | 0% | 0% |
+| 1 to 2 | 60 | 100% | 100% | 5% |
+| 2 to 4 | 60 | 95% | 45% | 0% |
+| 2 to 4 | 120 | 100% | 100% | 5% |
+
+The SNR found over S_in, by drift bin, with the boxcar: 0.68, 0.53, 0.39,
+0.28, 0.22 (theory for a box of N channels: 1/√N, 0.19 to 0.28 at 2 to 4
+Hz/s). Without desmearing it falls to 0.09 at 2 to 4 Hz/s, and the strong
+fast signals there made 131 hits at the wrong place or drift (boxcar: 0;
+scrunch: 1). **The boxcar is kept.** The full table, with Wilson
+intervals, is in `data/measurements/desmear.json`. S_in is set from the
+raw spectra alone (see measure.py): the SNR a search would give collecting
+all the power in ideal noise. Even at slow drift a search finds 0.68 of
+it, because a tone at a random place in a channel puts only part of its
+power in the nearest channel (the sinc-squared response of an FFT channel;
+Breakthrough Listen's polyphase filterbank has a flatter response, so this
+loss is, if anything, overstated here: unverified).
+
+**Close pairs** (`measure.py pairs`; 12 pairs each): with the boxcar, two
+equal signals at 0.05 Hz/s, or at +1 and −1 Hz/s, come out as two hits at
+3 channels apart and more, every time; two at the same 1 Hz/s (box of 7
+channels) at 30 channels and more every time, at 10 in 8 of 12, and at 3
+never (their boxes overlap: one hit). A weak signal (S_in 30, 0.3 Hz/s)
+beside one 20 times stronger was found every time at 10, 30, 100 and 300
+channels: the blanking works.
+
+**Spectral kurtosis** (`measure.py kurtosis`; all 30 looks). The flag at 3
+marks 0.018% to 0.026% of the channels of quiet looks (noise alone would
+give 0.0076%: the real tail is about three times heavier), 0.04% to 0.06%
+of busier ones, and 0.46% of the ON look with the burst. Leaving flagged
+channels out of the noise made no difference to what was found (boxcar
+with and without: the same within one signal per cell). But **it flags
+real signals**: planted signals drifting under 0.5 Hz/s at S_in 60 and
+above had 56% to 100% of their tracks flagged, because a slow tone sits in
+each channel for a few spectra only. Fast ones (over 1 Hz/s) were almost
+never flagged. A hit's `flagged_fraction` is therefore recorded and never
+read as interference on its own.
+
+**False hits** (`measure.py false`; each of the 30 looks scrambled twice:
+every spectrum turned round the band by its own random amount, so it keeps
+its noise and its interference but no signal can line up from one spectrum
+to the next):
+
+| looks | hits at the cut | per block of six looks (95% interval) |
+|---|---|---|
+| 48 looks of blocks 40, 100, 200, 280 | 0 | 0 (0 to 0.46) |
+| 12 looks of block 153 | 53 | 26.5 (19.9 to 34.7) |
+| all 60 | 53 | 5.3 (4.0 to 6.9) |
+
+Where the band is quiet the cut makes no false hits. Block 153's come from
+its strong tone at 2267.509 MHz (SNR about 80) and the burst in scan 31:
+scrambled, their bright pixels are scattered through the band, and lines
+through several of them reach the cut (SNR 10 to 17.6). That is harsher
+than the real looks, where those pixels form one tone; but it says that
+impulsive interference, bright for one spectrum at a time, does make false
+hits at this cut, and that a block's count of hits has to be read with its
+interference. Shadow hits (SNR 5 to 10): about 275 a look, scrambled or
+not.
+
+**The reference block** through the new search: the 2267.509 MHz tone in
+all six looks (SNR 50 to 95; interference), the weak 2269.557 MHz tone in
+scans 32, 33 and 36, and the burst at 2266.8 MHz as three fast-drifting
+hits in scan 31, one marked wide; the cadence gives the same labels as
+before (one interference, three unconfirmed, no candidate). New: a hit at
+−3.99 Hz/s with a 27-channel box in scan 32, which summing one channel a
+spectrum could not collect. 220 to 350 shadow hits a look. 5.5 s a look.
+
+**The 18 blocks swept, searched again** (9 November 2026, `sweep
+--blocks 18`): 287 hits at the cut where version 1 found 123, 46
+interference where it found 19, 4 unconfirmed, no candidate; 28,321 shadow
+hits (about 1,500 a block); 190 of the hits in one block (7, 1836 to 1839
+MHz). Version 1's hits and events stay in the store marked superseded, and
+each of its 24 events is linked to the new event that replaces it. About
+34 s a block (fetch 18 to 27 s, hidden; search 29 to 58 s; 120 CPU
+seconds; 2.3 GB peak): the whole cadence would take about 2.9 hours.
 
 ## Checked against turboSETI
 

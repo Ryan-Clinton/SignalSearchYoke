@@ -86,7 +86,8 @@ CREATE TABLE IF NOT EXISTS blocks (
     search_s REAL,
     wall_s REAL,                  -- from the end of the last block to the end of this one
     threads INTEGER,
-    hits INTEGER,
+    hits INTEGER,                 -- at the cut, all six looks
+    shadow_hits INTEGER,          -- SNR 5 to the cut
     candidates INTEGER,
     interference INTEGER,
     unconfirmed INTEGER,
@@ -113,7 +114,10 @@ CREATE TABLE IF NOT EXISTS hits (
     near_edge INTEGER,            -- within 5% of a coarse channel's end
     near_dc INTEGER,              -- within the drift's reach of a coarse channel's middle
     flagged_fraction REAL,        -- spectral kurtosis flags; NULL = not measured (not zero)
-    origin TEXT NOT NULL,         -- search, shadow, injected
+    box_channels INTEGER,         -- the desmearing box: channels summed a spectrum
+    wide INTEGER,                 -- lit over far more channels than its box
+    noise_factor REAL,            -- the summed lines' spread over sqrt(spectra x box): 1 for ideal noise
+    origin TEXT NOT NULL,         -- search, shadow (SNR 5 to the cut: evidence, never a candidate), injected
     superseded_run INTEGER        -- NULL: current; else the run whose re-search replaced it
 );
 CREATE INDEX IF NOT EXISTS hits_frequency ON hits (f_start_mhz);
@@ -185,7 +189,9 @@ def connect(where=None):
 
 
 MIGRATIONS = [("runs", "search_version", "TEXT"), ("hits", "superseded_run", "INTEGER"),
-              ("events", "superseded_run", "INTEGER"), ("events", "supersedes_event_id", "INTEGER")]
+              ("events", "superseded_run", "INTEGER"), ("events", "supersedes_event_id", "INTEGER"),
+              ("hits", "box_channels", "INTEGER"), ("hits", "wide", "INTEGER"), ("hits", "noise_factor", "REAL"),
+              ("blocks", "shadow_hits", "INTEGER")]
 
 
 def _migrate(db):
@@ -275,17 +281,27 @@ def cadence_files(db, target):
     return rows[0]["session"], [r["url"] for r in rows]
 
 
-def done_blocks(db, session):
-    return {r["block_idx"]: dict(r) for r in db.execute(
-        "SELECT * FROM blocks WHERE session=? AND status='done' ORDER BY block_idx", (session,))}
+def done_blocks(db, session, search_version=None):
+    """The blocks of a session searched; with `search_version`, only those
+    searched by that version of the search (the rest are to be searched
+    again)."""
+    rows = db.execute("SELECT b.*, r.search_version FROM blocks b LEFT JOIN runs r ON r.run_id = b.run_id"
+                      " WHERE b.session=? AND b.status='done' ORDER BY b.block_idx", (session,))
+    return {r["block_idx"]: dict(r) for r in rows
+            if search_version is None or r["search_version"] == search_version}
 
 
-def _hit_row(run_id, file_id, session, block_idx, h, origin="search"):
+def _flag(v):
+    return None if v is None else int(v)
+
+
+def _hit_row(run_id, file_id, session, block_idx, h, origin=None):
+    origin = origin or ("shadow" if h.get("shadow") else "search")
     return (run_id, file_id, session, block_idx, h.get("file_channel", h["channel"]), h["frequency_mhz"],
             h.get("end_frequency_mhz"), h["drift_hz_s"], h.get("drift_error_hz_s"), h.get("drift_norm"), h["snr"],
-            h.get("power"), h.get("noise"), h.get("width_channels"), h.get("smear"),
-            None if h.get("near_edge") is None else int(h["near_edge"]),
-            None if h.get("near_dc") is None else int(h["near_dc"]), h.get("flagged_fraction"), origin)
+            h.get("power"), h.get("noise"), h.get("width_channels"), h.get("smear"), _flag(h.get("near_edge")),
+            _flag(h.get("near_dc")), h.get("flagged_fraction"), h.get("box_channels"), _flag(h.get("wide")),
+            h.get("noise_factor"), origin)
 
 
 def save_block(db, run_id, session, block_idx, f_lo, f_hi, file_ids, looks_hits, events, timing, same=None):
@@ -308,7 +324,8 @@ def save_block(db, run_id, session, block_idx, f_lo, f_hi, file_ids, looks_hits,
                 cur = db.execute(
                     "INSERT INTO hits (run_id, file_id, session, block_idx, channel, f_start_mhz, f_end_mhz,"
                     " drift_hz_s, drift_err_hz_s, drift_norm, snr, power, noise, width_channels, smear, near_edge,"
-                    " near_dc, flagged_fraction, origin) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    " near_dc, flagged_fraction, box_channels, wide, noise_factor, origin)"
+                    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     _hit_row(run_id, file_id, session, block_idx, h))
                 these.append(cur.lastrowid)
             ids.append(these)
@@ -335,10 +352,12 @@ def save_block(db, run_id, session, block_idx, f_lo, f_hi, file_ids, looks_hits,
         count = {label: sum(e["label"] == label for e in events) for label in ("candidate", "interference", "unconfirmed")}
         db.execute(
             "INSERT OR REPLACE INTO blocks (session, block_idx, f_lo_mhz, f_hi_mhz, status, run_id, bytes, fetch_s,"
-            " search_s, wall_s, threads, hits, candidates, interference, unconfirmed, searched_utc)"
-            " VALUES (?,?,?,?,'done',?,?,?,?,?,?,?,?,?,?,?)",
+            " search_s, wall_s, threads, hits, shadow_hits, candidates, interference, unconfirmed, searched_utc)"
+            " VALUES (?,?,?,?,'done',?,?,?,?,?,?,?,?,?,?,?,?)",
             (session, block_idx, f_lo, f_hi, run_id, timing.get("bytes"), timing.get("fetch_s"),
-             timing.get("search_s"), timing.get("wall_s"), timing.get("threads"), sum(len(h) for h in looks_hits),
+             timing.get("search_s"), timing.get("wall_s"), timing.get("threads"),
+             sum(1 for hits in looks_hits for h in hits if not h.get("shadow")),
+             sum(1 for hits in looks_hits for h in hits if h.get("shadow")),
              count["candidate"], count["interference"], count["unconfirmed"], now()))
 
 

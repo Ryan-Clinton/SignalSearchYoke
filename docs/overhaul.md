@@ -287,6 +287,49 @@ units, as `store.py` says.
   frequency-flipped, and quiet slices elsewhere), and stated as a rate per
   block with its interval, not as "none".
 
+**Done, 9 November 2026** (`searching.py`, `measure.py`; every figure in
+`docs/seti.md`, "A correct search"; search version 2):
+
+- **Item 1, the SNR scale.** The noise of the summed lines, measured on
+  them per block and box width, is √(16N) times a spectrum's noise to
+  within 3% at the median (90th percentile of blocks 1.05 to 1.18) in all
+  five blocks: the old per-spectrum assumption was right in spread. It was
+  wrong in level: the summed lines sit about 0.5 a channel above zero (the
+  skew of the power), which read every old SNR about 0.13 high; the median
+  is now taken off. Against turboSETI 2.3.2 on 123 planted slow signals in
+  five blocks and bands, turboSETI's SNR is 0.227 of this search's
+  (0.224 to 0.242 across blocks): its cut of 10 is about 44 here.
+- **Item 2, desmearing:** the boxcar, chosen over scrunching and none on
+  800 planted signals in four bands per method: at 2 to 4 Hz/s and S_in 60
+  it finds 95% (scrunch 45%, none 0%), and it makes no stray hits where
+  none made 131. In the close-pair test it resolves everything the other
+  methods do except two lines inside one box.
+- **Item 3, hits picked and blanked one at a time:** a weak signal beside
+  one 20 times stronger found in 48 of 48 pairs at 10 to 300 channels; a
+  wide burst recorded as one hit, marked wide.
+- **Item 4, shadow hits** from SNR 5: about 250 to 350 a look, kept,
+  never used as seeds or matches by the cadence test (Phase 4 uses them).
+- **Item 5, spectral kurtosis:** the flag at 3 marks about 0.02% of a
+  quiet look's channels (noise alone: 0.008%), and leaving them out of the
+  noise changes nothing found. It flags strong slow real signals over most
+  of their tracks, as feared: `flagged_fraction` is recorded, never a
+  verdict.
+- **Done-when:** the reference block gives the same strong hits and the
+  same cadence labels; planted smeared signals are found at 22% (S_in 30)
+  and 100% (S_in 60) at 1 to 2 Hz/s, and 95% (S_in 60) and 100% (S_in 120)
+  at 2 to 4 Hz/s; false hits on scrambled looks: none in 48 looks of four
+  quiet blocks (at most 0.46 a block, 95%), 26.5 a block (19.9 to 34.7)
+  in the reference block, whose strong tone and burst, scrambled, become
+  impulsive interference. False hits depend on interference and are
+  quoted with it.
+- **The sweep with it:** the 18 swept blocks searched again: 287 hits at
+  the cut (123 before), 0 candidates; about 34 s a block, so G4's evening
+  for a cadence becomes about 2.9 hours, set by the search.
+- **Not yet:** the planted signals here are made with an FFT channel's
+  sinc² response; Breakthrough Listen's polyphase filterbank response was
+  not modelled (Phase 6). `inject` still uses the old one-channel planting
+  until Phase 6 rebuilds it.
+
 ### Phase 4: a stronger cadence test
 
 1. **Seed from every ON look**, not just the first; a signal that starts in

@@ -17,10 +17,11 @@ the web, block by block (HTTP range requests; h5py and hdf5plugin).
 A transmitter on a planet drifts in frequency as the planet turns and
 orbits. `search` adds each scan's spectra along every drift line up to
 MAX_DRIFT Hz a second either way (one channel across the scan between
-lines) and keeps each line SNR_MIN times above the noise: a hit. The
-noise is measured robustly (the median and its absolute deviation, after
-taking out the band's smooth shape) so a few bright signals do not hide
-the rest.
+lines), summing in each spectrum every channel a fast-drifting line
+crosses (desmearing), and keeps each line SNR_MIN times above the noise
+of the summed lines themselves: a hit. Hits are picked strongest first,
+each blanked before the next is looked for, and those from SNR 5 to the
+cut are kept as shadow hits. How: searching.py; measured: measure.py.
 
 `cadence` is the test that matters. Nearly every hit is interference from
 our own world: satellites, radar, phones, the telescope's own electronics.
@@ -58,25 +59,27 @@ import numpy as np
 import requests
 
 import reading
+import searching
 import store
 import yoke
 
 API = "https://seti.berkeley.edu/opendata/api/query-files"
 FINE = ".gpuspec.0000.h5"       # the finest frequency product of a Green Bank look
-SNR_MIN = 10.0                  # turboSETI's default: a hit is ten times the noise
-MAX_DRIFT = 4.0                 # Hz a second either way: the Earth's own turning gives up to about 0.4 at 1-10 GHz
-BLOCK = 1024                    # channels in each piece of the band's smooth shape taken out
-WINDOW_CHANNELS = 3             # channels either way a hit may sit from where its drift puts it
+SNR_MIN = searching.SNR_MIN     # the cut, in true noise of the summed lines
+MAX_DRIFT = searching.MAX_DRIFT  # Hz a second either way: the Earth's own turning gives up to about 0.4 at 1-10 GHz
+BLOCK = searching.BLOCK
+WINDOW_CHANNELS = searching.WINDOW_CHANNELS
 CADENCE_DAYS = 0.06             # OFF looks within this long (about 1.5 hours) of the ON looks are the cadence's
 MAX_LISTED = 100                # hits or events listed; the counts are of all of them
 TIMEOUT = 120
 HEADERS = reading.HEADERS
 MJD_UNIX = 40587.0              # the MJD of 1970-01-01
 EDGE_FRACTION = 0.05            # a hit this near a coarse channel's end (as a share of it) is flagged near_edge
-TILE = 131072                   # channels summed at a time: 16 spectra of them fit the processor's cache
 # The search's version, kept with every run: change it whenever what the
 # search finds can change, so results of different versions are told apart.
-SEARCH_VERSION = "1 (brute-force drift sum, block MAD noise, run-chained hits; 8 Nov 2026)"
+# 1: brute-force drift sum, block MAD noise per spectrum x sqrt(16), run-chained hits (8 Nov 2026).
+SEARCH_VERSION = ("2 (boxcar desmearing, noise of the summed lines, hits picked and blanked one at a time, "
+                  "shadow hits to SNR 5, spectral kurtosis flags; 9 Nov 2026)")
 
 
 def _utc(mjd):
@@ -270,138 +273,15 @@ def save(s, path):
 
 # --- the search -----------------------------------------------------------------
 
-def _block_medians(x, block):
-    """The median of each run of `block` channels of each row: (rows,
-    blocks), the last block shorter if the channels do not divide."""
-    n_r, n_f = x.shape
-    whole = n_f // block
-    out = np.empty((n_r, -(-n_f // block)))
-    if whole:
-        out[:, :whole] = np.median(x[:, :whole * block].reshape(n_r, whole, block), axis=2)
-    if whole * block < n_f:
-        out[:, -1] = np.median(x[:, whole * block:], axis=1)
-    return out
+def search(spectra, foff, tsamp, fch1, **options):
+    """The hits in one look, shadow hits (SNR 5 to the cut) among them:
+    searching.py's search, which says how."""
+    return searching.search(spectra, foff, tsamp, fch1, **options)
 
 
-def flatten(spectra, block=BLOCK, details=False):
-    """Each spectrum over its own noise, with the band's smooth shape taken
-    out: the median of each BLOCK channels, joined up, and the median
-    absolute deviation of what is left. A narrow signal stands out of it.
-    With `details`, also each spectrum's noise by block and the blocks'
-    centres, to give a hit's noise in the file's own units."""
-    n_t, n_f = spectra.shape
-    out = np.empty_like(spectra)
-    starts = np.arange(0, n_f, block)
-    centres = np.minimum(starts + block / 2, n_f - 1)
-    every = np.arange(n_f)
-    levels = _block_medians(spectra, block)
-    for t in range(n_t):
-        level = levels[t]
-        if len(level) > 1:
-            # Carried on to both ends along the slope of the blocks nearest them:
-            # held flat there, a sloping band would leave a ramp that adds up to hits.
-            xs = np.concatenate([[0.0], centres, [n_f - 1.0]])
-            first = level[0] - (level[1] - level[0]) * centres[0] / (centres[1] - centres[0])
-            last = level[-1] + (level[-1] - level[-2]) * (n_f - 1 - centres[-1]) / (centres[-1] - centres[-2])
-            out[t] = spectra[t] - np.interp(every, xs, np.concatenate([[first], level, [last]]))
-        else:
-            out[t] = spectra[t] - level[0]
-    # The noise too is measured block by block: near a coarse channel's
-    # edges the band rolls off and the noise with it, and one figure for
-    # the whole spectrum made hits of the quieter edges (3 November 2026,
-    # Tabby's 2017 data: four of five hits only this search found).
-    # One spectrum at a time: whole-look temporaries cost 2 x 134 MB a look,
-    # and six looks are searched at once.
-    spreads = np.empty((n_t, len(starts)))
-    for t in range(n_t):
-        row = out[t:t + 1]
-        middle = np.repeat(_block_medians(row, block), block, axis=1)[:, :n_f]
-        spreads[t] = 1.4826 * _block_medians(np.abs(row - middle), block)[0]
-    for t in range(n_t):
-        spread = spreads[t]
-        spread[spread <= 0] = np.median(spread[spread > 0]) if (spread > 0).any() else 1.0
-        out[t] /= np.interp(every, centres, spread) if len(spread) > 1 else spread[0]
-    return (out, {"spreads": spreads, "centres": centres}) if details else out
-
-
-def search(spectra, foff, tsamp, fch1, snr_min=SNR_MIN, max_drift=MAX_DRIFT, block=BLOCK):
-    """The hits in one look: each drift line whose sum is snr_min times its
-    noise, the best drift for each channel, and only the strongest within
-    the widest drift searched of it (as turboSETI keeps its top hits): one
-    strong burst lights every drift line near it, and is one hit, not
-    dozens. A hit's frequency is where it was at the start of the look.
-
-    The lines are summed in float32 by adding each spectrum's slice, shifted
-    by its drift, onto the total, a cache-sized tile of the band at a time
-    (about 3 s a look of 16 x 1,048,575 channels, against 39 s by np.roll in
-    float64): the same sums, rounded to float32. On the reference block the
-    hits are the same as np.roll's, to the last figure kept."""
-    n_t, n_f = spectra.shape
-    flat, noise = flatten(spectra, block, details=True)
-    width_hz = abs(foff) * 1e6
-    span = max(n_t - 1, 1) * tsamp
-    most = int(max_drift * span / width_hz) if n_t > 1 else 0
-    # Padded with `most` zeros each side, so every shifted slice is in range;
-    # what the padding touches is masked below, as np.roll's wrap was.
-    padded = np.zeros((n_t, n_f + 2 * most), np.float32)
-    padded[:, most:most + n_f] = flat
-    del flat
-    best, best_k = np.full(n_f, -np.inf, dtype=np.float32), np.zeros(n_f, np.int32)
-    steps = np.arange(n_t) / max(n_t - 1, 1)
-    scale = np.float32(1 / math.sqrt(n_t))
-    shifts = [(k, [int(round(k * steps[t])) for t in range(n_t)]) for k in range(-most, most + 1)]
-    # The band is taken a tile at a time, every drift for one tile before the
-    # next: a tile's spectra stay in the processor's cache, where the whole
-    # band's would stream from memory for every drift (memory-bound: six
-    # looks searched side by side took no less time than one after another).
-    for lo in range(0, n_f, TILE):
-        hi = min(lo + TILE, n_f)
-        total, tile_best, tile_k = np.empty(hi - lo, np.float32), best[lo:hi], best_k[lo:hi]
-        for k, ss in shifts:
-            total[:] = 0
-            for t, s in enumerate(ss):
-                # total[i] += flat[t, i + s], in order of t: the same sums as before
-                total += padded[t, most + lo + s:most + hi + s]
-            total *= scale
-            if k > 0 and hi > n_f - k:
-                total[max(n_f - k, lo) - lo:] = -np.inf     # would have wrapped round the end of the slice
-            elif k < 0 and lo < -k:
-                total[:min(-k, hi) - lo] = -np.inf
-            better = total > tile_best
-            np.copyto(tile_k, k, where=better)
-            np.maximum(tile_best, total, out=tile_best)
-    del padded
-    # The slice's ends: a drift line starting there runs off the slice, so
-    # what lies within the widest drift of either end is not searched.
-    edge = most + WINDOW_CHANNELS
-    best[:edge] = best[n_f - edge:] = -np.inf
-    over = np.flatnonzero(best >= snr_min)
-    # One hit for each run of bright channels no further apart than the
-    # widest drift: a burst of interference lights a wide run of them and is
-    # one hit, not one for every drift line (turboSETI keeps one top hit in
-    # each such window too).
-    reach = most + WINDOW_CHANNELS
-    step_hz_s = width_hz / span if span else 0.0
-    hits, run = [], []
-    for i in list(over) + [None]:
-        if run and (i is None or i - run[-1] > reach):
-            top = max(run, key=lambda c: best[c])
-            drift = float(best_k[top] * foff * 1e6 / span) if span else 0.0
-            f0 = fch1 + top * foff
-            sigma = float(np.median([np.interp(top, noise["centres"], row) for row in noise["spreads"]]))
-            snr = float(best[top])
-            hits.append({"channel": int(top), "frequency_mhz": round(f0, 6),
-                         "drift_hz_s": round(drift, 4), "snr": round(snr, 1),
-                         "width_channels": int(run[-1] - run[0] + 1),
-                         "end_frequency_mhz": round(f0 + drift * span / 1e6, 6),
-                         "drift_error_hz_s": round(step_hz_s / 2, 4),
-                         "drift_norm": drift / (f0 * 1e6) if f0 else None,
-                         "noise": sigma, "power": snr * math.sqrt(n_t) * sigma,
-                         "smear": round(abs(drift) * tsamp / width_hz, 3) if width_hz else None})
-            run = []
-        if i is not None:
-            run.append(i)
-    return hits
+def at_cut(hits):
+    """The hits at or above the cut: shadow hits left out."""
+    return [h for h in hits if not h.get("shadow")]
 
 
 def describe(hits, s):
@@ -429,22 +309,28 @@ def look(source, low, high, say=print, read=read_slice, keep=None):
     if keep:
         save(s, Path(keep) / (Path(str(source)).name.replace(".h5", "") + f"_{low:g}-{high:g}.h5"))
     hits = describe(search(s["spectra"], s["foff"], s["tsamp"], s["fch1"]), s)
+    cut = at_cut(hits)
     n_t, n_f = s["spectra"].shape
     answer = {"source": str(source), "target": s["target"], "from_mhz": low, "to_mhz": high, "channels": n_f,
               "channel_hz": round(abs(s["foff"]) * 1e6, 3), "spectra": n_t, "seconds": round(n_t * s["tsamp"], 1),
               "tstart": s["tstart"], "max_drift_hz_s": MAX_DRIFT, "snr_min": SNR_MIN, "fetched_mb": s["fetched_mb"],
-              "hit_count": len(hits), "hits": sorted(hits, key=lambda h: -h["snr"])[:MAX_LISTED], "kind": "measured"}
+              "hit_count": len(cut), "shadow_count": len(hits) - len(cut),
+              "hits": sorted(cut, key=lambda h: -h["snr"])[:MAX_LISTED], "kind": "measured"}
     say(f"{s['target'] or source}: {n_f} channels of {answer['channel_hz']:g} Hz, {n_t} spectra over "
-        f"{answer['seconds']:g} s; {len(hits)} hit(s) at {SNR_MIN:g} times the noise or more, drifts up to "
-        f"±{MAX_DRIFT:g} Hz/s" + (f" ({s['fetched_mb']:g} MB read)" if s["fetched_mb"] else ""))
+        f"{answer['seconds']:g} s; {len(cut)} hit(s) at {SNR_MIN:g} times the noise or more, drifts up to "
+        f"±{MAX_DRIFT:g} Hz/s, and {len(hits) - len(cut)} shadow hit(s) from {searching.SHADOW_MIN:g}"
+        + (f" ({s['fetched_mb']:g} MB read)" if s["fetched_mb"] else ""))
     for h in answer["hits"][:10]:
         say(f"  {h['frequency_mhz']:.6f} MHz  drift {h['drift_hz_s']:+.4f} Hz/s  SNR {h['snr']:g}")
     return answer, hits, s
 
 
 def _near(hits, frequency, window_mhz, drift=None, drift_tolerance=None):
-    """The first hit near `frequency` (and `drift`): its index, or None."""
+    """The first hit at the cut near `frequency` (and `drift`): its index,
+    or None. Shadow hits are evidence for later checks, not matches here."""
     for i, h in enumerate(hits):
+        if h.get("shadow"):
+            continue
         if abs(h["frequency_mhz"] - frequency) <= window_mhz and (
                 drift is None or abs(h["drift_hz_s"] - drift) <= drift_tolerance):
             return i
@@ -454,12 +340,15 @@ def _near(hits, frequency, window_mhz, drift=None, drift_tolerance=None):
 def judge(looks):
     """The ON, OFF, ON, OFF, ON, OFF test on six looks' hits. `looks` are
     (hits, tstart MJD, channel width Hz, seconds) in cadence order; each
-    hit of the first ON look is followed to where its drift puts it in each
-    later look. Found in every ON and no OFF: a candidate. Each event keeps
-    `matches`: for each look, the index of the hit matched there, or None."""
+    hit of the first ON look at the cut is followed to where its drift puts
+    it in each later look. Found in every ON and no OFF: a candidate. Each
+    event keeps `matches`: for each look, the index of the hit matched there
+    (in that look's whole list, shadow hits included), or None."""
     first_hits, t0, width_hz, seconds = looks[0]
     events = []
     for seed, h in enumerate(first_hits):
+        if h.get("shadow"):
+            continue
         drift = h["drift_hz_s"]
         tolerance = max(0.5 * abs(drift), 2 * width_hz / max(seconds, 1e-9))
         in_on, in_off, matches = [True], [], [seed]
@@ -494,15 +383,15 @@ def cadence(sources, low, high, say=print, read=read_slice, keep=None, every_hit
                              sources))
     scans, looks = [], []
     for k, (source, (answer, hits, s)) in enumerate(zip(sources, done)):
-        scans.append({"source": str(source), "target": s["target"], "on": k % 2 == 0, "hit_count": len(hits),
-                      "fetched_mb": s["fetched_mb"]})
+        scans.append({"source": str(source), "target": s["target"], "on": k % 2 == 0, "hit_count": answer["hit_count"],
+                      "shadow_count": answer["shadow_count"], "fetched_mb": s["fetched_mb"]})
         looks.append((hits, s["tstart"], abs(s["foff"]) * 1e6, answer["seconds"]))
     events = judge(looks)
     count = {label: sum(e["label"] == label for e in events) for label in ("candidate", "interference", "unconfirmed")}
     note = ("A candidate is found in every ON look where its drift puts it and in no OFF look. It is then checked "
             "against known interference and the published searches of these data: a candidate is never a signal "
             "from anyone until all of that is done, and so far every one has been ours.")
-    say(f"{low:g} to {high:g} MHz, {len(events)} hit(s) in the first ON look: {count['candidate']} candidate(s), "
+    say(f"{low:g} to {high:g} MHz, {len(events)} hit(s) at the cut in the first ON look: {count['candidate']} candidate(s), "
         f"{count['interference']} seen in an OFF look too (interference), {count['unconfirmed']} not in every ON look")
     for e in [e for e in events if e["label"] == "candidate"][:10]:
         say(f"  candidate {e['frequency_mhz']:.6f} MHz  drift {e['drift_hz_s']:+.4f} Hz/s  SNR {e['snr']:g}")
@@ -619,9 +508,11 @@ def _cpu_seconds():
 
 
 def search_params():
-    return {"snr_min": SNR_MIN, "max_drift_hz_s": MAX_DRIFT, "block": BLOCK, "window_channels": WINDOW_CHANNELS,
-            "edge_fraction": EDGE_FRACTION, "cadence_days": CADENCE_DAYS, "threads": reading.threads(),
-            "search": "brute-force drift sum, float32 slice-adds, run-chained hits"}
+    return {"snr_min": SNR_MIN, "shadow_min": searching.SHADOW_MIN, "max_drift_hz_s": MAX_DRIFT, "block": BLOCK,
+            "window_channels": WINDOW_CHANNELS, "edge_fraction": EDGE_FRACTION, "cadence_days": CADENCE_DAYS,
+            "threads": reading.threads(), "method": searching.METHOD, "sk_flag": searching.SK_FLAG,
+            "wide_level": searching.WIDE_LEVEL, "wide_min": searching.WIDE_MIN, "max_hits": searching.MAX_HITS,
+            "search_version": SEARCH_VERSION}
 
 
 def _cadence_files(db, target, get, say):
@@ -673,7 +564,8 @@ def export(db, target, session, block_list):
         done[str(k)] = {"from_mhz": b["f_lo_mhz"], "to_mhz": b["f_hi_mhz"], "hits": b["hits"],
                         "candidates": b["candidates"], "interference": b["interference"],
                         "unconfirmed": b["unconfirmed"], "events": events, "searched": b["searched_utc"],
-                        "bytes": b["bytes"], "fetch_s": b["fetch_s"], "search_s": b["search_s"]}
+                        "bytes": b["bytes"], "fetch_s": b["fetch_s"], "search_s": b["search_s"],
+                        "shadow_hits": b.get("shadow_hits"), "search_version": b.get("search_version")}
     record = {"store": "ssy.sqlite", "blocks": [list(b) for b in block_list], "done": done}
     if before:
         record["before_hit_store"] = before
@@ -695,8 +587,10 @@ def sweep(target, count=1, say=print, get=requests.get):
                                       target=(scans[i]["target"] if scans else None), cadence_target=target,
                                       position=i, is_on=i % 2 == 0) for i, index in enumerate(indexes)]
         block_list = blocks(indexes[0])
-        done = store.done_blocks(db, session)
-        todo = [k for k in range(len(block_list)) if k not in done][:count]
+        # Blocks searched by an older version of the search come first, then new ones.
+        done = store.done_blocks(db, session, SEARCH_VERSION)
+        older = [k for k in store.done_blocks(db, session) if k not in done]
+        todo = (older + [k for k in range(len(block_list)) if k not in done and k not in older])[:count]
         run_id = store.start_run(db, f"sweep {target} --blocks {count} --threads {reading.threads()}", search_params(),
                                  SEARCH_VERSION)
         log = _log()
@@ -725,13 +619,15 @@ def sweep(target, count=1, say=print, get=requests.get):
                 last_end = now
                 store.save_block(db, run_id, session, k, low, high, file_ids, looks, events, timing, same=_same_event)
                 cpu = round(_cpu_seconds() - cpu0, 1)
-                hits = sum(len(h) for h in looks)
+                hits = sum(len(at_cut(h)) for h in looks)
+                shadow = sum(len(h) for h in looks) - hits
                 log.info(f"{target} {session} block {k} {low:.3f}-{high:.3f} MHz: {timing['bytes'] / 1e6:.0f} MB, "
                          f"fetch {timing['fetch_s']} s, search {timing['search_s']} s, block {timing['wall_s']} s, "
-                         f"threads {timing['threads']}, cpu {cpu} s, peak {_peak_memory_mb()} MB; {hits} hits, "
+                         f"threads {timing['threads']}, cpu {cpu} s, peak {_peak_memory_mb()} MB; {hits} hits "
+                         f"(+{shadow} shadow), "
                          f"{answer['candidates']} candidate(s), {answer['interference']} interference, "
                          f"{answer['unconfirmed']} unconfirmed")
-                say(f"  block {k + 1} of {len(block_list)}, {low:.3f} to {high:.3f} MHz: {hits} hits; "
+                say(f"  block {k + 1} of {len(block_list)}, {low:.3f} to {high:.3f} MHz: {hits} hits (+{shadow} shadow); "
                     f"{answer['candidates']} candidate(s), {answer['interference']} interference, "
                     f"{answer['unconfirmed']} unconfirmed ({timing['bytes'] / 1e6:.0f} MB, fetch "
                     f"{timing['fetch_s']} s, search {timing['search_s']} s, {timing['wall_s']} s a block)")
@@ -784,7 +680,7 @@ def inject(path, snrs=INJECT_SNRS, count=INJECT_COUNT, seed=0, say=print, read=r
     width_hz, span = abs(foff) * 1e6, max(n_t - 1, 1) * tsamp
     most = int(MAX_DRIFT * span / width_hz)
     reach, step = most + WINDOW_CHANNELS, width_hz / span
-    before = search(spectra, foff, tsamp, fch1)
+    before = at_cut(search(spectra, foff, tsamp, fch1))
     sigma = float(np.median(np.abs(np.diff(spectra, axis=1)))) / (0.6745 * math.sqrt(2))   # a spectrum's noise
     rng = np.random.default_rng(seed)
     rows, planted_rows = [], []
@@ -799,7 +695,7 @@ def inject(path, snrs=INJECT_SNRS, count=INJECT_COUNT, seed=0, say=print, read=r
                 drift = float(rng.uniform(-0.9, 0.9) * MAX_DRIFT)
                 tones.append((c, drift, snr * sigma / math.sqrt(n_t)))
                 busy.append(c)
-        hits = search(plant(spectra, tones, tsamp, width_hz), foff, tsamp, fch1)
+        hits = at_cut(search(plant(spectra, tones, tsamp, width_hz), foff, tsamp, fch1))
         found, errors, used = 0, [], set()
         for c, drift, height in tones:
             h = next((h for h in hits if abs(h["channel"] - c) <= reach and id(h) not in used
@@ -846,6 +742,8 @@ if os.name == "nt":
 else:
     _TURBO_DEFAULT = Path.home() / ".local/share/signalsearchyoke/seti-venv/bin/python"
 TURBOSETI_PYTHON = Path(os.environ.get("SSY_TURBOSETI_PYTHON", _TURBO_DEFAULT))
+TURBOSETI_PINS = ('"setuptools<80" "numpy<2" "pandas<2.3" "scipy<1.14" "matplotlib<3.9" "contourpy<1.3" '
+                  '"h5py<3.12" "numba<0.61" "astropy<6.2" "hdf5plugin<5"')
 _TURBO = """
 import sys
 from turbo_seti.find_doppler.find_doppler import FindDoppler
@@ -870,11 +768,15 @@ def turboseti(path, run_it=subprocess.run):
     if not TURBOSETI_PYTHON.exists():
         python = "py -3" if os.name == "nt" else "python3"
         raise yoke.Refusal("INVALID_REQUEST", f"turboSETI is not installed: {python} -m venv "
-                                f"--system-site-packages {TURBOSETI_PYTHON.parent.parent} && "
-                                f"{TURBOSETI_PYTHON} -m pip install turbo_seti")
+                                f"{TURBOSETI_PYTHON.parent.parent} && {TURBOSETI_PYTHON} -m pip install turbo_seti "
+                                + TURBOSETI_PINS + " (HANDOVER.md says why the pins)")
+    path = Path(path).resolve()
     with tempfile.TemporaryDirectory() as out:
-        done = run_it([str(TURBOSETI_PYTHON), "-c", _TURBO, str(path), str(MAX_DRIFT), str(SNR_MIN), out],
-                      capture_output=True, text=True, timeout=3600)
+        # Run from the file's folder with its bare name: turboSETI joins its
+        # output folder to the name it is given, which on Windows makes
+        # "C:\out/C:\in\file.log" from a full path.
+        done = run_it([str(TURBOSETI_PYTHON), "-c", _TURBO, path.name, str(MAX_DRIFT), str(SNR_MIN), out],
+                      capture_output=True, text=True, timeout=3600, cwd=str(path.parent))
         if done.returncode:
             raise yoke.Refusal("INTERNAL_ERROR", f"turboSETI failed on {path}: {done.stderr.strip()[-400:]}")
         dat = next(Path(out).glob("*.dat"), None)
@@ -905,7 +807,7 @@ def benchmark(paths, say=print, turbo=turboseti):
         s = read_slice(path, -1e12, 1e12)
         n_t, n_f = s["spectra"].shape
         seconds = n_t * s["tsamp"]
-        ours = search(s["spectra"], s["foff"], s["tsamp"], s["fch1"])
+        ours = at_cut(search(s["spectra"], s["foff"], s["tsamp"], s["fch1"]))
         theirs = turbo(path)
         # turboSETI reads the file as saved, spike and all; a hit of its on a
         # coarse channel's middle, which this search blanks, is set aside.

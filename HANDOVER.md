@@ -18,6 +18,8 @@ KIC 8462852.
 |---|---|
 | `seti.py` | find, search, cadence, sweep, inject, benchmark |
 | `reading.py` | reading the archive's files over the web: chunk index, parallel range requests, retries, the request limit |
+| `searching.py` | the search on one look: band shape, desmeared drift sums, noise of the summed lines, hits picked and blanked, shadow hits, spectral kurtosis |
+| `measure.py` | the search measured on planted signals and real looks: desmearing, close pairs, kurtosis, false hits, the SNR scale against turboSETI |
 | `store.py` | the hit store, `data/ssy.sqlite`: runs, files, blocks, hits, events, checks, injections |
 | `check.py` | the sweeps' candidates checked for signs of interference |
 | `yoke.py` | the data folder, the `--json` envelope, writing a record whole |
@@ -101,12 +103,19 @@ On Windows the default place is
 
 ```
 py -3 -m venv $env:LOCALAPPDATA\signalsearchyoke\seti-venv
-& "$env:LOCALAPPDATA\signalsearchyoke\seti-venv\Scripts\python.exe" -m pip install turbo_seti
+& "$env:LOCALAPPDATA\signalsearchyoke\seti-venv\Scripts\python.exe" -m pip install turbo_seti "setuptools<80" "numpy<2" "pandas<2.3" "scipy<1.14" "matplotlib<3.9" "contourpy<1.3" "h5py<3.12" "numba<0.61" "astropy<6.2" "hdf5plugin<5"
 ```
+
+The pins matter (9 November 2026, Python 3.12): turboSETI 2.3.2 fails on
+numpy 2 (`%i` given an array), and blimpy needs `pkg_resources` (missing from
+the newest setuptools; 79 has it) and an astropy that still runs on numpy 1. With them,
+turbo_seti 2.3.2 and blimpy 2.1.4 run. turboSETI also writes its log beside
+a path it joins wrongly on Windows; `seti.py` runs it from the file's own
+folder to avoid that.
 
 `SSY_TURBOSETI_PYTHON` names another python. On the laptop where this was
 built, turboSETI is in `~/.local/share/telescopeyoke/seti-venv` (the old
-name); the Windows PC has none yet.
+name); the Windows PC has one at the default place.
 
 ## Results so far (details in docs/seti.md)
 
@@ -123,11 +132,13 @@ name); the Windows PC has none yet.
   the laptop): no candidate.
 - **The sweep of Tabby's 25 May 2017 cadence** (session AGBT17A_999_68,
   scans 31 to 36, 308 blocks, 1818-2721 MHz): 18 blocks done,
-  1818.46-1871.19 MHz, on 8 November 2026 into the hit store; 0
-  candidates, 19 interference, 5 unconfirmed, 123 hits kept. The first 12
-  were searched again (they had been searched before the store kept
-  hits) and gave the same counts as before. About 22 s a block on the
-  Windows PC. Every hit is in `data/ssy.sqlite`; the readable record is
+  1818.46-1871.19 MHz, searched again on 9 November 2026 with search
+  version 2: 0 candidates, 46 interference, 4 unconfirmed; 287 hits at the
+  cut (version 1 found 123) and 28,321 shadow hits. Block 7 (1836-1839
+  MHz) alone has 190 hits, all interference. The version 1 results are
+  kept in the store, marked superseded. About 34 s a block on the Windows
+  PC (the search, not the network, sets the pace): about 2.9 hours for
+  the whole cadence. Every hit is in `data/ssy.sqlite`; the readable record is
   `data/sweeps/KIC8462852-AGBT17A_999_68.json`.
 - **The reference block** (block 153, all six looks) is in
   `data/reference/`, with the old search's answer; the new search gives
@@ -137,12 +148,13 @@ name); the Windows PC has none yet.
 
 ## The state on 8 November 2026
 
-- Phases 0 to 2 of [docs/overhaul.md](docs/overhaul.md) are done on the
-  Windows PC: the reference block, fast reading, the hit store. Phase 3
-  (a correct search: true SNR scale, desmearing, hit selection without
-  run-chaining) is next. The search is still the old one in method, so
-  the sweep should not go much further before Phase 3: every block will
-  be searched again then (about 2 hours for the whole cadence).
+- Phases 0 to 3 of [docs/overhaul.md](docs/overhaul.md) are done on the
+  Windows PC: the reference block, fast reading, the hit store, and a
+  correct search (search version 2: boxcar desmearing, SNR on the noise of
+  the summed lines, hits picked and blanked one at a time, shadow hits,
+  spectral kurtosis), measured in `data/measurements/` and written up in
+  docs/seti.md. Phase 4 (a stronger cadence test) is next. A sweep
+  searches blocks done by an older search version again first.
 - Nothing runs on a timer.
 - SETI has been taken out of telescopeyoke; nothing in this repository
   reads or imports anything from it.
@@ -162,7 +174,7 @@ name); the Windows PC has none yet.
   Other programs there (a llama-server, WSL, Chrome) hold much of its
   memory commit: on 9 November 2026 a sweep ran out with 5.5 GB of 51 GB
   commit free; it now peaks at about 1.9 GB.
-  The laptop is `ssh laptop` from it. No turboSETI environment yet.
+  The laptop is `ssh laptop` from it. turboSETI 2.3.2 is in its own venv (above).
 - **brokerblitzer**, the always-on server: a KVM VPS, AMD EPYC Milan, 6
   vCPUs at 2.0 GHz, 7.7 GB RAM with no swap, 221 GB free SSD, Ubuntu
   24.04. It builds and serves ryanclinton.uk and runs sungrazeryoke's
