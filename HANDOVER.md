@@ -139,12 +139,14 @@ name); the Windows PC has one at the default place.
 - **The sweep of Tabby's 25 May 2017 cadence** (session AGBT17A_999_68,
   scans 31 to 36, 308 blocks, 1818-2721 MHz): 18 blocks done,
   1818.46-1871.19 MHz, searched again on 9 November 2026 with search
-  version 2: 0 candidates, 46 interference, 4 unconfirmed; 287 hits at the
-  cut (version 1 found 123) and 28,321 shadow hits. Block 6 (1836-1839
+  version 3 (the new cadence test): 0 candidates, 118 interference events
+  (every ON look now seeds events), 4 unconfirmed; 287 hits at the cut
+  (version 1 found 123) and 28,321 shadow hits; every look complete; no
+  candidate for the checks. Block 6 (1836-1839
   MHz) alone has 190 hits, all interference. The version 1 results are
   kept in the store, marked superseded. About 34 s a block on the Windows
-  PC (the search, not the network, sets the pace): about 2.9 hours for
-  the whole cadence. Every hit is in `data/ssy.sqlite`; the readable record is
+  PC (the search, not the network, sets the pace; 31 s with version 3):
+  about 2.7 hours for the whole cadence. Every hit is in `data/ssy.sqlite`; the readable record is
   `data/sweeps/KIC8462852-AGBT17A_999_68.json`.
 - **The reference block** (block 153, all six looks) is in
   `data/reference/`, with the old search's answer; the new search gives
