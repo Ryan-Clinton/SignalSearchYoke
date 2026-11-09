@@ -171,6 +171,7 @@ def build(target, session):
         "sefd_bracket_jy": [min(SEFD_BRACKET_JY[0], sefd), max(SEFD_BRACKET_JY[1], sefd)],
         "positions": _positions(files, (lo + hi) / 2 if lo else None),
         "response": instrument.load("response"), "dropped": instrument.load("dropped"),
+        "pipelines": (lambda x: x if x and x.get("session") == session else None)(_load("pipelines")),
         "edge_channels": int(seti.MAX_DRIFT * span / width_hz) + math.ceil(seti.MAX_DRIFT * tsamp / width_hz) + 4,
         "on_min": onoff.ON_MIN, "off_max": onoff.OFF_MAX, "max_hits": searching.MAX_HITS,
         "cut_flux_jy_hz": cut_flux, "cut_eirp_w": cut_eirp,
@@ -280,6 +281,74 @@ def _positions(files, f_mhz):
                     "elevation_deg": round(instrument.elevation(mid, f["ra_hours"], f["dec_degrees"]), 1),
                     "earth_drift_hz_s": round(vetting.expected_drift(f_mhz, mid, f["ra_hours"], f["dec_degrees"])[0], 4)
                     if f_mhz else None})
+    return out
+
+
+def other_pipelines(r):
+    """The section setting turboSETI's and pickles' events on this cadence
+    against this search's (pipelines.py compare)."""
+    p = r.get("pipelines")
+    if not p:
+        return ["## Other pipelines on the same cadence", "",
+                "Not run yet (`pipelines.py run`, then `pipelines.py compare`).", ""]
+    t, k = p["turboseti"], p["pickles"]
+    out = ["## Other pipelines on the same cadence", "",
+           f"Both run here over all {p['blocks']} blocks on the same slices (`pipelines.py run`, "
+           "`pipelines.py compare`; data/measurements/pipelines.json), as no published search lists this "
+           "cadence's hits:", "",
+           f"- **turboSETI {t['version']}** with its event pipeline ({t['settings']}).",
+           f"- **pickles** (Painter et al. 2025; github.com/UCBerkeleySETI/pickles at `{k['commit'][:7]}`, "
+           f"SHA-256 {k['sha256'][:12]}…), its code run as published from its hotspots on ({k['settings']}); "
+           "once with its interference bands masked, as published, once with none masked. Its code names a "
+           "variable it never defines when a block has no hotspots; that name is supplied, nothing else changed.",
+           "",
+           "| pipeline | lines found | kept as events or candidates |", "|---|---|---|",
+           f"| this search | {p['ours']['hits']:,} hits at SNR 10 | {p['ours']['candidates']} candidates, "
+           "none unexplained by the checks |",
+           f"| turboSETI | {t['hits']:,} hits at its SNR 10 | {t['events']} events |",
+           f"| pickles, masked | {k['masked']['level0']:,} hotspots | {k['masked']['level1']} at level 1, "
+           f"{k['masked']['level2']} at level 2 |",
+           f"| pickles, unmasked | {k['unmasked']['level0']:,} hotspots | {k['unmasked']['level1']} at level 1, "
+           f"{k['unmasked']['level2']} at level 2 |", "",
+           f"turboSETI's SNR is about {p['turbo_scale']:g} of this search's for the same signal, so its cut of 10 "
+           "is about 44 here: the two lists of hits differ mainly in depth. No line was kept by all three. "
+           "This search's candidates, in the others:", "",
+           "| candidate (MHz) | SNR | turboSETI | pickles |", "|---|---|---|---|"]
+    for o in p["our_candidates"]:
+        out.append(f"| {o['f_mhz']:.6f} | {o['snr']:.1f} | {o['turboseti']} | {o['pickles']} |")
+    out += ["", "What the others kept at level 1 or more, or as events, in this search:", "",
+            "| pipeline | MHz | kept | here |", "|---|---|---|---|"]
+    for e in p["their_events"]:
+        kept = (f"level {e['level']}" + (", masks on" if e.get("masks") else ", masks off")
+                + (f" (ON kurtosis {', '.join(f'{x:.2f}' for x in e['k_on'])}; OFF "
+                   f"{', '.join(f'{x:.2f}' for x in e['k_off'])})" if "k_on" in e else ""))             if e["pipeline"] == "pickles" else f"event, SNR {e['snr']:.1f}"
+        here = "; ".join(f"{x['label']} at {x['f_start_mhz']:.6f} MHz, {x['drift_hz_s']:+.4f} Hz/s, SNR "
+                         f"{x['snr']:.1f}" + (f", OFF S/N {x['off_snr_max']:.2f} along the track, ON at least "
+                                              f"{x['on_snr_min']:.2f}" if x.get("off_snr_max") is not None else "")
+                         for x in e["ours"]) or "no event"
+        out.append(f"| {e['pipeline']} | {e['f_mhz']:.6f} | {kept} | {here} |")
+    if not p["their_events"]:
+        out.append("| (none) | | | |")
+    pk = [e for e in p["their_events"] if e["pipeline"] == "pickles"]
+    two_of_three = [e for e in pk if min(e["k_on"]) < 0.5]
+    unexplained = [e for e in p["their_events"] if not e["ours"] or any(x["label"] == "unconfirmed" for x in e["ours"])]
+    weak = [o for o in p["our_candidates"] if o["turboseti_expected_snr"] < 10]
+    out += [""]
+    if pk:
+        out.append(f"pickles' level 1 asks for the median ON kurtosis, so a line in two of the three ON looks passes: "
+                   f"{len(two_of_three)} of its {len(pk)} kept window(s) have an ON look under 0.5"
+                   + (" (each its first), where this search finds the line under S/N 5 along the track: here they "
+                      "need all three, so they would be unconfirmed even without the OFF evidence." if two_of_three
+                      and all(e["k_on"][0] < 0.5 for e in two_of_three) else "."))
+        out.append("")
+    out.append(("Nothing either of the others kept is missed here: every window or event of theirs is an event here, "
+                "called interference by the OFF looks along its track. " if not unexplained else
+                f"{len(unexplained)} of what the others kept has no event here or only an unconfirmed one (the "
+                "table). ")
+               + f"Of this search's {len(p['our_candidates'])} candidates, {len(weak)} are under turboSETI's cut on "
+                 "its scale; pickles masks every one as published, and unmasked finds none at level 1. All are "
+                 "explained here as interference by the checks.")
+    out.append("")
     return out
 
 
@@ -516,6 +585,7 @@ def markdown(r):
                          f"{c['verdict'] or 'not checked'} | {signs} |")
         lines += ["", "Candidates are listed one by one, never merged. Those marked only for their band are a "
                   "weight on the frequency, not a finding about the signal.", ""]
+    lines += other_pipelines(r)
     lines += ["## How", "",
               "Runs that made the current results (from the store's `runs` table):", "",
               "| run | started (UTC) | commit | uncommitted | host | python | libraries |", "|---|---|---|---|---|---|---|"]

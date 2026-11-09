@@ -898,3 +898,18 @@ and each candidate's report is in [leads/](leads/).
 The crowded blocks near 2190 MHz took 6 to 15 minutes each, against about
 33 s for a quiet block, so the sweep took five hours, not the 2.7 first
 expected.
+
+### The other pipelines on the same cadence (9 November 2026)
+
+turboSETI's event pipeline (Price et al. 2020's settings) and Painter et
+al. 2025's pickles (commit e4539e3, run as published from its hotspots on,
+its bands masked and unmasked) were run over all 308 blocks on the
+sweep's own slices (`pipelines.py run`, about two hours), and set against
+this search's events (`pipelines.py compare`). turboSETI kept 0 events
+from 2,744 hits; pickles kept nothing with its masks, and 1 window at
+level 2 (3 at level 1) without them. Every window pickles kept is an
+interference event here, seen along its track in an OFF look at S/N 6.0
+to 7.4 and in only two of the three ON looks; this search's 11 candidates
+are under turboSETI's cut on its scale (10) or beside strong interference
+in the coarse channel (1), and inside pickles' masks (all). The result
+page has each one.

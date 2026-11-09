@@ -115,6 +115,27 @@ HIP 91699:
 **Done when:** a table of every event by pipeline is in the result page,
 with each disagreement explained.
 
+**Done, 9 November 2026** (`pipelines.py run`, `pipelines.py compare`;
+the result page, "Other pipelines on the same cadence"). On all 308 blocks
+of the 2017 cadence: turboSETI 2,744 hits, 0 events; pickles 77 hotspots
+with its bands masked (0 kept), 6,424 unmasked (3 at level 1, 1 at level
+2); this search 11 candidates. No line was kept by all three.
+- The 3 windows pickles kept (masks off) are each an event here, called
+  interference: OFF S/N 6.0 to 7.4 along the track. Each is weak in the
+  first ON look (kurtosis under 0.1, S/N under 5 here); pickles' median
+  test passes a line in two ON looks of three.
+- 10 of this search's 11 candidates are under turboSETI's cut on its scale
+  (SNR 2.3 to 3.5 there). The eleventh (2197.16 MHz, about 15.5 on its
+  scale) sits beside interference up to SNR 8,300 in its coarse channel,
+  which raises the noise turboSETI measures over the whole channel.
+- pickles' published masks cover all 11 candidates' frequencies; unmasked,
+  7 are hotspots and none reaches level 1 (6 on OFF kurtosis, 1 on ON).
+- pickles' code fails on a block with no hotspots (an undefined name at
+  line 630); the name is supplied, its code otherwise run as published.
+
+Not shown: that the pipelines agree at matched depth (step 4), since
+turboSETI's cut is about SNR 44 on this search's scale.
+
 ### Step 4: compare the pipelines at matched sensitivity
 
 The SNR scale (turboSETI's is 0.227 of this search's) says nothing about

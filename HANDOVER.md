@@ -23,6 +23,7 @@ KIC 8462852.
 | `vetting.py` | the ten checks on a candidate (after blc1), with strengths, chance rates and a report |
 | `injection.py` | signals planted in whole cadences and followed through search, cadence test and checks |
 | `measure.py` | the search measured on planted signals and real looks: desmearing, close pairs, kurtosis, false hits, the SNR scale against turboSETI, the cadence test, the checks, setigen; Voyager 1 and Price et al. 2020's HIP 91699 |
+| `pipelines.py` | the other pipelines on a swept cadence (comparable.md step 3): turboSETI's event pipeline (`tools/turbo_events.py`) and Painter et al.'s pickles (`tools/pickles_block.py`, fetched at a pinned commit) block by block on the sweep's slices, then `compare` sets each one's events against the others' (data/measurements/pipelines.json, the result page) |
 | `instrument.py` | the instrument measured: the fine channel's response (Voyager 1), the SEFD (3C295 ON-OFF pairs, same S-band setup), dropped data from the chunk indexes; via `measure.py response`, `sefd`, `dropped` |
 | `tools/setigen_frame.py` | setigen's planted signals, run in turboSETI's environment, for `measure.py setigen` |
 | `tools/turbo_events.py` | Price et al. 2020's pipeline (turboSETI hits, then its event pipeline at threshold 3) on a cadence's six slices, for `measure.py price` |
@@ -54,6 +55,8 @@ settings file.
 ./seti.py benchmark FILE...                       saved slices through this search and turboSETI
 ./check.py [--all] [--event ID]                   the ten checks on the store's candidates (or one event)
 ./seti.py report KIC8462852 AGBT17A_999_68        the result page of a swept cadence (Phase 8)
+./pipelines.py run KIC8462852                      turboSETI and pickles over the swept cadence (about 2 hours; resumes)
+./pipelines.py compare KIC8462852                  each pipeline's events against the others' (then the report again)
 ./measure.py WHAT [FILE...]                       desmear, pairs, kurtosis, false, scale, noise, cadence, vetting, setigen, voyager, price,
                                                   response, sefd, dropped TARGET SESSION
 ```
@@ -182,8 +185,10 @@ the default place.
   docs/seti.md; the files read for Phase 7 are in `data/validation/`.
   Phase 8 (the result) is done: the whole cadence swept and its result
   page written (above). A sweep searches blocks done by an older search
-  version again first. Next: comparable.md step 3 (turboSETI and the
-  published pipeline over the whole cadence).
+  version again first. comparable.md step 3 is done (9 November 2026,
+  13:05 to 15:06 UTC): turboSETI and pickles over all 308 blocks, every
+  disagreement explained in the result page. Next: step 4 (the pipelines
+  at matched sensitivity).
 - **Real signals:** Voyager 1's carrier and sidebands found at turboSETI's
   published frequencies and drifts, the drift the Earth's; wide signals
   (its 322 Hz sidebands) are tiled with many hits, a known gap. HIP 91699's
