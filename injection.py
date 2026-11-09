@@ -116,7 +116,8 @@ def trial(cadence, tones, vet=None):
     return out, events
 
 
-def tones_for(cadence, n_on, n_all, rng, strengths=measure.STRENGTHS, bins=measure.DRIFT_BINS, avoid=()):
+def tones_for(cadence, n_on, n_all, rng, strengths=measure.STRENGTHS, bins=measure.DRIFT_BINS, avoid=(),
+              which=None):
     """Tones spread over the slice, clear of each other, in every drift bin
     and strength in turn."""
     s = cadence[0]["s"]
@@ -124,7 +125,7 @@ def tones_for(cadence, n_on, n_all, rng, strengths=measure.STRENGTHS, bins=measu
     span = (s["spectra"].shape[0] - 1) * s["tsamp"]
     margin = int(searching.MAX_DRIFT * span / (abs(s["foff"]) * 1e6)) + 30
     where = measure.places(n_f, n_on + n_all, 2 * margin + 2400, list(avoid), EDGE_KEEP, rng)
-    cells = [(b, st) for b in range(len(bins)) for st in strengths]
+    cells = [(b, st) for b in (which if which is not None else range(len(bins))) for st in strengths]
     out = []
     for k, c in enumerate(where):
         b, st = cells[k % len(cells)]
@@ -156,7 +157,7 @@ def dc_tone(cadence, rng, s_in=60):
     """One tone starting near the coarse channel's middle (the blanked spike)."""
     s = cadence[0]["s"]
     per, first = int(s["coarse_channel"]), int(s.get("first_channel", 0))
-    middle = per // 2 - first
+    middle = (per // 2 - first) % per          # the middle's channel in this slice
     span = (s["spectra"].shape[0] - 1) * s["tsamp"]
     reach = int(searching.MAX_DRIFT * span / (abs(s["foff"]) * 1e6))
     c = middle + int(rng.integers(-reach, reach + 1))
@@ -166,7 +167,7 @@ def dc_tone(cadence, rng, s_in=60):
             "s_in": s_in, "bin": b, "where": "on", "position": "dc"}
 
 
-def study(cadence_files, runs, n_on=32, n_all=8, seed=11, vet=None, say=print):
+def study(cadence_files, runs, n_on=32, n_all=8, seed=11, vet=None, say=print, which=None, dc=1):
     """Signals planted through everything in each cadence `runs` times:
     every tone's journey."""
     rng = np.random.default_rng(seed)
@@ -174,9 +175,9 @@ def study(cadence_files, runs, n_on=32, n_all=8, seed=11, vet=None, say=print):
     for files in cadence_files:
         cad = load(files)
         for r in range(runs):
-            dc = dc_tone(cad, rng)
-            tones = tones_for(cad, n_on, n_all, rng, avoid=[int(dc["x0"])])
-            out, _ = trial(cad, tones + [dc], vet=vet)
+            middle = [dc_tone(cad, rng) for _ in range(dc)]
+            tones = tones_for(cad, n_on, n_all, rng, avoid=[int(m["x0"]) for m in middle], which=which)
+            out, _ = trial(cad, tones + middle, vet=vet)
             name = files[0].replace("\\", "/").rsplit("/", 1)[-1]
             for t in out:
                 rows.append(dict(t, cadence=name))

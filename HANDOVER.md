@@ -154,13 +154,20 @@ name); the Windows PC has one at the default place.
 
 ## The state on 8 November 2026
 
-- Phases 0 to 3 of [docs/overhaul.md](docs/overhaul.md) are done on the
-  Windows PC: the reference block, fast reading, the hit store, and a
-  correct search (search version 2: boxcar desmearing, SNR on the noise of
-  the summed lines, hits picked and blanked one at a time, shadow hits,
-  spectral kurtosis), measured in `data/measurements/` and written up in
-  docs/seti.md. Phase 4 (a stronger cadence test) is next. A sweep
-  searches blocks done by an older search version again first.
+- Phases 0 to 6 of [docs/overhaul.md](docs/overhaul.md) are done on the
+  Windows PC (9 November 2026): the reference block, fast reading, the hit
+  store, a correct search, the cadence test rebuilt (search version 3),
+  the ten checks, and completeness measured through the whole pipeline.
+  Every measurement is in `data/measurements/` and written up in
+  docs/seti.md. Phase 7 (validation on real signals: Voyager 1, a Price
+  2020 star) is next. A sweep searches blocks done by an older search
+  version again first.
+- **Completeness through everything** (3,257 planted signals, five
+  cadences): at S_in 60 (41 Jy Hz with an assumed SEFD of 10 Jy) 97 to 100%
+  are kept at every drift to 4 Hz/s; at S_in 30, 100% under 0.5 Hz/s, 52%
+  at 1 to 2, 4% at 2 to 4. No interference planted in all six looks was
+  kept. One false candidate in 95 cadences judged with the wrong ON looks,
+  marked by the checks; none unexplained.
 - Nothing runs on a timer.
 - SETI has been taken out of telescopeyoke; nothing in this repository
   reads or imports anything from it.

@@ -489,6 +489,85 @@ were in an OFF look too, and 98 were not in every ON look.
 
 ## Is the search right?
 
+### Completeness through the whole pipeline (Phase 6, 9 November 2026)
+
+`./seti.py inject` plants signals as the sky makes them (smeared through
+each 18 s spectrum, an FFT channel's sinc² response, a random place in a
+channel, strength S_in set from each look's own noise measured apart from
+the search) in the three ON looks of a saved cadence, each at the
+frequency its drift carries it to by that look's start, and none in the
+OFF looks; then searches all six looks, runs the cadence test and the
+checks, and follows every signal to the end. A signal is **kept** when it
+comes out a candidate the checks do not call interference ("likely
+interference" is a weight on it, counted apart, not a loss). Five
+cadences: block 153 (the reference) and blocks 40, 100, 200 and 280,
+1.94 to 2.64 GHz; 3,257 signals in all (`data/measurements/completeness.json`,
+and the store's `injections` table). Flux is from the radiometer equation
+with Green Bank's SEFD taken as 10 Jy (Price et al. 2020: assumed, not
+measured here), 2 polarisations, 2.79 Hz channels and 18.25 s spectra:
+S_in 1 is about 0.69 Jy Hz (0.69 × 10⁻²⁶ W m⁻²).
+
+Kept, of those planted in the ON looks only (95% Wilson interval):
+
+| drift (Hz/s) | S_in 15 (10 Jy Hz) | S_in 30 (21) | S_in 60 (41) | S_in 120 (83) |
+|---|---|---|---|---|
+| 0 to 0.15 | 85% (78-90) | 100% (97-100) | 100% (97-100) | 100% (97-100) |
+| 0.15 to 0.5 | 19% (13-27) | 100% (97-100) | 99% (96-100) | 100% (97-100) |
+| 0.5 to 1 | 0% (0-3) | 98% (95-100) | 99% (96-100) | 100% (97-100) |
+| 1 to 2 | 0% (0-3) | 52% (44-60) | 99% (96-100) | 99% (96-100) |
+| 2 to 4 | 0% (0-3) | 4% (2-9) | 97% (92-99) | 99% (95-100) |
+
+130 signals a cell under 1 Hz/s, 144 or 145 above. Where they were lost:
+almost all at the search (too faint for the cut once smeared); 10 at the
+cadence test (noise in an OFF look over the OFF level, or a fast signal's
+looks not joined); none at the checks.
+
+- **By place in the coarse channel** (S_in 60 and 120): the middle 99%
+  (1,201 of 1,209), within 5% of an end 98% (146 of 149), within the
+  drift's reach of the blanked spike at the middle 100% (20 of 20; 84-100%:
+  fewer than the 100 the plan asks, said here rather than left out). The
+  outermost 3,000 channels of a slice (0.3%) are not planted: the search
+  cannot follow a track off the slice.
+- **Interference planted in all six looks:** none of the 301 found was
+  kept as a candidate.
+- **The checks mark, they do not drop.** 1,225 of the 1,972 planted
+  candidates were marked "likely interference", almost all for their band:
+  blocks 40, 153 and 200 sit in the cellular, space-downlink and Wi-Fi
+  bands, and every candidate there is marked. In the two clean blocks (100
+  and 280) 41 of 788 (5.2%) were marked: 26 for a drift under one step
+  (as a ground transmitter's), 24 for a chance harmonic or
+  intermodulation relation with the other planted signals (about the 5%
+  the chance threshold allows), 4 for chance look-alikes (some for two
+  reasons). SETI@home's aim, that vetting loses under 10% of planted
+  signals: no check dropped any; the band marks are a weight a reader has
+  to see.
+- **False candidates through the whole pipeline:** each cadence's six
+  looks searched once, then judged with each of the 19 other choices of
+  three looks as the ON looks, where no signal from the target can pass:
+  152 events, **1 candidate in 95 judged cadences** (0.011 a block's
+  cadence, 95% interval 0.0003 to 0.059): a signal at 1937.81 MHz in the
+  first three looks only (interference that came and went), which the
+  checks marked for its band. **None came out unexplained** (at most 0.039
+  a block's cadence, 95%). Over the 308 blocks of a whole cadence, about
+  3 false candidates (0.1 to 18) are to be expected before the checks.
+- **Against setigen** (`measure.py setigen`; setigen 2.7.0, Brzycki et al.
+  2022): the same tones on an empty frame at 0.05 to −3.5 Hz/s; the
+  profiles correlate 0.994 or better in every spectrum, the centroids
+  agree within 0.2 channel; setigen's sinc² profile carries 8.5% less
+  power for the same level, a convention of its own (ours carries 0.96 to
+  1.00 of the power asked for; only sinc² tails beyond 4 channels are
+  dropped).
+- **Not modelled:** Breakthrough Listen's polyphase filterbank response
+  (flatter across a channel than sinc², so the loss at a channel's edge is
+  if anything overstated here); signals that are not steady tones (pulsed,
+  wide, or drifting unevenly).
+
+The earlier single-look tables (below) were made with the old planting,
+one channel a spectrum, and overstate what is found above 0.15 Hz/s; they
+are kept as the history of how the search was first checked.
+
+### Before 9 November 2026
+
 Measured on real data before the sweep was let loose.
 
 **Signals planted in real noise** (`./seti.py inject`, now marked LEGACY in

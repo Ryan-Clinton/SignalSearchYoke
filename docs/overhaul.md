@@ -474,6 +474,21 @@ whole pipeline.
 measured on the reference cadence through the whole pipeline, with
 intervals, replacing the single-look table.
 
+**Done, 9 November 2026** (`injection.py`, `seti.py inject`; `docs/seti.md`,
+"Completeness through the whole pipeline"): 3,257 signals through search,
+cadence test and checks in five cadences (the reference and four more
+bands), 130 to 145 a cell, Wilson intervals, flux from an assumed SEFD of
+10 Jy. Kept at S_in 60 (41 Jy Hz): 97 to 100% at every drift; at S_in 30,
+100% under 0.5 Hz/s, 52% at 1 to 2, 4% at 2 to 4. Lost almost entirely at
+the search; 10 at the cadence test; none at the checks, which mark (band,
+zero drift, chance relations) without dropping. No interference planted
+in all six looks was kept. False candidates on 95 cadences judged with
+the wrong ON looks: 1, marked by the checks; none unexplained. The planting
+matches setigen 2.7's. turboSETI 2.3.2 pinned with its known bugs in the
+scale record. Short of the plan: the middle-of-channel bin has 20 signals,
+not 100; the polyphase filterbank response is not modelled; the SEFD is
+assumed.
+
 ### Phase 7: validation on real signals
 
 Planted signals test the pipeline against the model of a signal; real

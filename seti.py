@@ -647,7 +647,7 @@ def plant(spectra, tones, tsamp, width_hz):
     return out
 
 
-def completeness(files=(), runs=13, false_too=True, say=print):
+def completeness(files=(), runs=13, false_too=True, say=print, which=None, add=False, n_all=8, seed=11):
     """How complete the whole pipeline is (Phase 6): signals as the sky
     makes them planted in the ON looks of whole saved cadences, through the
     search, the cadence test and the checks, by drift bin and strength,
@@ -660,15 +660,24 @@ def completeness(files=(), runs=13, false_too=True, say=print):
     import measure
     groups = [list(files[i:i + 6]) for i in range(0, len(files), 6)] if files else measure.cadences()
     hook = measure.vet_hook()
-    rows = injection.study(groups, runs, vet=hook, say=say)
+    rows = injection.study(groups, runs, vet=hook, say=say, which=which, n_all=n_all, seed=seed)
+    kept_before = None
+    path = yoke.DATA / "measurements" / "completeness.json"
+    if add and path.exists():
+        kept_before = json.loads(path.read_text(encoding="utf-8"))
+        rows = kept_before["rows"] + rows
     first = read_slice(groups[0][0], -1e12, 1e12)
     n_t = first["spectra"].shape[0]
     tables = injection.tables(rows, n_t, abs(first["foff"]) * 1e6, first["tsamp"])
     record = {"cadences": [g[0] for g in groups], "runs": runs, "signals": len(rows), "tables": tables,
               "sefd_jy": injection.SEFD_JY, "method": PLANTING, "rows": rows, "kind": "measured"}
+    if kept_before:
+        record["runs"] = f"{kept_before['runs']} + {runs} (drift bins {which})"
+        if "false_candidates" in kept_before and not false_too:
+            record["false_candidates"] = kept_before["false_candidates"]
     if false_too:
         record["false_candidates"] = injection.false_candidates(groups, vet=hook, say=say)
-    yoke.write(yoke.DATA / "measurements" / "completeness.json", record, stamp=True)
+    yoke.write(path, record, stamp=True)
     db = store.connect()
     run_id = store.start_run(db, f"inject --runs {runs}", dict(search_params(), runs=runs), SEARCH_VERSION)
     store.save_injections(db, run_id, ";".join(g[0] for g in groups), PLANTING,
@@ -882,7 +891,9 @@ def run(args, say=print):
         if args.legacy:
             return [inject(p, say=say, record=True) for p in args.what][-1] if len(args.what) == 1 else \
                 {"files": [inject(p, say=say, record=True) for p in args.what], "kind": "measured"}
-        return completeness(args.what, runs=args.runs, false_too=not args.no_false, say=say)
+        which = [int(b) for b in args.bins.split(",")] if args.bins else None
+        return completeness(args.what, runs=args.runs, false_too=not args.no_false, say=say, which=which,
+                            add=args.add, n_all=0 if which else 8, seed=args.seed)
     if args.action == "benchmark":
         return benchmark(args.what, say=say)
     if args.low is None or args.high is None:
@@ -909,6 +920,9 @@ def main():
                          f"at most {reading.MAX_THREADS})")
     ap.add_argument("--runs", type=int, default=13, help="inject: trials of 41 signals per cadence (default 13)")
     ap.add_argument("--no-false", action="store_true", help="inject: leave out the false-candidate count")
+    ap.add_argument("--bins", help="inject: only these drift bins (0-4, comma-separated), ON-only signals")
+    ap.add_argument("--add", action="store_true", help="inject: add to the signals already in completeness.json")
+    ap.add_argument("--seed", type=int, default=11, help="inject: the random seed")
     ap.add_argument("--legacy", action="store_true", help="inject: the old one-channel planting on one look's file")
     ap.add_argument("--json", action="store_true", help="answer in JSON")
     args = ap.parse_args()
