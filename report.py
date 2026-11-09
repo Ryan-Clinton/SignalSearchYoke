@@ -79,6 +79,8 @@ def build(target, session):
     for c in candidates:
         rows = _q(db, "SELECT * FROM checks WHERE event_id=? ORDER BY check_id", (c["event_id"],))
         latest = [r for r in rows if r["version"] == vetting.VERSION] or rows
+        # A candidate checked again at the same version: its latest result per check.
+        latest = list({r["name"]: r for r in latest}.values())
         c["checks"] = [{k: r[k] for k in ("name", "result", "strength")} for r in latest]
         c["verdict"] = next((r["result"] for r in latest if r["name"].startswith("10.")), None)
         c["checks_version"] = latest[0]["version"] if latest else None
@@ -358,7 +360,7 @@ def markdown(r):
     pos = r["positions"]
     lines += ["", "Where each look pointed (stored, checked against its own header), and the drift the Earth "
               f"gives a signal fixed in that direction at {(r['from_mhz'] + r['to_mhz']) / 2:.0f} MHz:", "",
-              "| # | RA (h) | Dec (°) | matches its header | from look 1 (°) | elevation (°) | Earth's drift (Hz/s) |",
+              "| # | RA (h) | Dec (°) | matches its header | from look 1 (°) | elevation mid-look (°) | Earth's drift (Hz/s) |",
               "|---|---|---|---|---|---|---|"]
     for p in pos:
         lines.append(f"| {p['position'] + 1} | {p['ra_hours']:.5f} | {p['dec_deg']:+.5f} | "
@@ -391,7 +393,7 @@ def markdown(r):
                  "not on the 2017 cadence (the archive lists no scan of a flux calibrator from that session: "
                  "3C48, 3C123, 3C138, 3C147, 3C196, 3C286, 3C295, 3C353, 3C380 and others queried): same receiver "
                  "and setup, other epoch; "
-                 "the cadence's elevation was "
+                 "the cadence's elevation at the start of each look was "
                + ", ".join(f"{e:g}°" for e in r["cadence_elevation_deg"]) + ". One pair, so its repeatability "
                  "is not measured either. The limits below use it as the best estimate, and carry it to 2017 within "
                  f"a bracket of {r['sefd_bracket_jy'][0]:g} to {r['sefd_bracket_jy'][1]:g} Jy (Price et al. "

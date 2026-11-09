@@ -868,3 +868,33 @@ KIC 8462852 was observed by Green Bank in May 2017, among other times;
 2017 (session AGBT17A_999_68, scans 31 to 36: three looks at the star,
 each followed by one at KIC8462852_OFF); the archive files the OFF looks
 under their own name, so `find` reads them from the session's folder.
+
+### The whole cadence, searched (9 November 2026)
+
+All 308 blocks (1818.457 to 2720.801 MHz) searched with search version 4,
+07:52 to 12:55 UTC on the Windows PC; the result page is
+[results/KIC8462852-AGBT17A_999_68.md](results/KIC8462852-AGBT17A_999_68.md)
+and each candidate's report is in [leads/](leads/).
+
+- **Usable for limits:** 801.3 of 902.3 MHz: the notch (2300 to 2360 MHz)
+  and 14 blocks where a look stopped at the 2,000-hit limit (41.0 MHz,
+  near 1920 to 1985, 2190 to 2199 and 2496 MHz) are left out.
+- **Found:** 72,555 hits at SNR 10 or more; 27,823 events: 27,423
+  interference, 389 unconfirmed, 11 candidates.
+- **After the checks (version 3):** 2 interference (shown: the signal
+  recurs at other targets and times; 2188.43 and 2197.16 MHz, the latter
+  the strongest at SNR 68) and 9 likely interference (indicated: zero or
+  very low drift with crowding near 1918 to 1925 MHz; the band and
+  crowding near 2105 MHz; the notch at 2316.7 MHz). No candidate came out
+  unexplained, and no technosignature is claimed.
+- **Sensitivity, measured** (90% of planted signals kept, SEFD 10.65 Jy,
+  a transmitter under 1 Hz wide at 434.6 pc): EIRP 3.1×10¹⁴ W at drifts
+  under 0.15 Hz/s, 9.5×10¹⁴ W at 2 to 4 Hz/s; 0.94 to 1.17 times these
+  over the SEFD's bracket. About 13 to 23 times deeper than Harp et al.
+  2016 at slow drifts, over the usable band only.
+- **The OFF test's veto rate** on random tracks across the sweep: 85 of
+  9,856 (0.86%), against 0.5% on planted signals.
+
+The crowded blocks near 2190 MHz took 6 to 15 minutes each, against about
+33 s for a quiet block, so the sweep took five hours, not the 2.7 first
+expected.

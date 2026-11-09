@@ -156,35 +156,34 @@ the default place.
   turboSETI found nothing this search missed. The sweep was let loose on
   that evidence, 3 November 2026.
 - **The sweep of Tabby's 25 May 2017 cadence** (session AGBT17A_999_68,
-  scans 31 to 36, 308 blocks, 1818-2721 MHz), search version 4, started
-  9 November 2026 about 07:55 UTC on the Windows PC: 128 blocks done by
-  10:24 UTC (1818-2193 MHz). Quiet blocks take about 35 s; the crowded
-  ones near 2190 MHz (the 2200-2290 MHz space downlink band begins there)
-  take 6 to 15 minutes, so the end is hours later than the 2.7 hours
-  first expected. Its results (the result page, `docs/results/`) are
-  committed when it finishes; the earlier 18-block runs are superseded.
-  Every hit is in `data/ssy.sqlite`; the readable record is
+  scans 31 to 36, 308 blocks, 1818-2721 MHz), search version 4: done,
+  9 November 2026, 07:52 to 12:55 UTC on the Windows PC. 11 candidates;
+  `check.py` (checks version 3) calls 2 interference and 9 likely
+  interference, none unexplained. Usable band 801.3 MHz (the notch and 14
+  blocks cut short at the hit limit left out); EIRP at 90% kept
+  3.1×10¹⁴ W (slow drifts) to 9.5×10¹⁴ W (2-4 Hz/s). The result page is
+  `docs/results/KIC8462852-AGBT17A_999_68.md`, the candidates' reports
+  `docs/leads/`. Every hit is in `data/ssy.sqlite`; the readable record is
   `data/sweeps/KIC8462852-AGBT17A_999_68.json`.
 - **The reference block** (block 153, all six looks) is in
   `data/reference/`, with the first search's answer (8 November 2026).
   The fast reading gave the same hits 9× faster; the search rewritten
   since (search version 2, Phase 3) finds more, and docs/seti.md, "A
   correct search", says what changed.
-- No candidate has been found in the sweep, so `check.py` has nothing in
-  the store to look into yet.
 
 ## The state on 9 November 2026
 
-- Phases 0 to 7 of [docs/overhaul.md](docs/overhaul.md) are done on the
+- Phases 0 to 8 of [docs/overhaul.md](docs/overhaul.md) are done on the
   Windows PC (9 November 2026): the reference block, fast reading, the hit
   store, a correct search, the cadence test rebuilt (search version 4),
   the ten checks, completeness measured through the whole pipeline, and
   validation on real signals (Voyager 1; Price et al. 2020's HIP 91699
   event). Every measurement is in `data/measurements/` and written up in
   docs/seti.md; the files read for Phase 7 are in `data/validation/`.
-  Phase 8 (the result) needs the whole cadence swept first: about 2.7
-  hours, run only on the owner's go. A sweep searches blocks done by an
-  older search version again first.
+  Phase 8 (the result) is done: the whole cadence swept and its result
+  page written (above). A sweep searches blocks done by an older search
+  version again first. Next: comparable.md step 3 (turboSETI and the
+  published pipeline over the whole cadence).
 - **Real signals:** Voyager 1's carrier and sidebands found at turboSETI's
   published frequencies and drifts, the drift the Earth's; wide signals
   (its 322 Hz sidebands) are tiled with many hits, a known gap. HIP 91699's
