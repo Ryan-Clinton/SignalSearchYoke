@@ -536,7 +536,7 @@ stating everything Section 5 of the sensitivity notes lists:
 - **The observation:**
   - target and distance with its uncertainty (Gaia DR3);
   - session, scans, UTC times, file URLs and ETags;
-  - receiver, SEFD (10 Jy at S-band, Price 2020), frequency covered, fraction
+  - receiver, SEFD (measured on 3C295: 10.65 Jy; 10 Jy assumed before, Price 2020), frequency covered, fraction
     masked.
 - **The search:**
   - channel width, integration, spectra, drift range and step;

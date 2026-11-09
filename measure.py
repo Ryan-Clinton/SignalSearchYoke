@@ -15,6 +15,9 @@ against turboSETI's. Each answer is kept in data/measurements/.
     ./measure.py setigen            the planted signals against setigen's (run in turboSETI's environment)
     ./measure.py voyager            Voyager 1's carrier and sidebands, against turboSETI's published hits
     ./measure.py price              Price et al. 2020's HIP 91699 S-band event, by their pipeline and by ours
+    ./measure.py response           the fine channel's response, from Voyager 1's drifting carrier (instrument.py)
+    ./measure.py sefd               the SEFD, from 3C295 ON-OFF pairs in the same S-band setup (instrument.py)
+    ./measure.py dropped TARGET SESSION   spectra of zeros and missing nodes in a cadence's files (instrument.py)
 
 FILE is a slice saved by `seti.py search --keep` (data/reference/ has six
 looks of block 153 and data/reference/blocks/ four more blocks).
@@ -796,16 +799,18 @@ def price(say=print):
 
 
 def main():
+    import instrument
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("what", choices=("desmear", "pairs", "kurtosis", "false", "scale", "noise", "cadence",
-                                     "vetting", "setigen", "voyager", "price"))
+                                     "vetting", "setigen", "voyager", "price", "response", "sefd", "dropped"))
     ap.add_argument("files", nargs="*")
     ap.add_argument("--json", action="store_true", help="answer in JSON")
     args = ap.parse_args()
     work = {"desmear": desmear, "pairs": pairs, "kurtosis": kurtosis, "false": false, "scale": scale,
             "noise": noise, "cadence": cadence, "vetting": lambda _files: vetting_demo(),
             "setigen": lambda _files: setigen_check(), "voyager": lambda _files: voyager(),
-            "price": lambda _files: price()}[args.what]
+            "price": lambda _files: price(), "response": lambda _files: instrument.response(),
+            "sefd": lambda _files: instrument.sefd(), "dropped": lambda files: instrument.dropped(*files)}[args.what]
     yoke.main("measure", lambda: work(args.files), args.json)
 
 

@@ -55,6 +55,11 @@ tiled with 34 hits), drifts beyond ±4 Hz/s.
 **Done when:** `report.py` writes a "What this search can and cannot see"
 section from the search parameters and the planting model.
 
+**Done** (9 November 2026): `report.search_space` writes it from the
+search's parameters, the cadence rules, the usable band, the edge channels
+and the measured channel response; the drift-curvature tolerance in it is
+an estimate until step 9 measures it.
+
 ### Step 2: measure the instrument instead of assuming it
 
 - **The fine channel's response,** from data: Voyager 1's carrier drifts
@@ -78,6 +83,16 @@ section from the search parameters and the planting model.
 
 **Done when:** the channel response is measured and written up; the SEFD
 is measured, or the range is carried through; zero spectra are counted.
+
+**Done** (9 November 2026; `instrument.py`, docs/seti.md, "The instrument,
+measured"): the response is sinc² (Voyager 1, Δχ² 1,950 over Hann); the
+SEFD 10.65 Jy (3C295, one steady pair of two; the 3C123 pair above is the
+L-band setup); no spectrum of zeros and no missing node in the cadence,
+from the chunk indexes. About 400 MB read in all. Still open: the 2017
+cadence's own SEFD (no calibrator in that session), a second steady pair
+for repeatability, packets lost within a spectrum (needs the data read: a
+per-spectrum power record in a future search version, not this sweep's),
+the coarse filterbank's roll-off.
 
 ### Step 3: run the other pipelines on the same cadence
 

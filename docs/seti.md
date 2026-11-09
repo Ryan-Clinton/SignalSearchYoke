@@ -536,9 +536,11 @@ interference" is a weight on it, counted apart, not a loss). Five
 cadences: block 153 (the reference) and blocks 40, 100, 200 and 280,
 1.94 to 2.64 GHz; 3,257 signals in all (`data/measurements/completeness.json`,
 and the store's `injections` table). Flux is from the radiometer equation
-with Green Bank's SEFD taken as 10 Jy (Price et al. 2020: assumed, not
-measured here), 2 polarisations, 2.79 Hz channels and 18.25 s spectra:
-S_in 1 is about 0.69 Jy Hz (0.69 × 10⁻²⁶ W m⁻²).
+with Green Bank's SEFD taken as 10 Jy (Price et al. 2020), 2
+polarisations, 2.79 Hz channels and 18.25 s spectra: S_in 1 is about 0.69
+Jy Hz (0.69 × 10⁻²⁶ W m⁻²). The SEFD has since been measured at 10.65 Jy
+("The instrument, measured", below): the result page scales these fluxes
+by it (6.5% higher); the table keeps the 10 Jy it was made with.
 
 Kept, of those planted in the ON looks only (95% Wilson interval):
 
@@ -770,6 +772,82 @@ on the 2200.0 to 2200.6 MHz slice of both of HIP 91699's S-band cadences.
   MHz: with no published hit lists, a fuller comparison is turboSETI against
   this search on the same data, which "Checked against turboSETI" already
   does.
+
+## The instrument, measured (9 November 2026)
+
+Three assumptions the limits rested on, measured from public data
+(`instrument.py`; [comparable.md](comparable.md), step 2). None needed more
+than 400 MB read; the sweep's own reads were left alone.
+
+**The fine channel's response** (`measure.py response`,
+`data/measurements/response.json`). Voyager 1's carrier drifts −0.377 Hz/s,
+2.5 channels a spectrum, 40 in the look, so it crosses every place within
+a channel. Each window's response, averaged over the carrier's place in
+each of a spectrum's 51 FFTs, was fitted to the 16 spectra (±30 channels,
+each spectrum's amplitude free, noise growing with power):
+
+| response | χ² / dof |
+|---|---|
+| rectangular (no window, sinc²) | 3.72 |
+| Hann | 5.79 |
+| Hamming | 5.90 |
+
+The unwindowed FFT fits best by Δχ² 1,950: the sinc² response the planted
+signals were made with holds for these files (gpuspec, until now
+unverified). The fit is not perfect (χ²/dof 3.7; residuals under 1% of the
+peak in every channel), and the far wings run above sinc² beyond 5 channels
+(0.0017 of the peak at 10 to 20 channels against sinc²'s 0.0005), which the
+carrier's own phase noise could give: they are not separable here. Phase
+6's completeness needs no new run.
+
+**The SEFD** (`measure.py sefd`, `data/measurements/sefd.json`). The
+archive has no flux calibrator from the 2017 session. It has 3C295, a
+steady calibrator 5″ across (Perley & Butler 2017: no sign of
+variability), in Green Bank's ON-OFF form (the OFF a degree north), in the
+same S-band setup (1818.5 to 2720.8 MHz, the same channels) from two
+sessions of a TESS survey, read in the `.0002` product (96 MB a scan). In
+each coarse channel SEFD = S(3C295) / (P_on / P_off − 1), the power the
+median over time of the mean over the channel's central 80%:
+
+| pair | elevation | SEFD (median, 16-84% over the band) | used |
+|---|---|---|---|
+| 2 Dec 2019 20:00 UTC | 36° | 10.65 Jy (10.03 to 11.28) | yes: power steady to 0.2% and 0.5%, SEFD flat with frequency (f^0.02) |
+| 27 Nov 2019 12:11 UTC | 57° | 15.49 Jy (14.05 to 17.92) | no: power moving +10% in the ON scan and −9% in the OFF, SEFD rising as f^0.84 (the source off the beam's centre) |
+
+The pair used: `spliced_blc0001020304050607_guppi_58819_72038_3C295_0091`
+(ON, SHA-256 7338cd8edccc03e6…) and `…_58819_72177_3C295_0092` (OFF,
+393011fe1a630b85…), `.gpuspec.0002.h5` at
+https://bldata.berkeley.edu/bl_tess/s_band/; the one not used,
+`spliced_blc7071727374757677_guppi_58814_43898_3C295_0129` and
+`…_44040_3C295_0130`. Full checksums and ETags in `sefd.json`.
+
+So **SEFD 10.65 Jy**, against the 10 Jy assumed: every flux and EIRP on
+the result page is now 6.5% higher than before. Over 50 MHz bins it runs
+from 9.8 to 11.5 Jy (13.5 at the band's top edge). In the notch the ON/OFF
+ratio is 1.07, as a filter that removes the source should leave it. Not
+measured: the 2017 cadence's own (another epoch; the cadence was at about
+56° elevation), the repeatability (one pair passes), the noise diode (not
+in these files), the 8-bit requantisation's linearity, atmospheric opacity
+(about 1%). Not used: 3C123 in AGBT17B_999_50 (the L-band setup) and
+3C286 and 3C353 in AGBT19B_999_128 (the 3C286 "ON" header 2′ off the
+source; 3C353 partly resolved by the beam).
+
+**Dropped data** (`measure.py dropped KIC8462852 AGBT17A_999_68`,
+`data/measurements/dropped.json`). Each chunk of the files is one spectrum
+of one coarse channel, compressed: a chunk of zeros (rawspec's fill for
+lost data) would be a few kB. All 29,568 chunks of the six looks are 3.07
+to 3.35 MB (the smallest 97% of its file's median): no spectrum of any
+coarse channel is zeros, and no node is missing (`zz`) or dropped (`oo`).
+Read from the chunk indexes alone, no data. Packets lost within a spectrum
+lower its power without zeroing it and are not seen this way.
+
+**A stored-data fault found on the way:** the files table held each
+file's position divided by about 3,600 (`store._sexagesimal` unpacked the
+HDF5 header's decimal hours as sigproc's packed hhmmss). Only check 5 (the
+drift against the Earth's, which never sets a strength) read it, so no
+verdict changed; its evidence did. Fixed in `store.py` (9 November 2026),
+the stored rows put right from each row's own header (KIC 8462852 at 20.1043
+h, +44.4568°; its OFF looks a degree north), and `check.py --all` run again.
 
 ## Tabby's star
 

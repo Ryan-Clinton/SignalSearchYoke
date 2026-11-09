@@ -266,16 +266,13 @@ def _num(v, cast=float):
         return None
 
 
-def _sexagesimal(v):
-    """src_raj / src_dej as Green Bank writes them (hhmmss.s or ddmmss.s
-    packed into one number) as hours or degrees."""
-    v = _num(v)
-    if v is None:
-        return None
-    sign, v = (-1 if v < 0 else 1), abs(v)
-    a, rest = divmod(v, 10000)
-    b, c = divmod(rest, 100)
-    return sign * (a + b / 60 + c / 3600)
+def _coordinate(v):
+    """src_raj / src_dej from an HDF5 file's header: decimal hours or
+    degrees already (blimpy's HDF5 writes them so: KIC 8462852's files say
+    20.1043, 44.4568). Sigproc .fil headers pack them as hhmmss.s, but no
+    .fil is stored here. Before 9 Nov 2026 these were unpacked as if packed,
+    which stored them divided by about 3,600."""
+    return _num(v)
 
 
 def upsert_file(db, index, session=None, target=None, cadence_target=None, position=None, is_on=None):
@@ -286,7 +283,7 @@ def upsert_file(db, index, session=None, target=None, cadence_target=None, posit
     row = (index.get("etag"), index.get("size"), session, scan, target, cadence_target, position,
            None if is_on is None else int(is_on), _num(a.get("tstart")), _num(a.get("fch1")), _num(a.get("foff")),
            _num(a.get("tsamp")), _num(a.get("nchans"), int), index["shape"][0],
-           _sexagesimal(a.get("src_raj")), _sexagesimal(a.get("src_dej")), _num(a.get("telescope_id"), int),
+           _coordinate(a.get("src_raj")), _coordinate(a.get("src_dej")), _num(a.get("telescope_id"), int),
            json.dumps(a, default=yoke.jsonable))
     with db:
         db.execute(

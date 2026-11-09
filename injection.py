@@ -145,11 +145,12 @@ SEFD_JY = 10.0          # Green Bank at L and S band (Price et al. 2020): assume
 N_POL = 2
 
 
-def flux_jy_hz(s_in, n_t, width_hz, tsamp):
+def flux_jy_hz(s_in, n_t, width_hz, tsamp, sefd_jy=None):
     """A planted signal's flux in Jy Hz (1e-26 W m^-2), from its S_in and the
-    radiometer equation with SEFD_JY: one channel's noise in one spectrum is
-    SEFD / sqrt(n_pol x channel width x tsamp) Jy, and S_in = h x sqrt(n_t) / sigma."""
-    sigma_jy = SEFD_JY / math.sqrt(N_POL * width_hz * tsamp)
+    radiometer equation with `sefd_jy` (SEFD_JY if not given): one channel's
+    noise in one spectrum is SEFD / sqrt(n_pol x channel width x tsamp) Jy,
+    and S_in = h x sqrt(n_t) / sigma."""
+    sigma_jy = (sefd_jy or SEFD_JY) / math.sqrt(N_POL * width_hz * tsamp)
     return s_in / math.sqrt(n_t) * sigma_jy * width_hz
 
 

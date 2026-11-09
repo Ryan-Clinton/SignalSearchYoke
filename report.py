@@ -49,6 +49,9 @@ def _crossing(rates, level):
 
 def build(target, session):
     import injection
+    import instrument
+    import onoff
+    import searching
     import seti
     import store
     import vetting
@@ -106,7 +109,11 @@ def build(target, session):
     t = TARGETS.get(target)
     comp = json.load(open(yoke.DATA / "measurements" / "completeness.json"))
     cells = comp["tables"]["by_cell"]
-    flux = lambda s: injection.flux_jy_hz(s, n_t, width_hz, tsamp)  # noqa: E731
+    # The flux scale: the SEFD measured on 3C295 in the same S-band setup
+    # (measure.py sefd), else the 10 Jy assumed before it was.
+    sefd_rec = instrument.load("sefd")
+    sefd = sefd_rec["sefd_jy"] if sefd_rec else injection.SEFD_JY
+    flux = lambda s: injection.flux_jy_hz(s, n_t, width_hz, tsamp, sefd)  # noqa: E731
     eirp = (lambda jy_hz, d_pc: 4 * math.pi * (d_pc * PC_M) ** 2 * jy_hz * 1e-26)  # noqa: E731
     sens = []
     for drift in sorted({tuple(c["drift_hz_s"]) for c in cells}):
@@ -151,7 +158,16 @@ def build(target, session):
                                                 "off_snr_max", "on_snr_min", "verdict", "checks", "checks_version")}
                        for c in candidates],
         "off_null": {"tracks": null_tracks, "vetoed": null_vetoed, "over_off_max": null_over},
-        "sefd_jy": injection.SEFD_JY, "cut_flux_jy_hz": cut_flux, "cut_eirp_w": cut_eirp,
+        "sefd_jy": sefd, "sefd_measured": bool(sefd_rec), "sefd_assumed_before_jy": injection.SEFD_JY,
+        "sefd_16_84_jy": sefd_rec and sefd_rec["sefd_jy_16_84"],
+        "sefd_pairs": sefd_rec and [{k: p.get(k) for k in ("utc", "elevation_on_deg", "sefd_jy_median", "kept",
+                                                            "not_kept_because")} for p in sefd_rec["pairs"]],
+        "cadence_elevation_deg": [round(instrument.elevation(f["tstart_mjd"], f["ra_hours"], f["dec_degrees"]), 1)
+                                  for f in files if f["ra_hours"] is not None],
+        "response": instrument.load("response"), "dropped": instrument.load("dropped"),
+        "edge_channels": int(seti.MAX_DRIFT * span / width_hz) + math.ceil(seti.MAX_DRIFT * tsamp / width_hz) + 4,
+        "on_min": onoff.ON_MIN, "off_max": onoff.OFF_MAX, "max_hits": searching.MAX_HITS,
+        "cut_flux_jy_hz": cut_flux, "cut_eirp_w": cut_eirp,
         "sensitivity": sens, "nu_rel": nu_rel,
         "cwtfm": zeta * cut_eirp / (1 * nu_rel) if cut_eirp and nu_rel else None,
         "cwtfm_90": (zeta * sens[0]["eirp_90_w"] / nu_rel if t and nu_rel and sens and sens[0]["how_90"] != "above"
@@ -168,6 +184,59 @@ def build(target, session):
         "checks_version": vetting.VERSION, "kind": "measured",
     }
     return record
+
+
+def search_space(r):
+    """What this search can and cannot see (docs/comparable.md, step 1),
+    from the search's parameters and the planting model."""
+    look_s = r["spectra"] * r["tsamp_s"]
+    # A drift that changes: the track leaves its fitted line by half a
+    # channel when the change reaches 16 x (width / 2) / T^2 (the largest gap
+    # between a parabola and its best line over T is a T^2 / 16).
+    curve = 16 * 0.5 * r["channel_hz"] / look_s ** 2
+    edge_khz = r["edge_channels"] * r["channel_hz"] / 1e3
+    resp = r.get("response")
+    drop = r.get("dropped")
+    out = ["## What this search can and cannot see", "",
+           "The completeness and the limits below hold for this signal and no other:", "",
+           f"- **A tone narrower than one channel** ({r['channel_hz']:.2f} Hz) at the transmitter; wider signals "
+           "spread over channels and lose sensitivity, not modelled (Voyager 1's 322 Hz sidebands came out as dozens "
+           "of hits).",
+           f"- **Drifting steadily**, within ±{r['max_drift_hz_s']:g} Hz/s (steps of {r['drift_step_hz_s']:.4f} "
+           f"Hz/s), as the planted signals did. A drift that changes by more than about {curve:.1e} Hz/s² leaves "
+           f"its line by half a channel within a look (an estimate, not measured: comparable.md step 9).",
+           f"- **On through each ON look** ({r['spectra']} spectra of {r['tsamp_s']:.2f} s, {look_s:.0f} s): a "
+           "signal on for part of a look gives about that share of its power (a pulse train shorter than "
+           f"{r['tsamp_s']:.0f} s is averaged into a steady one at its mean power).",
+           f"- **In all three ON looks** (a hit at SNR {r['snr_min']:g} in one, at least S/N {r['on_min']:g} "
+           f"along the track in the others), **and in none of the three OFF looks** (under S/N {r['off_max']:g} "
+           "along the track and no hit there): a transmitter also seen in the OFF directions is called "
+           "interference by design; one on in some ON looks only is unconfirmed.",
+           "- **Seen in total power** (both polarisations summed): any polarisation.",
+           ("- **With the channel response measured on Voyager 1's carrier** (`measure.py response`): "
+            f"{resp['best']} fits best, by χ² {resp['chi2_margin_over_next']:g} over the next "
+            f"(χ²/dof {resp['fits'][resp['best']]['chi2_per_dof']:g}), the response the planted signals used."
+            if resp else "- **With the sinc² channel response assumed** (an unwindowed FFT, as in rawspec)."),
+           "", "It cannot see:", "",
+           f"- drifts beyond ±{r['max_drift_hz_s']:g} Hz/s (the `.0002` product could reach about 2.7 kHz/s: "
+           "comparable.md step 9);",
+           "- signals wider than a few channels, broadband or dispersed pulses, and pulses resolved in time (the "
+           "finest time here is one spectrum);",
+           f"- the receiver's notch ({r['notch_mhz']:.1f} MHz searched there) and the blocks where a look stopped "
+           f"at the {r['max_hits']:,}-hit limit ({r['cut_short_mhz']:.1f} MHz), left out of the limits;",
+           f"- line starts within about {r['edge_channels']} channels ({edge_khz:.1f} kHz) of each coarse "
+           "channel's edges, where a line would run off the block (about "
+           f"{100 * 2 * r['edge_channels'] / 1048576:.2f}% of the band), and the blanked middle channel of each;",
+           "- anything outside the half-hour of the cadence or the beam (about 5.8′ wide at 2.3 GHz, centred on "
+           "the star).", ""]
+    if drop:
+        out += [f"**Dropped data** (`measure.py dropped`, from the files' chunk indexes): "
+                f"{drop['zero_like_chunks']} spectra of zeros in any coarse channel of the six looks, "
+                f"{drop['missing_or_dropped_nodes']} missing or dropped nodes (no `zz` or `oo` in the names); the "
+                "smallest chunk is "
+                f"{100 * min(lk['smallest_over_median'] for lk in drop['looks']):.0f}% of its file's median. Packets "
+                "lost within a spectrum lower its power without zeroing it, and are not seen this way.", ""]
+    return out
 
 
 def _load(name):
@@ -213,7 +282,8 @@ def markdown(r):
                                                if verdicts else "no candidate to check") + ".")
     slow, fast = (r["sensitivity"][0], r["sensitivity"][-1]) if r["sensitivity"] else (None, None)
     if slow:
-        lines.append(f"- **Sensitivity, measured** (90% of planted signals kept; assumed SEFD {r['sefd_jy']:g} Jy; "
+        lines.append(f"- **Sensitivity, measured** (90% of planted signals kept; SEFD {r['sefd_jy']:g} Jy, "
+                     f"{'measured on 3C295' if r['sefd_measured'] else 'assumed'}; "
                      f"a transmitter narrower than 1 Hz at {t.get('distance_pc', '?')} pc): EIRP "
                      f"{'≤ ' if slow['how_90'] == 'at or below' else ''}{_w(slow.get('eirp_90_w'))} at "
                      f"{slow['drift_hz_s'][0]:g} to {slow['drift_hz_s'][1]:g} Hz/s, "
@@ -250,8 +320,22 @@ def markdown(r):
                            for b in short) or "none")
               + ". Their candidates and interference stand, but a signal there may have gone unpicked, so they "
                 "are left out of the usable band and of the limits.",
-              f"- **SEFD:** {r['sefd_jy']:g} Jy, Price et al. 2020's figure for Green Bank at S-band: assumed, "
-              f"not measured here; every flux and EIRP below scales with it.", ""]
+              (f"- **SEFD:** {r['sefd_jy']:g} Jy, measured with the flux calibrator 3C295 in the same S-band "
+               f"setup (`measure.py sefd`; 16-84% over the band {r['sefd_16_84_jy'][0]:g} to "
+               f"{r['sefd_16_84_jy'][1]:g} Jy; pairs "
+               + ", ".join(f"{p['utc']} UTC at {p['elevation_on_deg']:g}° elevation: {p['sefd_jy_median']:g} Jy"
+                           for p in r["sefd_pairs"] if p["kept"])
+               + "".join(f"; one of {p['utc']} UTC not used ({p['sefd_jy_median']:g} Jy: "
+                         + "; ".join(p["not_kept_because"]) + ")" for p in r["sefd_pairs"] if not p["kept"])
+               + f"), against the {r['sefd_assumed_before_jy']:g} Jy assumed before. Measured in December 2019, "
+                 "not on the 2017 cadence (the archive lists no scan of a flux calibrator from that session: "
+                 "3C48, 3C123, 3C138, 3C147, 3C196, 3C286, 3C295, 3C353, 3C380 and others queried): same receiver "
+                 "and setup, other epoch; "
+                 "the cadence's elevation was "
+               + ", ".join(f"{e:g}°" for e in r["cadence_elevation_deg"]) + ". Every flux and EIRP below scales "
+                 "with it." if r["sefd_measured"] else
+               f"- **SEFD:** {r['sefd_jy']:g} Jy, Price et al. 2020's figure for Green Bank at S-band: assumed, "
+               "not measured here; every flux and EIRP below scales with it."), ""]
     lines += ["## The search", "",
               f"- **Data:** the finest product (`.gpuspec.0000.h5`): {r['channel_hz']:.3f} Hz channels, "
               f"{r['spectra']} spectra of {r['tsamp_s']:.2f} s ({r['span_s']:.0f} s between the first and the last).",
@@ -268,6 +352,7 @@ def markdown(r):
               "the OFF looks, known bands, zero drift, the Earth's drift, recurrence, look-alikes, harmonics "
               "and intermodulation, crowding, the report; each marked shown, indicated or coincidence "
               "possible with its chance. None deletes a candidate.", ""]
+    lines += search_space(r)
     lines += ["## What it achieved", "",
               "### Completeness through the whole pipeline", "",
               "Signals planted as the sky makes them in the ON looks of five saved cadences of this session "
@@ -335,7 +420,8 @@ def markdown(r):
                      "lists are not published, so no star's hits could be set against theirs.")
     lines += ["- **turboSETI** on seven real looks from two sessions: outside one burst of interference it found "
               "nothing this search missed (docs/seti.md, \"Checked against turboSETI\").",
-              "- **Not done:** a calibrated SEFD; the polyphase filterbank's channel shape; non-steady signals "
+              "- **Not done:** the 2017 cadence's own SEFD (the one measured is from 2019); the coarse "
+              "polyphase filterbank's roll-off; non-steady signals "
               "(pulsed, chirped, wide); re-observation (no telescope here).", ""]
     lines += ["## What it found", "",
               "| stage | count |", "|---|---|",

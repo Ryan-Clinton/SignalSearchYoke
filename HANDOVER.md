@@ -23,6 +23,7 @@ KIC 8462852.
 | `vetting.py` | the ten checks on a candidate (after blc1), with strengths, chance rates and a report |
 | `injection.py` | signals planted in whole cadences and followed through search, cadence test and checks |
 | `measure.py` | the search measured on planted signals and real looks: desmearing, close pairs, kurtosis, false hits, the SNR scale against turboSETI, the cadence test, the checks, setigen; Voyager 1 and Price et al. 2020's HIP 91699 |
+| `instrument.py` | the instrument measured: the fine channel's response (Voyager 1), the SEFD (3C295 ON-OFF pairs, same S-band setup), dropped data from the chunk indexes; via `measure.py response`, `sefd`, `dropped` |
 | `tools/setigen_frame.py` | setigen's planted signals, run in turboSETI's environment, for `measure.py setigen` |
 | `tools/turbo_events.py` | Price et al. 2020's pipeline (turboSETI hits, then its event pipeline at threshold 3) on a cadence's six slices, for `measure.py price` |
 | `store.py` | the hit store, `data/ssy.sqlite`: runs, files, blocks, hits, events, checks, injections |
@@ -53,7 +54,8 @@ settings file.
 ./seti.py benchmark FILE...                       saved slices through this search and turboSETI
 ./check.py [--all] [--event ID]                   the ten checks on the store's candidates (or one event)
 ./seti.py report KIC8462852 AGBT17A_999_68        the result page of a swept cadence (Phase 8)
-./measure.py WHAT [FILE...]                       desmear, pairs, kurtosis, false, scale, noise, cadence, vetting, setigen, voyager, price
+./measure.py WHAT [FILE...]                       desmear, pairs, kurtosis, false, scale, noise, cadence, vetting, setigen, voyager, price,
+                                                  response, sefd, dropped TARGET SESSION
 ```
 
 `search` and `cadence` take `--keep DIR` to save each slice read (a small
@@ -109,6 +111,8 @@ HDF5 file in Breakthrough Listen's layout), for `inject` and
    (50% and 90% of planted signals kept) and quoted over the usable band:
    the notch and every block with a look stopped at the hit limit left out
    and listed; the SNR-10 figure is labelled nominal.
+   The flux scale is the SEFD measured on 3C295 (10.65 Jy), and the page
+   opens with what the search can and cannot see.
 
 ## turboSETI
 

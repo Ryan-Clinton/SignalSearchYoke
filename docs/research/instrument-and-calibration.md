@@ -12,6 +12,13 @@ rawspec a5cc3b0, turbo_seti 7d9b4fd, blimpy 4dd6414.
 
 ## Bottom line
 
+**Measured since** (same day; docs/seti.md, "The instrument, measured"):
+the SEFD is 10.65 Jy from a steady 3C295 ON-OFF pair in the same S-band
+setup (December 2019), not 12.5; Voyager 1's carrier fits the unwindowed
+(sinc²) response far better than Hann or Hamming, so the gpuspec files
+behave as rawspec's; 3C123 in AGBT17B_999_50 is the L-band setup, not
+usable. The points below are the research as it stood before.
+
 - **SEFD 10 Jy is at the low end.** Price 2020's text gives Tsys 20 K,
   its Table 1 25 K, both with SEFD 10 Jy; the Proposer's Guide gives the
   S-band gain as 2.0 K/Jy, so 25 K is 12.5 Jy. Every flux and EIRP here
