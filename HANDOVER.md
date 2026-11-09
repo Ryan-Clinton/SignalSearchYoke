@@ -27,6 +27,7 @@ KIC 8462852.
 | `tools/turbo_events.py` | Price et al. 2020's pipeline (turboSETI hits, then its event pipeline at threshold 3) on a cadence's six slices, for `measure.py price` |
 | `store.py` | the hit store, `data/ssy.sqlite`: runs, files, blocks, hits, events, checks, injections |
 | `check.py` | the ten checks run on the store's candidates: records, reports in `docs/leads/` |
+| `report.py` | the result of a swept cadence (`seti.py report`): `docs/results/TARGET-SESSION.md`, from the store and the measurements |
 | `yoke.py` | the data folder, the `--json` envelope, writing a record whole |
 | `docs/seti.md` | how the search works, and everything measured so far |
 | `docs/overhaul.md` | the plan to bring the search up to the published searches' standard (8 Nov 2026) |
@@ -50,6 +51,7 @@ settings file.
 ./seti.py inject --legacy FILE                    the old one-channel planting (superseded)
 ./seti.py benchmark FILE...                       saved slices through this search and turboSETI
 ./check.py [--all] [--event ID]                   the ten checks on the store's candidates (or one event)
+./seti.py report KIC8462852 AGBT17A_999_68        the result page of a swept cadence (Phase 8)
 ./measure.py WHAT [FILE...]                       desmear, pairs, kurtosis, false, scale, noise, cadence, vetting, setigen, voyager, price
 ```
 

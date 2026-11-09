@@ -5,6 +5,7 @@ Listen's open data, as SETI@home did, one slice of the band at a time.
     ./seti.py find KIC8462852                         the observations of a target, by cadence
     ./seti.py search URL --from 2250 --to 2253        narrowband signals in one scan's slice
     ./seti.py cadence ON1 OFF1 ON2 OFF2 ON3 OFF3 --from 2250 --to 2253 --json
+    ./seti.py report KIC8462852 AGBT17A_999_68        the result of a swept cadence, docs/results/
 
 Breakthrough Listen (seti.berkeley.edu/opendata) publishes its telescopes'
 recordings: Green Bank, Parkes and others, observed in cadences of three
@@ -916,6 +917,11 @@ def run(args, say=print):
                             add=args.add, n_all=0 if which else 8, seed=args.seed)
     if args.action == "benchmark":
         return benchmark(args.what, say=say)
+    if args.action == "report":
+        if len(args.what) != 2:
+            raise yoke.Refusal("INVALID_REQUEST", "report takes a target and a session (KIC8462852 AGBT17A_999_68).")
+        import report
+        return report.write(args.what[0], args.what[1], say=say)
     if args.low is None or args.high is None:
         raise yoke.Refusal("INVALID_REQUEST", "Give the slice: --from MHZ --to MHZ (a few MHz at most: "
                                 "each MHz is about 360,000 channels).")
@@ -928,7 +934,7 @@ def run(args, say=print):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("action", choices=("find", "search", "cadence", "sweep", "benchmark", "inject"))
+    ap.add_argument("action", choices=("find", "search", "cadence", "sweep", "benchmark", "inject", "report"))
     ap.add_argument("what", nargs="*", help="find: a target; search: one look (file or URL); cadence: six looks; "
                                             "inject: six saved looks per cadence (default: data/reference's)")
     ap.add_argument("--from", dest="low", type=float, help="MHz: the bottom of the slice")

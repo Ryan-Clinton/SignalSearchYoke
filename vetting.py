@@ -40,7 +40,7 @@ import numpy as np
 
 import onoff
 
-VERSION = "1 (9 Nov 2026)"
+VERSION = "2 (9 Nov 2026: check 6 shows recurrence only from a hit at the cut with a small chance)"
 C = 299792458.0
 GBT_LAT, GBT_LON = 38.4331, -79.8398            # degrees (north, east)
 EARTH_OMEGA, EARTH_R = 7.2921159e-5, 6.371e6    # rad/s, m
