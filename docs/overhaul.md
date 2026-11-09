@@ -570,6 +570,10 @@ a second person could repeat it from the report alone.
 
 ### Phase 9: beyond one cadence
 
+**Replaced, 9 November 2026,** by [comparable.md](comparable.md): the steps
+that would let this search be set beside the published ones, in order of
+value. The list below is kept as it was.
+
 In order of value:
 
 1. **Grow the interference history:** the OFF looks of other sessions near in

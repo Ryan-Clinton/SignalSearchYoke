@@ -462,7 +462,14 @@ none in machine-readable form: the store becomes this project's); judge
 by eye whether look-alikes are one phenomenon (step 8 is automated only
 by the chance rates). Recurrence (check 6) sees only what the store holds:
 this cadence's OFF looks now, more as other sessions and targets are
-searched.
+searched. The store is asked, file by file, for the same window check 6
+tests (100 Hz plus the drift's travel over the time between, within a
+day; `check.recurrence_hits`, since 9 November 2026; before, a fixed ±12
+kHz, which a fast signal hours away could fall outside). The chance rates
+of checks 6 to 8 assume a uniform density of hits; interference clusters,
+so a small chance is a sign, not proof of one transmitter
+([comparable.md](comparable.md), step 6, replaces it with the measured
+occupancy).
 
 ## Checked against turboSETI
 

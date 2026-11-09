@@ -31,7 +31,8 @@ KIC 8462852.
 | `yoke.py` | the data folder, the `--json` envelope, writing a record whole |
 | `docs/seti.md` | how the search works, and everything measured so far |
 | `docs/overhaul.md` | the plan to bring the search up to the published searches' standard (8 Nov 2026) |
-| `docs/research/` | the research behind it: other pipelines, vetting, sensitivity, speed |
+| `docs/research/` | the research behind it: other pipelines, vetting, sensitivity, speed; the instrument and its calibration; published searches of this star; what comparable pipelines do |
+| `docs/comparable.md` | the plan after the first result: what it would take to stand beside the published searches |
 | `schemas/seti.schema.json` | the shape of `seti.py`'s `--json` answers |
 | `data/` | not in git: `ssy.sqlite` (every hit), `sweeps/` (readable records), `index/` (each file's chunk index), `reference/` (block 153 of the 2017 cadence and the old search's answer on it), `logs/`, `checks/` |
 | `docs/leads/` | a report for each candidate `check.py` has looked into (none yet) |

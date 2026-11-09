@@ -84,6 +84,30 @@ def _event(db, row, where):
     return e
 
 
+def recurrence_hits(db, e, looks, session):
+    """The store's hits check 6 could match: for each file at another
+    target or time, the same window vetting.py's check 6 tests (100 Hz, plus
+    the drift's travel over the time between when that is under a day,
+    around both where the drift carries the signal and where it started),
+    so no hit the check would match is left out of the query."""
+    f, drift = e["frequency_mhz"], e["drift_hz_s"]
+    t0 = looks[e.get("seed_position", 0)].tstart
+    out = []
+    for fl in db.execute("SELECT file_id, tstart_mjd, target, session FROM files"
+                         " WHERE is_on = 0 OR session != ? OR is_on IS NULL", (session,)).fetchall():
+        dt = ((fl["tstart_mjd"] or t0) - t0) * 86400
+        within = abs(dt) < 86400
+        reach = (vetting.RECUR_HZ + (abs(drift) * abs(dt) if within else 0.0)) / 1e6
+        moved = f + (drift * dt / 1e6 if within else 0.0)
+        for h in db.execute("SELECT hit_id, f_start_mhz, drift_hz_s, snr, origin FROM hits WHERE file_id=?"
+                            " AND superseded_run IS NULL AND (f_start_mhz BETWEEN ? AND ? OR f_start_mhz BETWEEN ? AND ?)",
+                            (fl["file_id"], moved - reach, moved + reach, f - reach, f + reach)):
+            out.append({"hit_id": h["hit_id"], "frequency_mhz": h["f_start_mhz"], "drift_hz_s": h["drift_hz_s"],
+                        "snr": h["snr"], "mjd": fl["tstart_mjd"], "target": fl["target"], "session": fl["session"],
+                        "shadow": h["origin"] == "shadow"})
+    return out
+
+
 def check_event(db, row, say=print, report_dir=REPORTS):
     session, block_idx = row["session"], row["block_idx"]
     looks, where, by_pos = _cadence(db, session, block_idx)
@@ -92,16 +116,7 @@ def check_event(db, row, say=print, report_dir=REPORTS):
     target = {"name": on["cadence_target"] or on["target"], "ra_hours": on["ra_hours"], "dec_deg": on["dec_degrees"]}
     own = {h for h in (r["hit_id"] for r in db.execute("SELECT hit_id FROM event_hits WHERE event_id=?",
                                                          (row["event_id"],)))}
-    others = [{"frequency_mhz": h["f_start_mhz"], "drift_hz_s": h["drift_hz_s"], "snr": h["snr"],
-               "mjd": h["tstart_mjd"], "target": h["target"], "session": h["session"],
-               "shadow": h["origin"] == "shadow"}
-              for h in db.execute(
-                  "SELECT h.hit_id, h.f_start_mhz, h.drift_hz_s, h.snr, h.origin, h.session, f.tstart_mjd, f.target,"
-                  " f.cadence_position FROM hits h JOIN files f ON f.file_id = h.file_id"
-                  " WHERE h.superseded_run IS NULL AND h.f_start_mhz BETWEEN ? AND ?"
-                  " AND (f.is_on = 0 OR f.session != ?)", (e["frequency_mhz"] - 0.012, e["frequency_mhz"] + 0.012,
-                                                          session))
-              if h["hit_id"] not in own]
+    others = [h for h in recurrence_hits(db, e, looks, session) if h.pop("hit_id") not in own]
     session_hits = [{"frequency_mhz": h["f_start_mhz"], "drift_hz_s": h["drift_hz_s"], "snr": h["snr"]}
                     for h in db.execute("SELECT f_start_mhz, drift_hz_s, snr FROM hits WHERE session=? AND"
                                         " superseded_run IS NULL AND origin='search'", (session,))]
