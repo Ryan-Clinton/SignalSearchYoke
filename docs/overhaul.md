@@ -444,6 +444,11 @@ whole pipeline.
   record; treated as a reference with known flaws, not as truth. It runs in
   WSL if it does not install on Windows.
 
+- **False candidates through the whole pipeline:** how often noise or
+  interference alone makes a candidate that survives the six looks and
+  the checks, measured on whole cadences (Phase 3's scrambled looks test
+  one look's detections only).
+
 **Done when:** a completeness table by SNR × drift is in `docs/seti.md`,
 measured on the reference cadence through the whole pipeline, with
 intervals, replacing the single-look table.

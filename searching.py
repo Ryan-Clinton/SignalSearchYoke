@@ -378,7 +378,10 @@ def search(spectra, foff, tsamp, fch1, snr_min=SNR_MIN, shadow_min=SHADOW_MIN, m
             best[a:b], best_k[a:b] = new[:b - a], new_k[:b - a]
         best[max(0, i - w - 1):i + w + 2] = -np.inf
     if details is not None:
+        # `unpicked`: line starts still at or over shadow_min when max_hits
+        # was reached. A look with any is not a complete list of its hits,
+        # and nothing later may treat it as one.
         details.update(noise_ratio={str(w): round(r, 3) for w, r in sorted(plane.ratio.items())},
                        flagged_channels=int(flags.sum()) if flags is not None else None,
-                       crowded=crowded, method=method)
+                       unpicked=crowded, complete=crowded == 0, method=method)
     return hits

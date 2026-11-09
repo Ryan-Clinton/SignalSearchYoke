@@ -134,7 +134,7 @@ name); the Windows PC has one at the default place.
   scans 31 to 36, 308 blocks, 1818-2721 MHz): 18 blocks done,
   1818.46-1871.19 MHz, searched again on 9 November 2026 with search
   version 2: 0 candidates, 46 interference, 4 unconfirmed; 287 hits at the
-  cut (version 1 found 123) and 28,321 shadow hits. Block 7 (1836-1839
+  cut (version 1 found 123) and 28,321 shadow hits. Block 6 (1836-1839
   MHz) alone has 190 hits, all interference. The version 1 results are
   kept in the store, marked superseded. About 34 s a block on the Windows
   PC (the search, not the network, sets the pace): about 2.9 hours for

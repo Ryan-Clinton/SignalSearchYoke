@@ -8,6 +8,7 @@ against turboSETI's. Each answer is kept in data/measurements/.
     ./measure.py kurtosis FILE...   how many quiet channels spectral kurtosis flags
     ./measure.py false FILE...      hits at the cut in scrambled looks, where no signal can line up
     ./measure.py scale FILE...      this search's SNR against turboSETI's for the same planted signals
+    ./measure.py noise FILE...      the planting's noise estimate against the search's own
 
 FILE is a slice saved by `seti.py search --keep` (data/reference/ has six
 looks of block 153 and data/reference/blocks/ four more blocks).
@@ -18,7 +19,8 @@ through each 18 s spectrum, its power spread over every channel it crosses
 random place within a channel. Its strength is set from the raw spectra
 alone, not from the search: S_in = h x sqrt(16) / sigma, where h is the
 power the tone adds to a spectrum and sigma one channel's noise in one
-spectrum there (1.4826 x the median absolute deviation). S_in is the SNR a
+spectrum there, measured by its own method (differences between
+neighbouring channels), not the search's. S_in is the SNR a
 search would give if it collected every bit of the power and the noise
 were ideal; what a search gives is measured against it.
 """
@@ -64,9 +66,28 @@ def plant(raw, tones, tsamp, foff, substeps=SUBSTEPS):
     return out
 
 
-def channel_noise(raw):
-    """One channel's noise in one spectrum, by channel (raw units): the
-    median over spectra of each block's 1.4826 x MAD."""
+def channel_noise(raw, block=1024):
+    """One channel's noise in one spectrum, by channel (raw units), by its
+    own method, not the search's: in each spectrum the differences between
+    neighbouring channels (which cancel the band's smooth shape), their
+    1.4826 x MAD over sqrt(2) per block of channels, the median over the
+    spectra. If neighbouring channels' noise were correlated this would
+    read low; `measure.py noise` sets it against the search's own
+    estimate."""
+    n_t, n_f = raw.shape
+    d = np.diff(raw, axis=1)
+    whole = (n_f - 1) // block
+    rows = d[:, :whole * block].reshape(n_t, whole, block)
+    med = np.median(rows, axis=2, keepdims=True)
+    spread = 1.4826 * np.median(np.abs(rows - med), axis=2) / math.sqrt(2)
+    per_block = np.median(spread, axis=0)
+    centres = np.arange(whole) * block + block / 2
+    return np.interp(np.arange(n_f), centres, per_block)
+
+
+def search_noise(raw):
+    """The search's own estimate of the same (searching.flatten): each
+    block's 1.4826 x MAD after the band's shape is taken out."""
     _, noise = searching.flatten(raw, details=True)
     spread = np.median(noise["spreads"], axis=0)
     return np.interp(np.arange(raw.shape[1]), noise["centres"], spread)
@@ -299,6 +320,27 @@ def kurtosis(paths, say=print):
     return record
 
 
+def noise(paths, say=print):
+    """The planting's noise estimate (neighbour differences) against the
+    search's (band shape taken out, MAD), per look: their ratio's median
+    and spread over the band's blocks."""
+    rows = []
+    for path in paths:
+        _, raw = _load(path)
+        ratio = channel_noise(raw) / search_noise(raw)
+        blocks = ratio[512::1024]
+        rows.append({"file": str(path), "median": round(float(np.median(blocks)), 4),
+                     "percentiles_5_95": [round(float(np.percentile(blocks, q)), 4) for q in (5, 95)]})
+        say(f"{Path(path).name}: planting's noise over the search's {rows[-1]['median']} "
+            f"(5th to 95th percentile of blocks {rows[-1]['percentiles_5_95']})")
+    medians = [r["median"] for r in rows]
+    record = {"rows": rows, "median": round(float(np.median(medians)), 4),
+              "range": [round(min(medians), 4), round(max(medians), 4)], "kind": "measured"}
+    _keep("noise", record)
+    say(f"\nmedian over looks {record['median']}, range {record['range']}")
+    return record
+
+
 def scramble(raw, rng):
     """Each spectrum turned round the band by its own random amount: every
     spectrum keeps its noise and its interference, but no signal lines up
@@ -405,11 +447,12 @@ def scale(paths, count=30, seed=5, say=print):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("what", choices=("desmear", "pairs", "kurtosis", "false", "scale"))
+    ap.add_argument("what", choices=("desmear", "pairs", "kurtosis", "false", "scale", "noise"))
     ap.add_argument("files", nargs="+")
     ap.add_argument("--json", action="store_true", help="answer in JSON")
     args = ap.parse_args()
-    work = {"desmear": desmear, "pairs": pairs, "kurtosis": kurtosis, "false": false, "scale": scale}[args.what]
+    work = {"desmear": desmear, "pairs": pairs, "kurtosis": kurtosis, "false": false, "scale": scale,
+            "noise": noise}[args.what]
     yoke.main("measure", lambda: work(args.files), args.json)
 
 

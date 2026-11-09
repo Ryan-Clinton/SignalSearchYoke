@@ -197,6 +197,23 @@ above zero, per channel of box, because each spectrum's median, not its
 mean, is taken out and the power's distribution is skewed. The old search
 read every SNR about 0.13 high; this one takes the median off.
 
+**The planted strengths are measured independently of the search.**
+`measure.py` sets each signal's strength from a channel's noise measured
+by its own method (differences between neighbouring channels, which
+cancel the band's shape), not the search's `flatten`. On all 30 looks the
+two estimates agree: the planting's over the search's is 0.9999 at the
+median (0.993 to 1.001 across looks; 0.98 to 1.02 across blocks within a
+look; `measure.py noise`). Physical units (Jy, from the receiver's SEFD)
+come in Phase 6.
+
+**Each look's search is kept** in the store's `looks` table: its hits and
+shadow hits, the noise of its summed lines by box width, its flagged
+channels, and whether it is complete. The search picks at most 2,000 hits
+a look; if it stops there, the look is marked not complete with the
+number of line starts still over SNR 5, the block is marked not complete,
+and nothing later may treat its hits as the whole list. No look of the 18
+swept blocks reached the limit (most had about 250 hits).
+
 **Against turboSETI** (`measure.py scale`; turboSETI 2.3.2): 30 slow
 signals (|drift| < 0.15 Hz/s, S_in 60 to 300) planted in one look of each
 of the five blocks, both searches run on the same files, 123 signals found
@@ -258,7 +275,7 @@ each channel for a few spectra only. Fast ones (over 1 Hz/s) were almost
 never flagged. A hit's `flagged_fraction` is therefore recorded and never
 read as interference on its own.
 
-**False hits** (`measure.py false`; each of the 30 looks scrambled twice:
+**False hits, a stress test** (`measure.py false`; each of the 30 looks scrambled twice:
 every spectrum turned round the band by its own random amount, so it keeps
 its noise and its interference but no signal can line up from one spectrum
 to the next):
@@ -277,7 +294,11 @@ than the real looks, where those pixels form one tone; but it says that
 impulsive interference, bright for one spectrum at a time, does make false
 hits at this cut, and that a block's count of hits has to be read with its
 interference. Shadow hits (SNR 5 to 10): about 275 a look, scrambled or
-not.
+not. This is a stress test of one look's detections, not the pipeline's
+false-alarm rate: scrambling changes the data's structure, and it says
+nothing of how often noise or interference makes a *candidate* that
+survives the six looks and the checks. That is measured on whole cadences
+in Phase 6.
 
 **The reference block** through the new search: the 2267.509 MHz tone in
 all six looks (SNR 50 to 95; interference), the weak 2269.557 MHz tone in
@@ -290,7 +311,7 @@ spectrum could not collect. 220 to 350 shadow hits a look. 5.5 s a look.
 **The 18 blocks swept, searched again** (9 November 2026, `sweep
 --blocks 18`): 287 hits at the cut where version 1 found 123, 46
 interference where it found 19, 4 unconfirmed, no candidate; 28,321 shadow
-hits (about 1,500 a block); 190 of the hits in one block (7, 1836 to 1839
+hits (about 1,500 a block); 190 of the hits in one block (6, 1836 to 1839
 MHz). Version 1's hits and events stay in the store marked superseded, and
 each of its 24 events is linked to the new event that replaces it. About
 34 s a block (fetch 18 to 27 s, hidden; search 29 to 58 s; 120 CPU
@@ -339,7 +360,9 @@ were in an OFF look too, and 98 were not in every ON look.
 
 Measured on real data before the sweep was let loose.
 
-**Signals planted in real noise** (`./seti.py inject`; 3 November 2026,
+**Signals planted in real noise** (`./seti.py inject`, now marked LEGACY in
+every answer and record: it plants one channel a spectrum, and is
+superseded by `measure.py desmear` until Phase 6 rebuilds it; 3 November 2026,
 the OFF look of Tabby's 2017 cadence, scan 32, 2266.75 to 2269.60 MHz,
 40 drifting signals at each strength, drifts up to 3.6 Hz/s):
 

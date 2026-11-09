@@ -86,6 +86,7 @@ CREATE TABLE IF NOT EXISTS blocks (
     search_s REAL,
     wall_s REAL,                  -- from the end of the last block to the end of this one
     threads INTEGER,
+    complete INTEGER,             -- 0: some look's hits were cut off at the search's limit (see looks)
     hits INTEGER,                 -- at the cut, all six looks
     shadow_hits INTEGER,          -- SNR 5 to the cut
     candidates INTEGER,
@@ -122,6 +123,21 @@ CREATE TABLE IF NOT EXISTS hits (
 );
 CREATE INDEX IF NOT EXISTS hits_frequency ON hits (f_start_mhz);
 CREATE INDEX IF NOT EXISTS hits_block ON hits (session, block_idx);
+CREATE TABLE IF NOT EXISTS looks (
+    look_id INTEGER PRIMARY KEY,
+    run_id INTEGER REFERENCES runs(run_id),
+    session TEXT,
+    block_idx INTEGER,
+    position INTEGER,             -- 0 to 5: ON, OFF, ON, OFF, ON, OFF
+    file_id INTEGER REFERENCES files(file_id),
+    hits INTEGER,                 -- at the cut
+    shadow_hits INTEGER,
+    complete INTEGER,             -- 0: the search stopped at its hit limit; the hits are NOT all there
+    unpicked INTEGER,             -- line starts still at or over SNR 5 when it stopped
+    noise_ratio TEXT,             -- JSON: the summed lines' spread over sqrt(16 x box), by box width
+    flagged_channels INTEGER,     -- spectral kurtosis flags in the look
+    superseded_run INTEGER        -- NULL: current
+);
 CREATE TABLE IF NOT EXISTS events (
     event_id INTEGER PRIMARY KEY,
     run_id INTEGER REFERENCES runs(run_id),
@@ -191,7 +207,7 @@ def connect(where=None):
 MIGRATIONS = [("runs", "search_version", "TEXT"), ("hits", "superseded_run", "INTEGER"),
               ("events", "superseded_run", "INTEGER"), ("events", "supersedes_event_id", "INTEGER"),
               ("hits", "box_channels", "INTEGER"), ("hits", "wide", "INTEGER"), ("hits", "noise_factor", "REAL"),
-              ("blocks", "shadow_hits", "INTEGER")]
+              ("blocks", "shadow_hits", "INTEGER"), ("blocks", "complete", "INTEGER")]
 
 
 def _migrate(db):
@@ -304,7 +320,8 @@ def _hit_row(run_id, file_id, session, block_idx, h, origin=None):
             h.get("noise_factor"), origin)
 
 
-def save_block(db, run_id, session, block_idx, f_lo, f_hi, file_ids, looks_hits, events, timing, same=None):
+def save_block(db, run_id, session, block_idx, f_lo, f_hi, file_ids, looks_hits, events, timing, same=None,
+               scans=None):
     """One block's hits (all six looks) and cadence results, in one
     transaction. An earlier search of the block is kept, marked superseded
     by this run; `same(old_event_row, new_event)` says which earlier event
@@ -317,6 +334,14 @@ def save_block(db, run_id, session, block_idx, f_lo, f_hi, file_ids, looks_hits,
                    (run_id, session, block_idx))
         db.execute("UPDATE hits SET superseded_run=? WHERE session=? AND block_idx=? AND superseded_run IS NULL",
                    (run_id, session, block_idx))
+        db.execute("UPDATE looks SET superseded_run=? WHERE session=? AND block_idx=? AND superseded_run IS NULL",
+                   (run_id, session, block_idx))
+        for position, (file_id, sc) in enumerate(zip(file_ids, scans or [])):
+            db.execute("INSERT INTO looks (run_id, session, block_idx, position, file_id, hits, shadow_hits, complete,"
+                       " unpicked, noise_ratio, flagged_channels) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                       (run_id, session, block_idx, position, file_id, sc.get("hit_count"), sc.get("shadow_count"),
+                        _flag(sc.get("complete")), sc.get("unpicked"), json.dumps(sc.get("noise_ratio")),
+                        sc.get("flagged_channels")))
         ids = []
         for file_id, hits in zip(file_ids, looks_hits):
             these = []
@@ -352,10 +377,11 @@ def save_block(db, run_id, session, block_idx, f_lo, f_hi, file_ids, looks_hits,
         count = {label: sum(e["label"] == label for e in events) for label in ("candidate", "interference", "unconfirmed")}
         db.execute(
             "INSERT OR REPLACE INTO blocks (session, block_idx, f_lo_mhz, f_hi_mhz, status, run_id, bytes, fetch_s,"
-            " search_s, wall_s, threads, hits, shadow_hits, candidates, interference, unconfirmed, searched_utc)"
-            " VALUES (?,?,?,?,'done',?,?,?,?,?,?,?,?,?,?,?,?)",
+            " search_s, wall_s, threads, complete, hits, shadow_hits, candidates, interference, unconfirmed,"
+            " searched_utc) VALUES (?,?,?,?,'done',?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (session, block_idx, f_lo, f_hi, run_id, timing.get("bytes"), timing.get("fetch_s"),
              timing.get("search_s"), timing.get("wall_s"), timing.get("threads"),
+             None if not scans else int(all(sc.get("complete", True) for sc in scans)),
              sum(1 for hits in looks_hits for h in hits if not h.get("shadow")),
              sum(1 for hits in looks_hits for h in hits if h.get("shadow")),
              count["candidate"], count["interference"], count["unconfirmed"], now()))

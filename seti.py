@@ -308,18 +308,23 @@ def look(source, low, high, say=print, read=read_slice, keep=None):
     s = read(source, low, high)
     if keep:
         save(s, Path(keep) / (Path(str(source)).name.replace(".h5", "") + f"_{low:g}-{high:g}.h5"))
-    hits = describe(search(s["spectra"], s["foff"], s["tsamp"], s["fch1"]), s)
+    details = {}
+    hits = describe(search(s["spectra"], s["foff"], s["tsamp"], s["fch1"], details=details), s)
     cut = at_cut(hits)
     n_t, n_f = s["spectra"].shape
     answer = {"source": str(source), "target": s["target"], "from_mhz": low, "to_mhz": high, "channels": n_f,
               "channel_hz": round(abs(s["foff"]) * 1e6, 3), "spectra": n_t, "seconds": round(n_t * s["tsamp"], 1),
               "tstart": s["tstart"], "max_drift_hz_s": MAX_DRIFT, "snr_min": SNR_MIN, "fetched_mb": s["fetched_mb"],
-              "hit_count": len(cut), "shadow_count": len(hits) - len(cut),
+              "hit_count": len(cut), "shadow_count": len(hits) - len(cut), "complete": details["complete"],
+              "unpicked": details["unpicked"], "noise_ratio": details["noise_ratio"],
+              "flagged_channels": details["flagged_channels"],
               "hits": sorted(cut, key=lambda h: -h["snr"])[:MAX_LISTED], "kind": "measured"}
     say(f"{s['target'] or source}: {n_f} channels of {answer['channel_hz']:g} Hz, {n_t} spectra over "
         f"{answer['seconds']:g} s; {len(cut)} hit(s) at {SNR_MIN:g} times the noise or more, drifts up to "
         f"±{MAX_DRIFT:g} Hz/s, and {len(hits) - len(cut)} shadow hit(s) from {searching.SHADOW_MIN:g}"
-        + (f" ({s['fetched_mb']:g} MB read)" if s["fetched_mb"] else ""))
+        + (f" ({s['fetched_mb']:g} MB read)" if s["fetched_mb"] else "")
+        + ("" if details["complete"] else f"; NOT COMPLETE: stopped at {searching.MAX_HITS} hits with "
+                                          f"{details['unpicked']} line starts still over {searching.SHADOW_MIN:g}"))
     for h in answer["hits"][:10]:
         say(f"  {h['frequency_mhz']:.6f} MHz  drift {h['drift_hz_s']:+.4f} Hz/s  SNR {h['snr']:g}")
     return answer, hits, s
@@ -384,7 +389,9 @@ def cadence(sources, low, high, say=print, read=read_slice, keep=None, every_hit
     scans, looks = [], []
     for k, (source, (answer, hits, s)) in enumerate(zip(sources, done)):
         scans.append({"source": str(source), "target": s["target"], "on": k % 2 == 0, "hit_count": answer["hit_count"],
-                      "shadow_count": answer["shadow_count"], "fetched_mb": s["fetched_mb"]})
+                      "shadow_count": answer["shadow_count"], "complete": answer["complete"],
+                      "unpicked": answer["unpicked"], "noise_ratio": answer["noise_ratio"],
+                      "flagged_channels": answer["flagged_channels"], "fetched_mb": s["fetched_mb"]})
         looks.append((hits, s["tstart"], abs(s["foff"]) * 1e6, answer["seconds"]))
     events = judge(looks)
     count = {label: sum(e["label"] == label for e in events) for label in ("candidate", "interference", "unconfirmed")}
@@ -397,7 +404,8 @@ def cadence(sources, low, high, say=print, read=read_slice, keep=None, every_hit
         say(f"  candidate {e['frequency_mhz']:.6f} MHz  drift {e['drift_hz_s']:+.4f} Hz/s  SNR {e['snr']:g}")
     say(note)
     order = {"candidate": 0, "unconfirmed": 1, "interference": 2}
-    answer = {"from_mhz": low, "to_mhz": high, "scans": scans, "candidates": count["candidate"],
+    answer = {"from_mhz": low, "to_mhz": high, "scans": scans, "complete": all(sc["complete"] for sc in scans),
+              "candidates": count["candidate"],
               "interference": count["interference"], "unconfirmed": count["unconfirmed"],
               "events": [{k: v for k, v in e.items() if k != "matches"}
                          for e in sorted(events, key=lambda e: (order[e["label"]], -e["snr"]))[:MAX_LISTED]],
@@ -565,7 +573,8 @@ def export(db, target, session, block_list):
                         "candidates": b["candidates"], "interference": b["interference"],
                         "unconfirmed": b["unconfirmed"], "events": events, "searched": b["searched_utc"],
                         "bytes": b["bytes"], "fetch_s": b["fetch_s"], "search_s": b["search_s"],
-                        "shadow_hits": b.get("shadow_hits"), "search_version": b.get("search_version")}
+                        "shadow_hits": b.get("shadow_hits"), "complete": b.get("complete"),
+                        "search_version": b.get("search_version")}
     record = {"store": "ssy.sqlite", "blocks": [list(b) for b in block_list], "done": done}
     if before:
         record["before_hit_store"] = before
@@ -617,7 +626,8 @@ def sweep(target, count=1, say=print, get=requests.get):
                 now = time.monotonic()
                 timing.update(wall_s=round(now - last_end, 1), threads=reading.threads())
                 last_end = now
-                store.save_block(db, run_id, session, k, low, high, file_ids, looks, events, timing, same=_same_event)
+                store.save_block(db, run_id, session, k, low, high, file_ids, looks, events, timing, same=_same_event,
+                                 scans=answer["scans"])
                 cpu = round(_cpu_seconds() - cpu0, 1)
                 hits = sum(len(at_cut(h)) for h in looks)
                 shadow = sum(len(h) for h in looks) - hits
@@ -627,7 +637,8 @@ def sweep(target, count=1, say=print, get=requests.get):
                          f"(+{shadow} shadow), "
                          f"{answer['candidates']} candidate(s), {answer['interference']} interference, "
                          f"{answer['unconfirmed']} unconfirmed")
-                say(f"  block {k + 1} of {len(block_list)}, {low:.3f} to {high:.3f} MHz: {hits} hits (+{shadow} shadow); "
+                say(f"  block {k} (of 0 to {len(block_list) - 1}), {low:.3f} to {high:.3f} MHz: {hits} hits "
+                    f"(+{shadow} shadow); "
                     f"{answer['candidates']} candidate(s), {answer['interference']} interference, "
                     f"{answer['unconfirmed']} unconfirmed ({timing['bytes'] / 1e6:.0f} MB, fetch "
                     f"{timing['fetch_s']} s, search {timing['search_s']} s, {timing['wall_s']} s a block)")
@@ -650,6 +661,8 @@ def sweep(target, count=1, say=print, get=requests.get):
 
 # --- completeness: signals planted in real noise ---------------------------------
 
+LEGACY_PLANTING = ("legacy plant(): one channel a spectrum, no smearing, no channel response; superseded by "
+                   "measure.py until Phase 6; overstates completeness above 0.15 Hz/s")
 INJECT_SNRS = (10, 12, 15, 20, 30, 50)   # the strengths planted, in times the noise of the summed line
 INJECT_COUNT = 40                        # signals planted at each strength
 
@@ -673,7 +686,13 @@ def inject(path, snrs=INJECT_SNRS, count=INJECT_COUNT, seed=0, say=print, read=r
     places and drifts (away from the slice's ends and its own hits), the
     look searched again, and each planted signal counted found when a hit
     lies within its drift's reach with its drift within two steps. Hits
-    that are neither planted nor in the look before are false."""
+    that are neither planted nor in the look before are false.
+
+    LEGACY, superseded until Phase 6 rebuilds it: each signal's power is put
+    in one channel a spectrum, with no Doppler smearing and no channel
+    response, so it overstates what is found above about 0.15 Hz/s. The
+    realistic planting is measure.py's (`measure.py desmear`). Every answer
+    and every record of this one says so."""
     s = read(path, -1e12, 1e12)
     spectra, foff, tsamp, fch1 = s["spectra"], s["foff"], s["tsamp"], s["fch1"]
     n_t, n_f = spectra.shape
@@ -723,11 +742,12 @@ def inject(path, snrs=INJECT_SNRS, count=INJECT_COUNT, seed=0, say=print, read=r
         db = store.connect()
         run_id = store.start_run(db, f"inject {path}", dict(search_params(), snrs=list(snrs), count=count, seed=seed),
                                  SEARCH_VERSION)
-        store.save_injections(db, run_id, path, "plant: one channel a spectrum, no smearing", planted_rows)
+        store.save_injections(db, run_id, path, LEGACY_PLANTING, planted_rows)
         store.finish_run(db, run_id)
         db.close()
+    say(f"LEGACY planting ({LEGACY_PLANTING}): see measure.py desmear for signals as the sky makes them.")
     return {"file": str(path), "own_hits": len(before), "injected": rows, "max_drift_hz_s": MAX_DRIFT,
-            "snr_min": SNR_MIN, "kind": "measured"}
+            "snr_min": SNR_MIN, "method": LEGACY_PLANTING, "legacy": True, "kind": "measured"}
 
 
 # --- the benchmark: the same slices through turboSETI ----------------------------
