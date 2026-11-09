@@ -313,6 +313,10 @@ def search(spectra, foff, tsamp, fch1, snr_min=SNR_MIN, shadow_min=SHADOW_MIN, m
     flags = kurtosis(spectra) > SK_FLAG if sk else None
     flat, noise = flatten(spectra, details=True)
     plane = Plane(flat, tsamp, foff, max_drift, method, flags)
+    if details is not None:
+        # The flattened spectra before any blanking: the cadence test
+        # measures tracks in them (float32, 67 MB a look).
+        details["flat"] = flat.astype(np.float32)
     del flat
     best, best_k = plane.search()
     best = best[:n_f]

@@ -9,6 +9,10 @@ against turboSETI's. Each answer is kept in data/measurements/.
     ./measure.py false FILE...      hits at the cut in scrambled looks, where no signal can line up
     ./measure.py scale FILE...      this search's SNR against turboSETI's for the same planted signals
     ./measure.py noise FILE...      the planting's noise estimate against the search's own
+    ./measure.py cadence [FILE...]  signals planted in whole cadences (six files each; default: the saved ones)
+                                    through the search and the cadence test
+    ./measure.py vetting            a lone planted signal and a planted look-alike family through the checks
+    ./measure.py setigen            the planted signals against setigen's (run in turboSETI's environment)
 
 FILE is a slice saved by `seti.py search --keep` (data/reference/ has six
 looks of block 153 and data/reference/blocks/ four more blocks).
@@ -34,6 +38,7 @@ from pathlib import Path
 
 import numpy as np
 
+import onoff
 import searching
 import seti
 import yoke
@@ -438,6 +443,10 @@ def scale(paths, count=30, seed=5, say=print):
               "turboseti": subprocess.run([str(seti.TURBOSETI_PYTHON), "-c",
                                            "import importlib.metadata as m; print(m.version('turbo_seti'))"],
                                           capture_output=True, text=True).stdout.strip(),
+              "turboseti_known_bugs": ["#296: top-hit suppression drops hits beside a stronger one",
+                                       "#319: level-3 de-duplication in find_event"],
+              "turboseti_note": "a reference with known flaws, not the truth; run on Windows from the file's folder "
+                                "with pinned dependencies (HANDOVER.md)",
               "kind": "measured"}
     _keep("scale", record)
     say(f"\nturboSETI's SNR over this search's: {record['median_of_files']} at the median of files, "
@@ -445,14 +454,190 @@ def scale(paths, count=30, seed=5, say=print):
     return record
 
 
+CADENCES = None
+
+
+def cadences():
+    """The saved cadences: block 153 (the reference) and blocks 40, 100,
+    200 and 280, six looks each, in cadence order."""
+    import glob
+    import json as _json
+    ref = _json.load(open(yoke.DATA / "reference" / "reference.json"))["files"]
+    out = [ref]
+    for k in sorted({int(Path(p).name[5:8]) for p in glob.glob(str(yoke.DATA / "reference" / "blocks" / "block*.h5"))}):
+        out.append([str(yoke.DATA / "reference" / "blocks" / f"block{k:03d}_{scan:04d}.h5") for scan in range(31, 37)])
+    return out
+
+
+def cadence(paths=None, runs=2, n_on=32, n_all=8, seed=6, say=print):
+    """Signals planted in whole cadences, in the ON looks only or in all
+    six, through the search and the cadence test: how many ON-only signals
+    come out as candidates, how many in-all signals as interference, and
+    the OFF looks' S/N along ON-only signals' tracks (the false veto)."""
+    import injection
+    rng = np.random.default_rng(seed)
+    groups = cadences() if not paths else [paths[i:i + 6] for i in range(0, len(paths), 6)]
+    rows = []
+    for files in groups:
+        cad = injection.load(files)
+        for r in range(runs):
+            tones = injection.tones_for(cad, n_on, n_all, rng)
+            out, _ = injection.trial(cad, tones)
+            for t in out:
+                rows.append(dict(t, cadence=Path(files[0]).name))
+            say(f"{Path(files[0]).name}: run {r + 1} of {runs}: {sum(t['label'] == 'candidate' for t in out if t['where'] == 'on')}"
+                f" of {n_on} ON-only signals candidates, {sum(t['label'] == 'interference' for t in out if t['where'] == 'all')}"
+                f" of {n_all} in-all signals interference", flush=True)
+    table = []
+    for where in ("on", "all"):
+        for b, (lo, hi) in enumerate(DRIFT_BINS):
+            for st in STRENGTHS:
+                cell = [t for t in rows if t["where"] == where and t["bin"] == b and t["s_in"] == st]
+                n = len(cell)
+                if not n:
+                    continue
+                want = "candidate" if where == "on" else "interference"
+                k = sum(t["label"] == want for t in cell)
+                seen = sum(t["found_on_looks"] > 0 for t in cell)
+                table.append({"where": where, "drift_hz_s": [lo, hi], "s_in": st, "planted": n,
+                              "found_in_a_look": seen, "labelled": want, "count": k, "rate": round(k / n, 3),
+                              "interval": wilson(k, n),
+                              "of_found": round(k / seen, 3) if seen else None})
+    on = [t for t in rows if t["where"] == "on" and t["label"] is not None]
+    off_snrs = [t["off_snr_max"] for t in on if t["off_snr_max"] is not None]
+    vetoed = [t for t in on if t["label"] == "interference"]
+    allr = [t for t in rows if t["where"] == "all" and t["label"] is not None]
+    record = {"cadences": [Path(g[0]).name for g in groups], "runs": runs, "seed": seed,
+              "off_max": onoff.OFF_MAX, "on_min": onoff.ON_MIN, "table": table,
+              "on_only_off_snr_percentiles": {str(q): round(float(np.percentile(off_snrs, q)), 2)
+                                              for q in (50, 90, 99, 100)} if off_snrs else None,
+              "on_only_vetoed": len(vetoed), "on_only_with_event": len(on),
+              "on_only_veto_interval": wilson(len(vetoed), len(on)),
+              "all_interference": sum(t["label"] == "interference" for t in allr), "all_with_event": len(allr),
+              "all_missed": [{k: t[k] for k in ("s_in", "drift", "label", "off_snr_max")} for t in allr
+                             if t["label"] != "interference"],
+              "rows": rows, "kind": "measured"}
+    _keep("cadence", record)
+    say("\nON-only signals labelled candidate, by drift bin and S_in (of those planted; of those found in a look):")
+    for b, (lo, hi) in enumerate(DRIFT_BINS):
+        line = [t for t in table if t["where"] == "on" and t["drift_hz_s"] == [lo, hi]]
+        say(f"  {lo:4.2f}-{hi:4.2f}  " + "  ".join(f"S_in {t['s_in']}: {t['rate']:.0%} ({t['of_found'] if t['of_found'] is not None else '-'})" for t in line))
+    say(f"ON-only signals with an event wrongly labelled interference: {len(vetoed)} of {len(on)} "
+        f"{record['on_only_veto_interval']}; their OFF S/N percentiles {record['on_only_off_snr_percentiles']}")
+    say(f"in-all signals with an event labelled interference: {record['all_interference']} of {len(allr)}")
+    return record
+
+
+KIC8462852 = {"name": "KIC8462852", "ra_hours": 20.104292, "dec_deg": 44.456833}   # 20h06m15.45s +44d27m24.6s
+
+
+def vet_hook(target=KIC8462852, report_dir=None, prefix="PLANTED"):
+    """The checks as injection.trial calls them on a candidate, the cadence's
+    own hits standing in for the session's."""
+    import vetting
+
+    def hook(event, looks):
+        session_hits = [h for lk in looks for h in lk.hits if not h.get("shadow")]
+        lead = f"{prefix}-{event['frequency_mhz']:.6f}"
+        return vetting.vet(event, looks, target, (), session_hits, report_dir=report_dir, lead=lead)
+    return hook
+
+
+def vetting_demo(seed=7, say=print, which=(0, 2)):
+    """Phase 5's test: in the reference cadence, a lone signal in the ON
+    looks only, and a family of signals sharing one drift over frequency
+    (as harmonics of one oscillator would): four in all six looks, as
+    interference, and one more in the ON looks only. The lone one should
+    come out unexplained; the family's ON-only member should be caught by
+    its look-alikes (check 7) or its relations (check 8)."""
+    import injection
+    rows, folder = [], yoke.DATA / "measurements" / "vetting"
+    for w in which:
+        rows += _vetting_one(injection, injection.load(cadences()[w]), np.random.default_rng(seed + w), folder, say)
+    record = {"rows": rows, "reports": sorted(str(p) for p in folder.glob("*.md")), "kind": "measured"}
+    _keep("vetting", record)
+    return record
+
+
+def _vetting_one(injection, cad, rng, folder, say):
+    s = cad[0]["s"]
+    n_f = s["spectra"].shape[1]
+    f_of = lambda c: s["fch1"] + c * s["foff"]  # noqa: E731
+    nu = 0.45 / (f_of(n_f // 2) * 1e6)                        # the family's drift over frequency, 1/s
+    family = [int(n_f * q) for q in (0.18, 0.33, 0.62, 0.71, 0.86)]
+    lone = int(n_f * 0.45)
+    tones = [{"x0": lone + 0.2, "drift": -0.83, "s_in": 80, "bin": 2, "where": "on", "position": "middle",
+              "role": "lone"}]
+    for k, c in enumerate(family):
+        tones.append({"x0": c + float(rng.uniform(-0.5, 0.5)), "drift": nu * f_of(c) * 1e6, "s_in": 60, "bin": 1,
+                      "where": "on" if k == 2 else "all", "position": "middle",
+                      "role": "family, ON only" if k == 2 else "family, in all"})
+    out, events = injection.trial(cad, tones, vet=vet_hook(report_dir=folder))
+    rows = []
+    say(f"block at {s['fch1']:.3f} MHz:")
+    for t in out:
+        rows.append({k: t.get(k) for k in ("role", "x0", "drift", "s_in", "where", "found_on_looks", "label",
+                                           "off_snr_max", "verdict", "reasons")})
+        rows[-1]["block_fch1_mhz"] = s["fch1"]
+        say(f"{t['role']:>16}: drift {t['drift']:+.4f} Hz/s, found in {t['found_on_looks']} ON look(s), "
+            f"cadence {t['label']}, checks: {t['verdict']}")
+    return rows
+
+
+def setigen_check(say=print):
+    """Our planted signals against setigen's (Brzycki et al. 2022) for the
+    same tones on an empty frame: tools/setigen_frame.py makes setigen's in
+    turboSETI's environment (setigen 2.7 is installed there); here each
+    spectrum's profile, centroid and power are compared. setigen's data run
+    upward in frequency, Green Bank's downward, so its channels are turned
+    round first."""
+    import re
+    with tempfile.TemporaryDirectory() as tmp:
+        out = Path(tmp) / "setigen.npz"
+        done = subprocess.run([str(seti.TURBOSETI_PYTHON), "-I", str(yoke.ROOT / "tools" / "setigen_frame.py"),
+                               str(out)], capture_output=True, text=True, timeout=600)
+        if done.returncode:
+            raise yoke.Refusal("INTERNAL_ERROR", f"setigen failed: {done.stderr.strip()[-300:]}")
+        frames = dict(np.load(out))
+    version = subprocess.run([str(seti.TURBOSETI_PYTHON), "-c",
+                              "import importlib.metadata as m; print(m.version('setigen'))"],
+                             capture_output=True, text=True).stdout.strip()
+    src = (yoke.ROOT / "tools" / "setigen_frame.py").read_text(encoding="utf-8")
+    df, dt = (float(x) for x in re.search(r"DF, DT, FCH1 = ([\d.]+), ([\d.]+),", src).groups())
+    rows = []
+    for key, sg in frames.items():
+        c0, drift = (float(x) for x in key.split("_"))
+        sg = sg[:, ::-1]
+        ours = plant(np.zeros(sg.shape), [(c0, drift, 1.0)], dt, -df / 1e6)
+        corr = [float(np.corrcoef(a, b)[0, 1]) for a, b in zip(ours, sg)]
+        ch = np.arange(sg.shape[1])
+        cen = [float((a * ch).sum() / a.sum() - (b * ch).sum() / b.sum()) for a, b in zip(ours, sg)]
+        rows.append({"start_channel": c0, "drift_hz_s": drift, "correlation_min": round(min(corr), 4),
+                     "correlation_median": round(float(np.median(corr)), 4),
+                     "centroid_offset_channels": [round(min(cen), 3), round(max(cen), 3)],
+                     "power_ours_over_setigen": round(float(ours.sum() / sg.sum()), 4),
+                     "power_ours_over_h": round(float(ours.sum(axis=1).mean()), 4)})
+        say(f"start {c0}, {drift:+} Hz/s: profiles correlate {rows[-1]['correlation_min']} at the least; centroids "
+            f"{rows[-1]['centroid_offset_channels']} channels apart; power ours/setigen "
+            f"{rows[-1]['power_ours_over_setigen']}, ours/h {rows[-1]['power_ours_over_h']}")
+    record = {"setigen": version, "rows": rows, "kind": "measured",
+              "note": "setigen's sinc2_f_profile at level 1 carries about 8.5% less power than h; ours carries 0.96 "
+                      "to 1.00 of h (the sinc^2 tails beyond 4 channels are dropped): a difference of convention "
+                      "in setigen's profile, not of shape."}
+    _keep("setigen", record)
+    return record
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("what", choices=("desmear", "pairs", "kurtosis", "false", "scale", "noise"))
-    ap.add_argument("files", nargs="+")
+    ap.add_argument("what", choices=("desmear", "pairs", "kurtosis", "false", "scale", "noise", "cadence",
+                                     "vetting", "setigen"))
+    ap.add_argument("files", nargs="*")
     ap.add_argument("--json", action="store_true", help="answer in JSON")
     args = ap.parse_args()
     work = {"desmear": desmear, "pairs": pairs, "kurtosis": kurtosis, "false": false, "scale": scale,
-            "noise": noise}[args.what]
+            "noise": noise, "cadence": cadence, "vetting": lambda _files: vetting_demo(),
+            "setigen": lambda _files: setigen_check()}[args.what]
     yoke.main("measure", lambda: work(args.files), args.json)
 
 

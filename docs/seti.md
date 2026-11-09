@@ -56,10 +56,13 @@ How it reads (`reading.py`, 8 November 2026):
   bright signals do not make hits. 10 is turboSETI's default number, but
   not the same threshold: for the same signals turboSETI's SNR is 0.227 of
   this search's (measured below), so its cut of 10 is about 44 here.
-- `cadence` follows each hit of the first ON look to where its drift puts
-  it in the later looks. Found in every ON look and no OFF look, it is a
-  candidate; seen in any OFF look, interference; missing from an ON look,
-  unconfirmed.
+- `cadence` groups every ON look's hits into events and measures every
+  look along each event's track. Seen in every ON look (a hit, or S/N 5
+  along the track) and nowhere in the OFF looks (no S/N 6 along the track,
+  no hit of any strength), it is a candidate; seen in an OFF look,
+  interference; otherwise unconfirmed. "The cadence test" below.
+- `check.py` runs ten checks on each candidate (`vetting.py`; "The checks"
+  below) and writes a report with a picture of the six looks.
 
 ## What a candidate is
 
@@ -316,6 +319,134 @@ MHz). Version 1's hits and events stay in the store marked superseded, and
 each of its 24 events is linked to the new event that replaces it. About
 34 s a block (fetch 18 to 27 s, hidden; search 29 to 58 s; 120 CPU
 seconds; 2.3 GB peak): the whole cadence would take about 2.9 hours.
+
+## The cadence test (Phase 4, 9 November 2026)
+
+`onoff.py` is the cadence test since search version 3:
+
+- **Every ON look's hits at the cut are seeds**, not only the first look's:
+  a signal that starts in the second ON look is followed.
+- **Hits are matched by one distance**, one to one, closest first. A hit
+  is projected to the other look's start along its drift; the frequency
+  difference in channels over its tolerance (3 channels, plus half each
+  hit's box, plus the drift's error over the time between: half a drift
+  step or 2% of the drift, whichever is more), and the drift difference
+  in drift steps over its tolerance (2 steps plus 5% of the drift), are
+  added in quadrature; a match is 1 or less. The ±50% drift tolerance of
+  the old test is gone.
+- **Every look is measured along the event's track**, found or not: the
+  S/N of the summed line (box included) against the same line 60 to 1,900
+  channels to either side, the best within the matching tolerance. In an
+  ON look that is its drift fit; in an OFF look, its power with no
+  threshold.
+- **Interference** is any OFF look at S/N 6 or more along the track (where
+  the drift would put it, or where it started), or any hit there of any
+  strength, shadow hits from SNR 5 included. **A candidate** has no OFF
+  evidence, a hit at the cut in at least one ON look, and in every ON look
+  a hit or an S/N along the track of 5 or more. The rest are unconfirmed.
+- Recorded with each event: the OFF looks' brightest S/N, the ON looks'
+  faintest, the spread of the ON looks' drifts (flagged beyond 2 steps),
+  the largest ON/OFF stamp dot product (ATA's DOT score), and each look's
+  measurements. A candidate's six stamps are kept in the store.
+
+**The reference cadence** through it: the 2267.509 MHz tone is
+interference (OFF S/N 79, DOT 0.56); the weak 2269.557 MHz tone, which
+starts in the second ON look and so was never followed before, is
+interference too (OFF S/N 15); the three fast hits in the burst remain
+unconfirmed. 30 s for the six looks.
+
+**Planted in whole cadences** (`measure.py cadence`; the five saved
+cadences, three runs each, 32 signals in the ON looks only and 8 in all
+six looks a run; 9 November 2026). Of the ON-only signals the search
+found in a look, the share labelled candidate:
+
+| drift (Hz/s) | S_in 15 | S_in 30 | S_in 60 | S_in 120 |
+|---|---|---|---|---|
+| 0 to 0.15 | 96% | 100% | 100% | 100% |
+| 0.15 to 0.5 | 75% | 100% | 100% | 97% |
+| 0.5 to 1 | - | 90% | 97% | 97% |
+| 1 to 2 | - | 100% | 100% | 93% |
+| 2 to 4 | - | 100% | 93% | 93% |
+
+(30 signals a cell under 1 Hz/s, 15 above; "-": none found.) Of 370 ON-only signals found, 359 came
+out candidates; of the 11 that did not, 10 were vetoed by noise in an OFF
+look at S/N 5.2 to 6.5 (the best of noise over the matching window: median
+3.3, 99th percentile 5.4) and one fast signal (2.4 Hz/s) stayed
+unconfirmed. Every one of the 71 signals planted in all six looks and
+found came out interference, with OFF S/N 11.6 and more. The OFF level was
+then set at 6, where 2 of the 370 (0.5%) would be vetoed; Phase 6 measures
+it through the whole pipeline. Interference fainter than 6 in an OFF look
+is still caught by any hit there, down to SNR 5.
+
+## The checks (Phase 5, 9 November 2026)
+
+`vetting.py` runs ten checks on each candidate, after Sheikh et al.'s
+framework for blc1; `check.py` runs them on the store's current candidates
+and keeps every result in the `checks` table, a record in `data/checks/`
+and a report in `docs/leads/` with a picture of the six looks around the
+track. No check deletes a candidate. Each result has a strength: **shown**
+(the signal is demonstrably elsewhere), **indicated** (a strong sign short
+of proof), **coincidence possible** (a relation whose chance, at this many
+hits, is not small; the chance is recorded), or none.
+
+| # | check | strength it can give |
+|---|---|---|
+| 1 | data sanity: every look complete, stamps finite, no blank spectra | none (a weak verdict if not sound) |
+| 2 | the OFF looks below the threshold (the cadence test's S/N) | shown |
+| 3 | known Green Bank bands (16 bands: GNSS, Iridium, Inmarsat, ADS-B, cellular, space links, the S-band notch filter, Wi-Fi) | indicated |
+| 4 | zero or very low drift (under one drift step, 0.0102 Hz/s) | indicated |
+| 5 | drift against the Earth's (rotation and orbit, toward the target, at Green Bank) | recorded only |
+| 6 | recurrence at other targets and times in the store | shown within 3 days with drift agreeing; else indicated or coincidence possible |
+| 7 | look-alikes: the same drift over frequency (or its mirror) in the cadence, and whether they show in OFF looks | indicated, or coincidence possible |
+| 8 | harmonics (×2 to ×20, ÷2 to ÷20), clock spacings (2.000004 to 133.33 MHz) and intermodulation (a·f1 ± b·f2 of strong zero-drift hits), within 1 kHz | indicated, or coincidence possible |
+| 9 | crowding: hits in the MHz around it against the band's median | indicated at 10 times |
+| 10 | the report, with blc1's ten steps each marked automated, in part, or not possible here (re-observation: the project has no telescope); a Rio 2.0 score only for "unexplained, strong", by hand | |
+
+The verdict: **interference (shown)** if any check shows it; **likely
+interference (indicated)** if any indicates it; **unexplained, strong**
+if every ON look has a hit at the cut and the data are sound; otherwise
+**unexplained, weak**. "Unexplained" is the end of these checks, not a
+discovery: blc1 was unexplained until its look-alikes were found.
+
+Chance rates. For look-alikes (check 7) the chance is the Poisson chance
+of finding at least as many in the OFF looks as were found, when the
+expected number is the OFF hits at the cut times the share of the ±4 Hz/s
+drift range the tolerance covers (2 drift steps, over frequency, and its
+mirror). Near zero drift, where interference crowds, a look-alike is only
+ever a possible coincidence. For harmonics and intermodulation (check 8)
+the chance is the share of 200 random frequencies in the session's band
+that would find a relation too. A relation is "indicated" when its chance
+is under 5%.
+
+The Earth's drift (check 5) for Tabby's star (RA 20h06m15.45s, Dec
++44°27′24.6″) from Green Bank on 25 May 2017 at 2267.5 MHz is about
+−0.106 Hz/s (rotation −0.102, orbit −0.004).
+
+**Tested on planted signals** (`measure.py vetting`; reports in
+`data/measurements/vetting/`). In each of two cadences, a lone signal in
+the ON looks only, and a family of five signals sharing one drift over
+frequency (as harmonics of one oscillator would): four in all six looks,
+as interference, and one more in the ON looks only, as blc1 was.
+
+| block | signal | cadence test | the checks |
+|---|---|---|---|
+| 100 (2111-2114 MHz) | lone, −0.83 Hz/s | candidate | unexplained, strong |
+| 100 | family member in the ON looks only, +0.45 Hz/s | candidate | likely interference (indicated: look-alikes in the cadence: 12 in OFF looks where 0.12 were expected by chance) |
+| 100 | the four family members in all looks | interference | (not checked: not candidates) |
+| 153 (2266.7-2269.6 MHz) | lone | candidate | likely interference (indicated: in the 2200-2290 MHz space downlink band) |
+| 153 | family member in the ON looks only | candidate | likely interference (indicated: the band; look-alikes) |
+
+The family's lone ON member is caught by its look-alikes, as blc1 was; a
+lone signal in a clean band comes out unexplained, and in a band of known
+transmitters is marked, not dropped.
+
+What the checks cannot do from archive data: re-observe (blc1 step 10);
+compare with an observatory interference database (Green Bank publishes
+none in machine-readable form: the store becomes this project's); judge
+by eye whether look-alikes are one phenomenon (step 8 is automated only
+by the chance rates). Recurrence (check 6) sees only what the store holds:
+this cadence's OFF looks now, more as other sessions and targets are
+searched.
 
 ## Checked against turboSETI
 

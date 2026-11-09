@@ -148,11 +148,23 @@ CREATE TABLE IF NOT EXISTS events (
     f_start_mhz REAL,
     drift_hz_s REAL,
     snr REAL,
-    looks TEXT,                   -- JSON: per look, found or not, and the matched hit's SNR and drift
+    looks TEXT,                   -- JSON: per look: found (a hit), its SNR and drift, the S/N along the track,
+                                  -- OFF evidence, and seen (counted for the label)
+    seed_position INTEGER,        -- the look of the event's strongest hit
+    off_snr_max REAL,             -- the brightest OFF look along the track (S/N, no threshold)
+    on_snr_min REAL,              -- the faintest ON look (a hit's SNR, or the S/N along the track)
+    drift_spread_steps REAL,      -- the ON looks' drifts, max minus min, in drift steps
+    drift_flag INTEGER,           -- 1: the ON looks' drifts disagree by more than 2 steps
+    dot_max REAL,                 -- the largest ON/OFF stamp dot product (ATA's DOT score)
     superseded_run INTEGER,       -- NULL: current; else the run whose re-search replaced it
     supersedes_event_id INTEGER   -- the earlier event at the same place this one replaces
 );
 CREATE INDEX IF NOT EXISTS events_block ON events (session, block_idx);
+CREATE TABLE IF NOT EXISTS stamps (
+    event_id INTEGER PRIMARY KEY REFERENCES events(event_id),
+    shape TEXT,                   -- JSON: (looks, spectra, channels)
+    data BLOB                     -- float32: each look cut around the track, straightened along the drift
+);
 CREATE TABLE IF NOT EXISTS event_hits (
     event_id INTEGER REFERENCES events(event_id),
     position INTEGER,             -- the look, 0 to 5
@@ -180,7 +192,7 @@ CREATE TABLE IF NOT EXISTS injections (
     drift_hz_s REAL,
     snr_planted REAL,
     height REAL,                  -- raw units added a spectrum
-    found INTEGER,
+    found INTEGER,                -- whole pipeline: kept to the end (ON-only) / wrongly kept (in all)
     hit_snr REAL,
     hit_drift_hz_s REAL
 );
@@ -207,7 +219,11 @@ def connect(where=None):
 MIGRATIONS = [("runs", "search_version", "TEXT"), ("hits", "superseded_run", "INTEGER"),
               ("events", "superseded_run", "INTEGER"), ("events", "supersedes_event_id", "INTEGER"),
               ("hits", "box_channels", "INTEGER"), ("hits", "wide", "INTEGER"), ("hits", "noise_factor", "REAL"),
-              ("blocks", "shadow_hits", "INTEGER"), ("blocks", "complete", "INTEGER")]
+              ("blocks", "shadow_hits", "INTEGER"), ("blocks", "complete", "INTEGER"),
+              ("events", "seed_position", "INTEGER"), ("events", "off_snr_max", "REAL"),
+              ("events", "on_snr_min", "REAL"), ("events", "drift_spread_steps", "REAL"),
+              ("events", "drift_flag", "INTEGER"), ("events", "dot_max", "REAL"),
+              ("injections", "outcome", "TEXT"), ("injections", "placed", "TEXT")]
 
 
 def _migrate(db):
@@ -356,20 +372,30 @@ def save_block(db, run_id, session, block_idx, f_lo, f_hi, file_ids, looks_hits,
             ids.append(these)
         for e in events:
             matches = e.get("matches") or [None] * 6
-            looks = []
-            for pos, m in enumerate(matches):
-                hit = looks_hits[pos][m] if m is not None else None
-                looks.append({"position": pos, "found": m is not None,
-                              "snr": hit and hit["snr"], "drift_hz_s": hit and hit["drift_hz_s"]})
+            looks = e.get("looks")
+            if looks is None:
+                looks = []
+                for pos, m in enumerate(matches):
+                    hit = looks_hits[pos][m] if m is not None else None
+                    looks.append({"position": pos, "found": m is not None,
+                                  "snr": hit and hit["snr"], "drift_hz_s": hit and hit["drift_hz_s"]})
+            seed = e.get("seed_position", 0)
             before = next((o for o in earlier if same and same(o, e)), None)
             if before:
                 earlier.remove(before)
             cur = db.execute(
                 "INSERT INTO events (run_id, session, block_idx, seed_hit_id, label, f_start_mhz, drift_hz_s, snr,"
-                " looks, supersedes_event_id) VALUES (?,?,?,?,?,?,?,?,?,?)",
-                (run_id, session, block_idx, ids[0][matches[0]] if matches[0] is not None else None, e["label"],
-                 e["frequency_mhz"], e["drift_hz_s"], e["snr"], json.dumps(looks), before and before["event_id"]))
+                " looks, supersedes_event_id, seed_position, off_snr_max, on_snr_min, drift_spread_steps, drift_flag,"
+                " dot_max) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (run_id, session, block_idx, ids[seed][matches[seed]] if matches[seed] is not None else None,
+                 e["label"], e["frequency_mhz"], e["drift_hz_s"], e["snr"],
+                 json.dumps(looks, default=yoke.jsonable), before and before["event_id"], seed, e.get("off_snr_max"),
+                 e.get("on_snr_min"), e.get("drift_spread_steps"), _flag(e.get("drift_flag")), e.get("dot_max")))
             e["event_id"], e["supersedes_event_id"] = cur.lastrowid, before and before["event_id"]
+            if e["label"] == "candidate" and e.get("stamps") is not None:
+                st = e["stamps"].astype("float32")
+                db.execute("INSERT OR REPLACE INTO stamps (event_id, shape, data) VALUES (?,?,?)",
+                           (cur.lastrowid, json.dumps(list(st.shape)), st.tobytes()))
             for pos, m in enumerate(matches):
                 if m is not None:
                     db.execute("INSERT INTO event_hits (event_id, position, hit_id) VALUES (?,?,?)",
@@ -391,9 +417,10 @@ def save_injections(db, run_id, path, method, rows):
     with db:
         db.executemany(
             "INSERT INTO injections (run_id, file, method, channel, f_start_mhz, drift_hz_s, snr_planted, height,"
-            " found, hit_snr, hit_drift_hz_s) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            " found, hit_snr, hit_drift_hz_s, outcome, placed) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
             [(run_id, str(path), method, r["channel"], r["frequency_mhz"], r["drift_hz_s"], r["snr"], r["height"],
-              int(r["found"]), r.get("hit_snr"), r.get("hit_drift_hz_s")) for r in rows])
+              int(r["found"]), r.get("hit_snr"), r.get("hit_drift_hz_s"), r.get("outcome"), r.get("where"))
+             for r in rows])
 
 
 def save_check(db, lead, name, result, evidence, version, event_id=None, strength=None):

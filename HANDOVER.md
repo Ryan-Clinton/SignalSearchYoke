@@ -19,9 +19,13 @@ KIC 8462852.
 | `seti.py` | find, search, cadence, sweep, inject, benchmark |
 | `reading.py` | reading the archive's files over the web: chunk index, parallel range requests, retries, the request limit |
 | `searching.py` | the search on one look: band shape, desmeared drift sums, noise of the summed lines, hits picked and blanked, shadow hits, spectral kurtosis |
-| `measure.py` | the search measured on planted signals and real looks: desmearing, close pairs, kurtosis, false hits, the SNR scale against turboSETI |
+| `onoff.py` | the cadence test: events from every ON look's hits, every look measured along the track, the OFF test with no threshold |
+| `vetting.py` | the ten checks on a candidate (after blc1), with strengths, chance rates and a report |
+| `injection.py` | signals planted in whole cadences and followed through search, cadence test and checks |
+| `measure.py` | the search measured on planted signals and real looks: desmearing, close pairs, kurtosis, false hits, the SNR scale against turboSETI, the cadence test, the checks, setigen |
+| `tools/setigen_frame.py` | setigen's planted signals, run in turboSETI's environment, for `measure.py setigen` |
 | `store.py` | the hit store, `data/ssy.sqlite`: runs, files, blocks, hits, events, checks, injections |
-| `check.py` | the sweeps' candidates checked for signs of interference |
+| `check.py` | the ten checks run on the store's candidates: records, reports in `docs/leads/` |
 | `yoke.py` | the data folder, the `--json` envelope, writing a record whole |
 | `docs/seti.md` | how the search works, and everything measured so far |
 | `docs/overhaul.md` | the plan to bring the search up to the published searches' standard (8 Nov 2026) |
@@ -41,9 +45,11 @@ settings file.
 ./seti.py search URL --from 2250 --to 2253        narrowband hits in one look's slice
 ./seti.py cadence ON1 OFF1 ON2 OFF2 ON3 OFF3 --from 2250 --to 2253
 ./seti.py sweep KIC8462852 --blocks N             the next N blocks of the target's whole cadence (--threads 1-8, default 6)
-./seti.py inject FILE                             signals planted in a saved slice's noise, counted back
+./seti.py inject                                  signals planted in the saved cadences, through everything (Phase 6)
+./seti.py inject --legacy FILE                    the old one-channel planting (superseded)
 ./seti.py benchmark FILE...                       saved slices through this search and turboSETI
-./check.py [--all]                                the sweeps' candidates looked into
+./check.py [--all] [--event ID]                   the ten checks on the store's candidates (or one event)
+./measure.py WHAT [FILE...]                       desmear, pairs, kurtosis, false, scale, noise, cadence, vetting, setigen
 ```
 
 `search` and `cadence` take `--keep DIR` to save each slice read (a small

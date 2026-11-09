@@ -1,139 +1,146 @@
 #!/usr/bin/env python3
-"""Look into the sweeps' candidates: each one's signs of interference,
-with the evidence, kept as a record and a report.
+"""The checks on the sweeps' candidates (vetting.py says which and how),
+each kept in the store's `checks` table, with a record and a report.
 
-    ./check.py              every candidate in the sweeps not yet looked into
-    ./check.py --all        all of them again
+    ./check.py                every current candidate not yet checked by this version of the checks
+    ./check.py --all          every current candidate again
+    ./check.py --event ID     one event of the store, whatever its label (to see the checks at work)
     ./check.py --json
 
-A candidate (seti.py: in every ON look, in no OFF look) is checked against
-the bands satellites and ground transmitters use (ITU Radio Regulations,
-Article 5) and for a drift of zero, which is what a transmitter fixed to
-the ground gives. A sign is not proof: an allocated band does not say
-which transmitter made it, and a zero drift is not proof of a ground
-transmitter. The verdict is "likely interference" with its signs, or
-"unexplained, weak". Only the same signal checked in another session of
-the star, in a different star, or against a known transmitter says more.
+A candidate (onoff.py: seen in every ON look along its track, nowhere in the
+OFF looks) goes through ten checks after blc1's framework: data sanity, the
+OFF looks below the threshold, known bands, zero drift, the Earth's drift,
+recurrence elsewhere, look-alikes, harmonics and intermodulation, crowding,
+and a report. Each check's result is "shown", "indicated", "coincidence
+possible" or nothing; none deletes a candidate. The verdict is
+"interference", "likely interference", "unexplained, strong" or
+"unexplained, weak". "Unexplained" is the end of these checks, not a
+discovery.
 
-Records: data/checks/LEAD.json; reports: docs/leads/LEAD.md.
+Records: data/checks/LEAD.json; reports: docs/leads/LEAD.md (with a PNG of
+the six looks around the track).
 """
 import argparse
 import json
-from datetime import datetime, timezone
+
+import numpy as np
 
 import store
+import vetting
 import yoke
 
 REPORTS = yoke.ROOT / "docs" / "leads"
-CHECK_VERSION = "1"
-
-# Bands satellites and the ground transmit in (ITU Radio Regulations,
-# Article 5), MHz: a hit inside one is most likely one of them.
-SATELLITE_BANDS = [
-    (1164.0, 1189.0, "GPS L5 / Galileo E5a"), (1215.0, 1240.0, "GPS L2 / Galileo E6"),
-    (1525.0, 1559.0, "Inmarsat and other mobile satellites"), (1559.0, 1610.0, "GPS L1, GLONASS, Galileo, BeiDou"),
-    (1610.0, 1626.5, "Iridium and Globalstar"), (1670.0, 1710.0, "weather satellites"),
-    (2200.0, 2290.0, "space operation and research downlinks"), (2320.0, 2345.0, "satellite radio (SDARS)"),
-    (2400.0, 2483.5, "Wi-Fi and the ISM band"), (2483.5, 2500.0, "Globalstar downlinks")]
 
 
-def lead_id(lead):
-    return f"SETI-{lead['target']}-{lead.get('session') or 'unknown'}-{lead['frequency_mhz']:.6f}"
-
-
-def signal_id(lead):
-    """What links detections that may be one signal: the target and the
-    frequency to the kHz, whatever session saw it (drift moves a signal by
-    well under a kHz over a cadence)."""
-    return f"{lead['target']}-{lead['frequency_mhz']:.3f}"
+def lead_id(target, session, f_mhz):
+    return f"SETI-{target}-{session}-{f_mhz:.6f}"
 
 
 def records_dir():
     return yoke.DATA / "checks"
 
 
-def done():
-    """Every candidate looked into, by its id: its kept record."""
-    return {p.stem: json.loads(p.read_text(encoding="utf-8")) for p in sorted(records_dir().glob("*.json"))}
+def _cadence(db, session, block_idx):
+    """The block's six looks from the store: LookInfo each, and a map from
+    hit id to (position, index)."""
+    files = {r["file_id"]: dict(r) for r in db.execute(
+        "SELECT * FROM files WHERE session=? AND cadence_position IS NOT NULL", (session,))}
+    by_pos = {f["cadence_position"]: f for f in files.values()}
+    complete = {r["position"]: r["complete"] for r in db.execute(
+        "SELECT position, complete FROM looks WHERE session=? AND block_idx=? AND superseded_run IS NULL",
+        (session, block_idx))}
+    looks, where = [], {}
+    for pos in range(6):
+        f = by_pos[pos]
+        rows = db.execute("SELECT * FROM hits WHERE session=? AND block_idx=? AND file_id=? AND superseded_run IS NULL"
+                          " ORDER BY hit_id", (session, block_idx, f["file_id"])).fetchall()
+        hits = []
+        for i, h in enumerate(rows):
+            where[h["hit_id"]] = (pos, i)
+            hits.append({"frequency_mhz": h["f_start_mhz"], "drift_hz_s": h["drift_hz_s"], "snr": h["snr"],
+                         "shadow": h["origin"] == "shadow", "box_channels": h["box_channels"] or 1})
+        width = abs(f["foff_mhz"]) * 1e6
+        span = max((f["n_spectra"] or 16) - 1, 1) * f["tsamp_s"]
+        looks.append(vetting.LookInfo(hits, f["tstart_mjd"], pos, width / span, width,
+                                      bool(complete.get(pos, 1) if complete.get(pos) is not None else True)))
+    return looks, where, by_pos
 
 
-def leads():
-    """Every candidate in the sweeps' records, strongest first. Hits labelled
-    interference or unconfirmed are left in the sweep's record."""
-    out = []
-    for path in sorted((yoke.DATA / "sweeps").glob("*.json")):
-        kept = json.loads(path.read_text(encoding="utf-8"))
-        target, session = path.stem.rsplit("-", 1) if "-" in path.stem else (path.stem, "")
-        for block in kept.get("done", {}).values():
-            for e in block.get("events", []):
-                if e.get("label", "candidate") != "candidate":
-                    continue
-                out.append({"target": target, "session": session, **e, "signal": signal_id({"target": target, **e})})
-    return sorted(out, key=lambda e: -e.get("snr", 0))
+def _event(db, row, where):
+    e = {"event_id": row["event_id"], "frequency_mhz": row["f_start_mhz"], "drift_hz_s": row["drift_hz_s"],
+         "snr": row["snr"], "label": row["label"], "looks": json.loads(row["looks"] or "[]"),
+         "seed_position": row["seed_position"] or 0, "off_snr_max": row["off_snr_max"],
+         "on_snr_min": row["on_snr_min"], "dot_max": row["dot_max"], "drift_spread_steps": row["drift_spread_steps"],
+         "drift_flag": bool(row["drift_flag"]), "supersedes_event_id": row["supersedes_event_id"]}
+    matches = [None] * 6
+    for link in db.execute("SELECT position, hit_id FROM event_hits WHERE event_id=?", (row["event_id"],)):
+        if link["hit_id"] in where:
+            matches[link["position"]] = where[link["hit_id"]][1]
+    e["matches"] = matches
+    st = db.execute("SELECT shape, data FROM stamps WHERE event_id=?", (row["event_id"],)).fetchone()
+    e["stamps"] = np.frombuffer(st["data"], np.float32).reshape(json.loads(st["shape"])) if st else None
+    seed = db.execute("SELECT flagged_fraction FROM hits WHERE hit_id=?", (row["seed_hit_id"],)).fetchone()
+    e["flagged_fraction"] = seed["flagged_fraction"] if seed else None
+    return e
 
 
-def check(lead):
-    """One candidate's signs of interference, each with its evidence."""
-    f = lead["frequency_mhz"]
-    band = next((b for b in SATELLITE_BANDS if b[0] <= f <= b[1]), None)
-    signs = []
-    if band:
-        signs.append(f"{f:.6f} MHz is in {band[2]} ({band[0]:g} to {band[1]:g} MHz, ITU Radio Regulations "
-                     f"Article 5): such transmitters are common there, though the band alone does not name one")
-    drift = lead.get("drift_hz_s", 0.0) or 0.0
-    if abs(drift) < 1e-3:
-        signs.append(f"a drift of {drift:g} Hz/s: what a transmitter fixed to the ground gives (Breakthrough "
-                     "Listen sets zero-drift hits aside for this reason, Enriquez et al. 2017), not proof of one")
-    seen = (f"seen in all {len(lead['in_on'])} ON looks and none of the {len(lead.get('in_off', []))} OFF looks"
-            if lead.get("in_on") else "passed the ON/OFF test")
-    return {"lead": lead_id(lead), "signal": signal_id(lead), "star": lead["target"], "frequency_mhz": f,
-            "drift_hz_s": lead.get("drift_hz_s"), "snr": lead.get("snr"), "session": lead.get("session"),
-            "band": band and band[2], "verdict": "likely interference" if signs else "unexplained, weak",
-            "likely_because": signs,
-            "notes": [seen + ".", "to settle it: the same frequency in another session of this star or a "
-                      "different star (./seti.py find), and the known transmitters at that frequency"],
-            "checked": datetime.now(timezone.utc).isoformat(timespec="seconds")}
-
-
-def report(r):
-    lines = [f"# {r['star']} at {r['frequency_mhz']:.6f} MHz: {r['verdict']}", "",
-             f"Looked into by `check.py` on {r['checked'][:10]} (`{r['lead']}`, signal `{r['signal']}`). "
-             "\"Unexplained\" is the end of these checks, not a discovery.", "",
-             f"- Session {r['session']}, SNR {r['snr']}, drift {r['drift_hz_s']} Hz/s",
-             f"- Band (ITU Radio Regulations, Article 5): {r['band'] or 'none listed here'}", "", "## The verdict", "",
-             f"**{r['verdict']}**", ""]
-    lines += [f"- sign of interference: {why}" for why in r["likely_because"]]
-    lines += [f"- {note}" for note in r["notes"]]
-    return "\n".join(lines) + "\n"
+def check_event(db, row, say=print, report_dir=REPORTS):
+    session, block_idx = row["session"], row["block_idx"]
+    looks, where, by_pos = _cadence(db, session, block_idx)
+    e = _event(db, row, where)
+    on = by_pos[0]
+    target = {"name": on["cadence_target"] or on["target"], "ra_hours": on["ra_hours"], "dec_deg": on["dec_degrees"]}
+    own = {h for h in (r["hit_id"] for r in db.execute("SELECT hit_id FROM event_hits WHERE event_id=?",
+                                                         (row["event_id"],)))}
+    others = [{"frequency_mhz": h["f_start_mhz"], "drift_hz_s": h["drift_hz_s"], "snr": h["snr"],
+               "mjd": h["tstart_mjd"], "target": h["target"], "session": h["session"],
+               "shadow": h["origin"] == "shadow"}
+              for h in db.execute(
+                  "SELECT h.hit_id, h.f_start_mhz, h.drift_hz_s, h.snr, h.origin, h.session, f.tstart_mjd, f.target,"
+                  " f.cadence_position FROM hits h JOIN files f ON f.file_id = h.file_id"
+                  " WHERE h.superseded_run IS NULL AND h.f_start_mhz BETWEEN ? AND ?"
+                  " AND (f.is_on = 0 OR f.session != ?)", (e["frequency_mhz"] - 0.012, e["frequency_mhz"] + 0.012,
+                                                          session))
+              if h["hit_id"] not in own]
+    session_hits = [{"frequency_mhz": h["f_start_mhz"], "drift_hz_s": h["drift_hz_s"], "snr": h["snr"]}
+                    for h in db.execute("SELECT f_start_mhz, drift_hz_s, snr FROM hits WHERE session=? AND"
+                                        " superseded_run IS NULL AND origin='search'", (session,))]
+    lead = lead_id(target["name"], session, e["frequency_mhz"])
+    result = vetting.vet(e, looks, target, others, session_hits, report_dir=report_dir, lead=lead)
+    for c in result["checks"]:
+        store.save_check(db, lead, f"{c['n']}. {c['name']}", c["result"], c["evidence"], vetting.VERSION,
+                         event_id=row["event_id"], strength=c["strength"])
+    record = {"lead": lead, "event_id": row["event_id"], "session": session, "block": block_idx,
+              "frequency_mhz": e["frequency_mhz"], "drift_hz_s": e["drift_hz_s"], "snr": e["snr"],
+              "label": e["label"], "supersedes_event_id": e["supersedes_event_id"], **result}
+    yoke.write(records_dir() / f"{lead}.json", record)
+    say(f"{lead} (event {row['event_id']}, {e['label']}): {result['verdict']}")
+    return record
 
 
 def run(args, say=print):
-    taken = {} if args.all else done()
-    fresh = [lead for lead in leads() if lead_id(lead) not in taken]
-    out = []
-    db = store.connect() if fresh else None
-    for lead in fresh:
-        r = check(lead)
-        yoke.write(records_dir() / f"{r['lead']}.json", r)
-        store.save_check(db, r["lead"], "bands and zero drift", r["verdict"],
-                         {"band": r["band"], "signs": r["likely_because"],
-                          "supersedes_event_id": lead.get("supersedes_event_id")},
-                         CHECK_VERSION, event_id=lead.get("event_id"),
-                         strength="indicated" if r["likely_because"] else None)
-        REPORTS.mkdir(parents=True, exist_ok=True)
-        (REPORTS / f"{r['lead']}.md").write_text(report(r), encoding="utf-8")
-        say(f"{r['star']} {r['frequency_mhz']:.6f} MHz: {r['verdict']}")
-        out.append(r)
-    if db:
-        db.close()
-    if not fresh:
-        say("No candidate waiting: every one in the sweeps has been looked into.")
-    return {"checked": out, "candidates": len(leads())}
+    db = store.connect()
+    if args.event:
+        rows = db.execute("SELECT * FROM events WHERE event_id=?", (args.event,)).fetchall()
+    else:
+        rows = db.execute("SELECT * FROM events WHERE label='candidate' AND superseded_run IS NULL"
+                          " ORDER BY snr DESC").fetchall()
+        if not args.all:
+            done = {r["event_id"] for r in db.execute("SELECT DISTINCT event_id FROM checks WHERE version=?",
+                                                       (vetting.VERSION,))}
+            rows = [r for r in rows if r["event_id"] not in done]
+    out = [check_event(db, r, say) for r in rows]
+    if not rows:
+        say("No candidate waiting: every current candidate has been checked by this version of the checks.")
+    count = db.execute("SELECT count(*) FROM events WHERE label='candidate' AND superseded_run IS NULL").fetchone()[0]
+    db.close()
+    return {"checked": out, "candidates": count}
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--all", action="store_true", help="look into every candidate again")
+    ap.add_argument("--all", action="store_true", help="check every current candidate again")
+    ap.add_argument("--event", type=int, help="check this one event of the store, whatever its label")
     ap.add_argument("--json", action="store_true", help="answer in JSON")
     args = ap.parse_args()
     yoke.main("check", lambda: run(args), args.json)

@@ -364,6 +364,17 @@ units, as `store.py` says.
 - the reference cadence's known interference (2267.509 MHz) is still
   interference.
 
+**Done, 9 November 2026** (`onoff.py`, search version 3; `docs/seti.md`,
+"The cadence test"): seeds from every ON look; one-to-one matching by one
+stated distance; every look measured along the track; the OFF test with
+no threshold, OFF level 6 set from planted signals; the per-look drift fit
+and its flag; the DOT score. Planted in five cadences: 359 of 370 ON-only
+signals found came out candidates (10 vetoed by noise at the then OFF level
+of 5, which then rose to 6; one fast signal unconfirmed); 71 of 71 signals
+planted in all six looks came out interference; 2267.509 MHz is still
+interference, and 2269.557 MHz, which starts in the second ON look, now is
+too.
+
 ### Phase 5: vetting (`check.py` rebuilt)
 
 Each candidate is run through these checks in order. Every result is stored
@@ -407,6 +418,16 @@ Only a "shown" result makes "interference" on its own.
 
 **Done when:** a planted candidate and a planted look-alike family produce
 reports with every check filled, and the family is caught by check 7 or 8.
+
+**Done, 9 November 2026** (`vetting.py`, `check.py`; `docs/seti.md`,
+"The checks"): the ten checks with strengths and chance rates, records in
+the store's `checks` table, reports with a PNG of the six looks. In block
+100 a lone planted signal came out "unexplained, strong" and a look-alike
+family's ON-only member "likely interference" by check 7 (12 look-alikes in
+the OFF looks where 0.12 were expected); in block 153 both were marked by
+the band they sit in (2200-2290 MHz downlinks), the family member by check
+7 too. Not automated: re-observation (impossible here), an observatory
+interference database (none published), and judging look-alikes by eye.
 
 ### Phase 6: completeness, measured properly
 

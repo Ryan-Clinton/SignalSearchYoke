@@ -58,6 +58,7 @@ from urllib.parse import unquote
 import numpy as np
 import requests
 
+import onoff
 import reading
 import searching
 import store
@@ -78,8 +79,10 @@ EDGE_FRACTION = 0.05            # a hit this near a coarse channel's end (as a s
 # The search's version, kept with every run: change it whenever what the
 # search finds can change, so results of different versions are told apart.
 # 1: brute-force drift sum, block MAD noise per spectrum x sqrt(16), run-chained hits (8 Nov 2026).
-SEARCH_VERSION = ("2 (boxcar desmearing, noise of the summed lines, hits picked and blanked one at a time, "
-                  "shadow hits to SNR 5, spectral kurtosis flags; 9 Nov 2026)")
+# 2: boxcar desmearing, noise of the summed lines, hits picked and blanked one at a time, shadow hits to
+#    SNR 5, spectral kurtosis flags (9 Nov 2026).
+SEARCH_VERSION = ("3 (search 2; cadence test 2: seeds from every ON look, one-to-one matching by one distance, "
+                  "every look measured along the track, OFF test below the threshold, DOT score; 9 Nov 2026)")
 
 
 def _utc(mjd):
@@ -310,6 +313,7 @@ def look(source, low, high, say=print, read=read_slice, keep=None):
         save(s, Path(keep) / (Path(str(source)).name.replace(".h5", "") + f"_{low:g}-{high:g}.h5"))
     details = {}
     hits = describe(search(s["spectra"], s["foff"], s["tsamp"], s["fch1"], details=details), s)
+    s["flat"] = details.pop("flat")
     cut = at_cut(hits)
     n_t, n_f = s["spectra"].shape
     answer = {"source": str(source), "target": s["target"], "from_mhz": low, "to_mhz": high, "channels": n_f,
@@ -330,54 +334,11 @@ def look(source, low, high, say=print, read=read_slice, keep=None):
     return answer, hits, s
 
 
-def _near(hits, frequency, window_mhz, drift=None, drift_tolerance=None):
-    """The first hit at the cut near `frequency` (and `drift`): its index,
-    or None. Shadow hits are evidence for later checks, not matches here."""
-    for i, h in enumerate(hits):
-        if h.get("shadow"):
-            continue
-        if abs(h["frequency_mhz"] - frequency) <= window_mhz and (
-                drift is None or abs(h["drift_hz_s"] - drift) <= drift_tolerance):
-            return i
-    return None
-
-
-def judge(looks):
-    """The ON, OFF, ON, OFF, ON, OFF test on six looks' hits. `looks` are
-    (hits, tstart MJD, channel width Hz, seconds) in cadence order; each
-    hit of the first ON look at the cut is followed to where its drift puts
-    it in each later look. Found in every ON and no OFF: a candidate. Each
-    event keeps `matches`: for each look, the index of the hit matched there
-    (in that look's whole list, shadow hits included), or None."""
-    first_hits, t0, width_hz, seconds = looks[0]
-    events = []
-    for seed, h in enumerate(first_hits):
-        if h.get("shadow"):
-            continue
-        drift = h["drift_hz_s"]
-        tolerance = max(0.5 * abs(drift), 2 * width_hz / max(seconds, 1e-9))
-        in_on, in_off, matches = [True], [], [seed]
-        for j, (hits, tstart, _, secs) in enumerate(looks[1:], start=1):
-            later = (tstart - t0) * 86400
-            expected = h["frequency_mhz"] + drift * later / 1e6
-            window = (WINDOW_CHANNELS * width_hz + abs(drift) * secs) / 1e6
-            if j % 2:   # an OFF look: anything near where it should be, or where it started, is ours
-                m = _near(hits, expected, window)
-                m = m if m is not None else _near(hits, h["frequency_mhz"], window)
-                in_off.append(m is not None)
-            else:
-                m = _near(hits, expected, window, drift, tolerance)
-                in_on.append(m is not None)
-            matches.append(m)
-        label = "interference" if any(in_off) else "candidate" if all(in_on) else "unconfirmed"
-        events.append(dict(h, label=label, in_on=in_on, in_off=in_off, matches=matches))
-    return events
-
-
 def cadence(sources, low, high, say=print, read=read_slice, keep=None, every_hit=False):
-    """The six looks searched, then judged together. Read over the web, the
-    six are fetched at once; the six searches run side by side. With
-    `every_hit`, the answer also carries each look's every hit (`_looks`)."""
+    """The six looks searched, then judged together (onoff.py says how).
+    Read over the web, the six are fetched at once; the six searches run
+    side by side. With `every_hit`, the answer also carries each look's
+    every hit (`_looks`) and the events in full (`_events`)."""
     if len(sources) != 6:
         raise yoke.Refusal("INVALID_REQUEST", "A cadence is six looks: ON, OFF, ON, OFF, ON, OFF.")
     if read is read_slice and all(_web(s) for s in sources):
@@ -387,18 +348,21 @@ def cadence(sources, low, high, say=print, read=read_slice, keep=None, every_hit
         done = list(pool.map(lambda source: look(source, low, high, say=lambda *_: None, read=read, keep=keep),
                              sources))
     scans, looks = [], []
+    done_looks = []
     for k, (source, (answer, hits, s)) in enumerate(zip(sources, done)):
         scans.append({"source": str(source), "target": s["target"], "on": k % 2 == 0, "hit_count": answer["hit_count"],
                       "shadow_count": answer["shadow_count"], "complete": answer["complete"],
                       "unpicked": answer["unpicked"], "noise_ratio": answer["noise_ratio"],
                       "flagged_channels": answer["flagged_channels"], "fetched_mb": s["fetched_mb"]})
-        looks.append((hits, s["tstart"], abs(s["foff"]) * 1e6, answer["seconds"]))
-    events = judge(looks)
+        looks.append(onoff.Look(hits, s["tstart"], s["fch1"], s["foff"], s["tsamp"], s.pop("flat"), k))
+        done_looks.append(looks[-1])
+    events = onoff.judge(looks)
     count = {label: sum(e["label"] == label for e in events) for label in ("candidate", "interference", "unconfirmed")}
-    note = ("A candidate is found in every ON look where its drift puts it and in no OFF look. It is then checked "
-            "against known interference and the published searches of these data: a candidate is never a signal "
-            "from anyone until all of that is done, and so far every one has been ours.")
-    say(f"{low:g} to {high:g} MHz, {len(events)} hit(s) at the cut in the first ON look: {count['candidate']} candidate(s), "
+    note = ("A candidate is seen in every ON look where its drift puts it (a hit, or its track at S/N 5 or more) "
+            "and nowhere in the OFF looks (no hit of any strength, no track at S/N 5). It is then checked against "
+            "known interference and the published searches of these data: a candidate is never a signal from anyone "
+            "until all of that is done, and so far every one has been ours.")
+    say(f"{low:g} to {high:g} MHz, {len(events)} event(s) from the ON looks' hits: {count['candidate']} candidate(s), "
         f"{count['interference']} seen in an OFF look too (interference), {count['unconfirmed']} not in every ON look")
     for e in [e for e in events if e["label"] == "candidate"][:10]:
         say(f"  candidate {e['frequency_mhz']:.6f} MHz  drift {e['drift_hz_s']:+.4f} Hz/s  SNR {e['snr']:g}")
@@ -407,11 +371,13 @@ def cadence(sources, low, high, say=print, read=read_slice, keep=None, every_hit
     answer = {"from_mhz": low, "to_mhz": high, "scans": scans, "complete": all(sc["complete"] for sc in scans),
               "candidates": count["candidate"],
               "interference": count["interference"], "unconfirmed": count["unconfirmed"],
-              "events": [{k: v for k, v in e.items() if k != "matches"}
+              "events": [{k: v for k, v in e.items() if k not in ("matches", "stamps")}
                          for e in sorted(events, key=lambda e: (order[e["label"]], -e["snr"]))[:MAX_LISTED]],
               "note": note, "kind": "measured"}
     if every_hit:
-        answer["_looks"], answer["_events"] = [lk[0] for lk in looks], events
+        answer["_looks"], answer["_events"] = [lk.hits for lk in done_looks], events
+    for lk in done_looks:
+        lk.flat = None
     return answer
 
 
@@ -566,9 +532,10 @@ def export(db, target, session, block_list):
             looks = json.loads(e["looks"])
             events.append({"event_id": e["event_id"], "supersedes_event_id": e["supersedes_event_id"],
                            "frequency_mhz": e["f_start_mhz"], "drift_hz_s": e["drift_hz_s"],
-                           "snr": e["snr"], "label": e["label"],
-                           "in_on": [lk["found"] for lk in looks if lk["position"] % 2 == 0],
-                           "in_off": [lk["found"] for lk in looks if lk["position"] % 2 == 1]})
+                           "snr": e["snr"], "label": e["label"], "off_snr_max": e["off_snr_max"],
+                           "on_snr_min": e["on_snr_min"], "dot_max": e["dot_max"],
+                           "in_on": [lk.get("seen", lk["found"]) for lk in looks if lk["position"] % 2 == 0],
+                           "in_off": [lk.get("seen", lk["found"]) for lk in looks if lk["position"] % 2 == 1]})
         done[str(k)] = {"from_mhz": b["f_lo_mhz"], "to_mhz": b["f_hi_mhz"], "hits": b["hits"],
                         "candidates": b["candidates"], "interference": b["interference"],
                         "unconfirmed": b["unconfirmed"], "events": events, "searched": b["searched_utc"],
@@ -678,6 +645,61 @@ def plant(spectra, tones, tsamp, width_hz):
             if 0 <= at < out.shape[1]:
                 out[t, at] += height
     return out
+
+
+def completeness(files=(), runs=13, false_too=True, say=print):
+    """How complete the whole pipeline is (Phase 6): signals as the sky
+    makes them planted in the ON looks of whole saved cadences, through the
+    search, the cadence test and the checks, by drift bin and strength,
+    with the loss at each stage; signals planted in all six looks, how
+    often wrongly kept; and how many candidates the pipeline makes where
+    none can be (every other choice of three ON looks). injection.py and
+    measure.py say how. Kept in data/measurements/completeness.json and the
+    store's injections table."""
+    import injection
+    import measure
+    groups = [list(files[i:i + 6]) for i in range(0, len(files), 6)] if files else measure.cadences()
+    hook = measure.vet_hook()
+    rows = injection.study(groups, runs, vet=hook, say=say)
+    first = read_slice(groups[0][0], -1e12, 1e12)
+    n_t = first["spectra"].shape[0]
+    tables = injection.tables(rows, n_t, abs(first["foff"]) * 1e6, first["tsamp"])
+    record = {"cadences": [g[0] for g in groups], "runs": runs, "signals": len(rows), "tables": tables,
+              "sefd_jy": injection.SEFD_JY, "method": PLANTING, "rows": rows, "kind": "measured"}
+    if false_too:
+        record["false_candidates"] = injection.false_candidates(groups, vet=hook, say=say)
+    yoke.write(yoke.DATA / "measurements" / "completeness.json", record, stamp=True)
+    db = store.connect()
+    run_id = store.start_run(db, f"inject --runs {runs}", dict(search_params(), runs=runs), SEARCH_VERSION)
+    store.save_injections(db, run_id, ";".join(g[0] for g in groups), PLANTING,
+                          [{"channel": int(t["x0"]), "frequency_mhz": None, "drift_hz_s": t["drift"], "snr": t["s_in"],
+                            "height": None, "found": injection.kept(t) if t["where"] == "on" else
+                            t["label"] == "candidate", "hit_snr": None, "hit_drift_hz_s": None,
+                            "outcome": (t["label"] or "not found") + (f"; {t['verdict']}" if t.get("verdict") else ""),
+                            "where": t["where"]} for t in rows])
+    store.finish_run(db, run_id)
+    db.close()
+    say("\nKept to the end (a candidate the checks do not call interference), ON-only signals, by drift and S_in:")
+    for c in tables["by_cell"]:
+        say(f"  {c['drift_hz_s'][0]:4.2f}-{c['drift_hz_s'][1]:4.2f} Hz/s, S_in {c['s_in']:>3} ({c['flux_jy_hz']:>5} Jy Hz): "
+            f"{c['kept']}/{c['planted']} {c['kept_interval']}; lost at search {c['lost_at']['search']}, "
+            f"cadence {c['lost_at']['cadence']}, checks {c['lost_at']['checks']}")
+    for p in tables["by_position"]:
+        say(f"  position {p['position']}: {p['kept']}/{p['planted']} {p['kept_interval']}")
+    if tables["in_all"]:
+        a = tables["in_all"]
+        say(f"  planted in all six looks: {a['kept_as_candidate']} of {a['found_in_a_look']} found kept as candidates")
+    if false_too:
+        fc = record["false_candidates"]
+        say(f"  false candidates: {sum(x['candidates'] for x in fc)} in {len(fc)} cadences judged with the wrong "
+            f"ON looks; after the checks, {sum(x['survivors'] for x in fc)} not called interference, "
+            f"{sum(x['unexplained'] for x in fc)} unexplained")
+    return {k: v for k, v in record.items() if k != "rows"}
+
+
+PLANTING = ("measure.plant: a tone drifting through each spectrum (32 steps), sinc^2 channel response, random "
+            "place in a channel, strength from each look's own noise; planted in the ON looks at the place its "
+            "drift carries it to; through search, cadence test and checks")
 
 
 def inject(path, snrs=INJECT_SNRS, count=INJECT_COUNT, seed=0, say=print, read=read_slice, record=False):
@@ -857,8 +879,10 @@ def run(args, say=print):
             raise yoke.Refusal("INVALID_REQUEST", "sweep takes one target (KIC8462852).")
         return sweep(args.what[0], args.blocks, say=say)
     if args.action == "inject":
-        return [inject(p, say=say, record=True) for p in args.what][-1] if len(args.what) == 1 else \
-            {"files": [inject(p, say=say, record=True) for p in args.what], "kind": "measured"}
+        if args.legacy:
+            return [inject(p, say=say, record=True) for p in args.what][-1] if len(args.what) == 1 else \
+                {"files": [inject(p, say=say, record=True) for p in args.what], "kind": "measured"}
+        return completeness(args.what, runs=args.runs, false_too=not args.no_false, say=say)
     if args.action == "benchmark":
         return benchmark(args.what, say=say)
     if args.low is None or args.high is None:
@@ -874,7 +898,8 @@ def run(args, say=print):
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("action", choices=("find", "search", "cadence", "sweep", "benchmark", "inject"))
-    ap.add_argument("what", nargs="+", help="find: a target; search: one look (file or URL); cadence: six looks")
+    ap.add_argument("what", nargs="*", help="find: a target; search: one look (file or URL); cadence: six looks; "
+                                            "inject: six saved looks per cadence (default: data/reference's)")
     ap.add_argument("--from", dest="low", type=float, help="MHz: the bottom of the slice")
     ap.add_argument("--to", dest="high", type=float, help="MHz: the top of the slice")
     ap.add_argument("--blocks", type=int, default=1, help="sweep: blocks of 2.9 MHz to search this run (default 1)")
@@ -882,8 +907,13 @@ def main():
     ap.add_argument("--threads", type=int, default=reading.THREADS,
                     help=f"requests to the archive in flight at once (default {reading.THREADS}, "
                          f"at most {reading.MAX_THREADS})")
+    ap.add_argument("--runs", type=int, default=13, help="inject: trials of 41 signals per cadence (default 13)")
+    ap.add_argument("--no-false", action="store_true", help="inject: leave out the false-candidate count")
+    ap.add_argument("--legacy", action="store_true", help="inject: the old one-channel planting on one look's file")
     ap.add_argument("--json", action="store_true", help="answer in JSON")
     args = ap.parse_args()
+    if not args.what and args.action != "inject":
+        ap.error("give what to act on")
     yoke.main("seti", lambda: run(args), args.json)
 
 
