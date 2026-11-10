@@ -192,10 +192,12 @@ the default place.
   page written (above). A sweep searches blocks done by an older search
   version again first. comparable.md step 3 is done (9 November 2026,
   13:05 to 15:06 UTC): turboSETI and pickles over all 308 blocks, every
-  disagreement explained in the result page. Steps 4 and 7 (the pipelines
-  at matched sensitivity, false candidates on 121 blocks) are running as
-  `matched.py run` (10 November 2026); a stopped run goes on from the last
-  finished block.
+  disagreement explained in the result page. Steps 4 and 7 are done (10
+  November 2026, `matched.py run`, `tracks`, `tables`; 121 blocks): at 0.1
+  false candidates a block both pipelines need SNR 30, and there this
+  search recovers 4,520 of 13,310 planted signals in all three ON looks,
+  turboSETI 442 (docs/seti.md, "The pipelines at matched sensitivity").
+  Next: step 5 (rank, and measure discovery completeness).
 - **Real signals:** Voyager 1's carrier and sidebands found at turboSETI's
   published frequencies and drifts, the drift the Earth's; wide signals
   (its 322 Hz sidebands) are tiled with many hits, a known gap. HIP 91699's

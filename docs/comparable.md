@@ -199,7 +199,15 @@ So the comparison is done in two parts, each measured on its own:
 pipeline's false-candidate curve, the cut each needed for the chosen rate
 and its interval. Needs step 7 first.
 
-**Running (10 November 2026),** with step 7, as `matched.py run`: 121 blocks
+**Done, 10 November 2026** (with step 7): the table, the curves, the cuts
+and their intervals are in `docs/seti.md`, "The pipelines at matched
+sensitivity". At 0.1 false candidates a block both pipelines need SNR 30;
+there, of 13,310 planted signals, this search recovers 4,520 in all three
+ON looks and turboSETI 442, and at every rate both reach in the cuts
+tested (0.026 to 0.26 a block) this search recovers more. The rates'
+intervals reach about 0.13 at that cut, and the result is one session's.
+
+**How it was run,** with step 7, as `matched.py run`: 121 blocks
 (the 61 crowded, more than 20 hits at the cut in the six looks, and 60 of
 the 247 clean at random), each read once, then judged by all three
 pipelines with the 19 wrong choices of ON looks (this search at cuts 8 to
@@ -320,6 +328,13 @@ choices) as the unit, by band.
 
 **Done when:** the false-candidate rate per block is measured on at least
 100 blocks, with the clean bands apart from the crowded ones.
+
+**Done, 10 November 2026,** in step 4's run: 121 blocks (61 crowded, 60
+clean). At the cut of 10, this search keeps 0.13 false candidates a block
+in clean bands (0 to 0.33) and 16 in crowded ones (6.2 to 30), 3.3 a
+block over the cadence weighted by class; turboSETI none in clean bands
+and 1.4 in crowded ones. Both fall to about 0.05 to 0.07 a block by SNR
+30. The curves are in `docs/seti.md`.
 
 ### Step 8: an interference history across sessions and targets
 

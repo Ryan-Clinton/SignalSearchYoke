@@ -144,11 +144,11 @@ def wilson(k, n, z=1.96):
 def poisson_interval(n, cl=0.95):
     """A count's exact (Garwood) interval, by bisection on the Poisson sums."""
     def cdf(k, mu):
-        term, total = math.exp(-mu), math.exp(-mu)
-        for i in range(1, k + 1):
-            term *= mu / i
-            total += term
-        return total
+        # Each term in logs: exp(-mu) alone is 0 in floats from mu about 745.
+        if mu <= 0:
+            return 1.0
+        lm = math.log(mu)
+        return sum(math.exp(i * lm - mu - math.lgamma(i + 1)) for i in range(k + 1))
 
     def solve(f, lo, hi):
         for _ in range(200):

@@ -918,3 +918,80 @@ turboSETI's own statistics 10 of this search's 11 candidates are under its
 cut in every ON look; the eleventh clears it in two ON looks but is
 dropped by its top-hit rule for a larger line 2.1 kHz away. All 11 are
 inside pickles' masks. The result page has each one.
+
+### The pipelines at matched sensitivity (10 November 2026)
+
+`matched.py run` (comparable.md steps 4 and 7; the page is
+[results/KIC8462852-AGBT17A_999_68-matched.md](results/KIC8462852-AGBT17A_999_68-matched.md))
+read 121 blocks of the cadence once each, the 61 crowded ones (more than
+20 hits at the cut in the six looks) and 60 of the 247 clean at random,
+and ran all three pipelines on them twice: with each of the 19 wrong
+choices of three ON looks among the six, for the false candidates, and
+with 110 signals planted in the true ON looks of each block (13,310 in
+all; S_in 10 to 400, drifts 0 to 4 Hz/s), for the recovery.
+
+**False candidates a block against the cut** (wrong-cadence control: real
+looks of the target in the wrong roles, not empty sky; the two classes
+weighted by their share of the 308 blocks; candidates sharing a member hit
+counted once; 95% intervals by bootstrap over blocks):
+
+| cut | this search | turboSETI |
+|---|---|---|
+| 5 | - | 0.26 (0.07-0.51) |
+| 10 | 3.3 (1.3-6.2) | 0.29 (0.01-0.81) |
+| 15 | 0.79 (0.39-1.36) | 0.28 (0.01-0.80) |
+| 20 | 0.22 (0.11-0.36) | 0.15 (0-0.44) |
+| 30 | 0.068 (0.023-0.133) | 0.049 (0-0.13) |
+| 50 | 0.049 (0.013-0.097) | 0.013 (0-0.036) |
+| 100 | 0.026 (0.003-0.058) | 0.010 (0-0.029) |
+
+Almost all of them come from the crowded blocks: in the clean ones this
+search keeps 0.13 a block at its cut of 10 and none from 20, turboSETI
+none at any cut. Some blocks are far from typical: one gave this search
+340 at the cut of 10 (a comb of interference switching between looks),
+and one gave turboSETI 73. Other ways of counting one signal (frequency
+and drift, frequency within 6 Hz, 100 Hz, 3 kHz, none) change these by up
+to about a factor of two at the cut of 10 (3.3 a block, 1.5 merged
+within 3 kHz) and hardly at all at 30. pickles kept 1.1 windows a block at
+level 1 unmasked, 0.08 at level 2, 0.03 and 0.003 with its masks.
+
+**At 0.1 false candidates a block, both pipelines need SNR 30** (this
+search 0.068, turboSETI 0.049; each interval reaches about 0.13, and the
+cut's own interval runs from 30 to 50 here, 5 to 50 for turboSETI).
+There, of the 13,310 planted signals, in all three ON looks:
+
+| drift (Hz/s) | this search, cut 30 | turboSETI, cut 30 | this search, cut 10 | turboSETI, cut 10 |
+|---|---|---|---|---|
+| 0-0.15 | 1514/2662 | 283/2662 | 2359/2662 | 811/2662 |
+| 0.15-0.5 | 1225/2662 | 159/2662 | 2174/2662 | 599/2662 |
+| 0.5-1 | 868/2662 | 0/2662 | 1909/2662 | 273/2662 |
+| 1-2 | 594/2662 | 0/2662 | 1478/2662 | 26/2662 |
+| 2-4 | 319/2662 | 0/2662 | 786/2662 | 0/2662 |
+| **all** | **4520** | **442** | **8706** | **1709** |
+
+At the matched cut, 7 signals turboSETI found were missed here, and 4,085
+the other way. 80% are recovered from S_in 50 (near zero drift), 60, 120
+and 200 (to 2 Hz/s) here, and from S_in 400 near zero drift for turboSETI
+(above 0.15 Hz/s it never reaches 80%). No recovery was a false
+association.
+
+**The result does not hang on the rate chosen.** At every rate both reach
+in the cuts tested (0.026 to 0.26 a block), this search recovers more: at
+its cut of 30 (0.068 a block) 4,520, more than turboSETI at its loosest
+cut of 5 (3,128, at 0.26 a block); at 20 (0.22) 6,189 against 2,762 for
+turboSETI at 6 (0.24); at 50 (0.049) 2,785 against 442 at 30 (0.049).
+Below 0.026 a block only turboSETI was measured (203 at its cut of 50,
+0.013 a block; none at 100), as this search's highest cut tested is 100. Most of the difference is at drifts above
+0.5 Hz/s, where turboSETI's search smears the signal across channels and
+its SNR falls (it finds none there at the matched cut), but this search
+also recovers five times as many near zero drift.
+
+What this does not show: it is one session at one telescope, and blocks
+near each other share interference, so the intervals describe this sample
+of blocks, not observations in general; the recovery intervals are for
+signals, which within a block are not independent either. turboSETI's
+three-look recovery uses its own hit tables at the cut (its event table
+does not list every look), so which hits its events used is not
+recorded. Two false candidates of this search that the checks left
+unexplained (block 6, 1837.5101 MHz) and the 22 others it called unexplained are kept as
+test cases for the checks.

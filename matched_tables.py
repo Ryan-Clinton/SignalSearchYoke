@@ -95,10 +95,16 @@ def _rate(recs, count, weights, rng):
     for cls in ("clean", "crowded"):
         rs = [r for r in recs if r["class"] == cls]
         n = [count(r) for r in rs]
-        lo, hi = measure.poisson_interval(sum(n))
         m = max(len(rs), 1)
+        if sum(n):
+            # Bootstrap over the class's blocks: their counts are far from Poisson (one block can hold
+            # most of them), so a Poisson interval on the total would be much too narrow.
+            lo, hi = np.percentile([np.mean(rng.choice(n, len(n))) for _ in range(BOOT)], [2.5, 97.5])
+        else:
+            lo, hi = (x / m for x in measure.poisson_interval(0))
         by[cls] = {"blocks": len(rs), "distinct": sum(n), "per_block": round(sum(n) / m, 4),
-                   "interval": (round(lo / m, 4), round(hi / m, 4)), "most_in_a_block": max(n, default=0), "_n": n}
+                   "interval": (round(float(lo), 4), round(float(hi), 4)), "most_in_a_block": max(n, default=0),
+                   "_n": n}
     est = sum(weights[c] * by[c]["per_block"] for c in by)
     boots = [sum(weights[c] * (np.mean(rng.choice(by[c]["_n"], len(by[c]["_n"]))) if by[c]["_n"] else 0)
                  for c in by) for _ in range(BOOT)]
@@ -292,7 +298,7 @@ def markdown(r):
            "rate, how often the cadence logic keeps something when the roles are wrong. Counted a block as groups "
            "of candidates joined through shared member hits (connected groups of detections, which need not each "
            "be one physical signal; the other ways of counting are below); 95% intervals (all blocks: stratified "
-           "bootstrap over blocks; a class: Poisson on its count).", ""]
+           "bootstrap over blocks; a class: bootstrap over its blocks, or Poisson on a count of none).", ""]
     for p in ("ours", "turboseti"):
         out += [f"**{NAME[p]}**", "", "| cut (its SNR) | all blocks | clean | crowded | most in one block |",
                 "|---|---|---|---|---|"]
