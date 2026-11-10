@@ -344,7 +344,7 @@ def judge(looks):
             else:
                 snr, at, d_fit = lk.best_track(start, drift, f_tol, d_tol)
                 entry.update(found=False, track_snr=None if snr is None else round(snr, 2),
-                             track_drift_hz_s=None if d_fit is None else round(d_fit, 4))
+                             track_drift_hz_s=None if d_fit is None else round(d_fit, 4), track_channel=at)
                 if not lk.on:
                     # Also where it started: a transmitter fixed in frequency.
                     s2, _, _ = lk.best_track(lk.channel(top["frequency_mhz"]), drift, f_tol, d_tol)

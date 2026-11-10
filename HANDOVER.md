@@ -59,6 +59,7 @@ settings file.
 ./pipelines.py compare KIC8462852                  each pipeline's events against the others' (then the report again)
 ./pipelines.py followup KIC8462852                 taken to the signal: pickles' windows with our tracks blanked, turboSETI's own SNR
 ./matched.py run KIC8462852                        steps 4 and 7: false candidates (wrong ON choices) and planted-signal recovery, all three pipelines
+./matched.py tracks KIC8462852                     blocks recorded before the measured ON tracks were kept: judged again and completed
 ./matched.py tables KIC8462852                     their curves, matched cuts and recovery tables (docs/results/...-matched.md)
 ./measure.py WHAT [FILE...]                       desmear, pairs, kurtosis, false, scale, noise, cadence, vetting, setigen, voyager, price,
                                                   response, sefd, dropped TARGET SESSION

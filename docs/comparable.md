@@ -212,13 +212,31 @@ planted in the true ON looks (S_in 10 to 400, drifts to 4 Hz/s);
   candidates are merged per block. The count depends on how: in block 34,
   158 candidate frequencies under 13 wrong choices were 21 signals merged
   within 3 kHz (combs of zero-drift lines 100 Hz apart, switching between
-  looks; the checks called every one likely interference). The curves
-  merge candidates that share a member hit (no tolerance); merging by
-  frequency and drift, by frequency within 6 Hz, 100 Hz and 3 kHz, and no
-  merging are shown beside it.
-- **Recovery, strict and lenient:** strict, a kept event every one of whose
-  ON member hits matches the planted signal (±6 Hz, ±0.05 Hz/s); lenient,
-  any member. Each pipeline is matched at its own reference time:
+  looks; the checks called every one likely interference); merged by
+  shared hits they stay 158, since the comb's lines share none. The curves
+  count connected groups of candidates sharing a member hit (no tolerance;
+  joined through any chain of shared hits, so a group need not be one
+  physical signal); merging by frequency and drift, by frequency within
+  6 Hz, 100 Hz and 3 kHz, and no merging are shown beside it.
+- **What the false rate is:** the wrong choices give real looks of the
+  target the wrong roles, not empty sky, so the rate is a wrong-cadence
+  control (how often the cadence logic keeps something when the roles are
+  wrong), not a probability of false detection in other observations.
+- **Recovery, four ways** (±6 Hz, ±0.05 Hz/s): **in all three ON looks**,
+  the main one, an event matching in each ON look, by its hit there or,
+  where it has no hit at the cut, by the track this search measured there
+  (a candidate needs a hit or a track of S/N 5 in each ON look, so strict
+  alone did not show the signal was followed through all three); **three
+  hits**, a matching hit in each; **strict**, every ON member hit matching;
+  **lenient**, any member. On block 6 at the published cut: 75, 72, 77 and
+  81 of 110. turboSETI's event needs a hit in each ON look within its own
+  follow window, but its table of an event's hits leaves out a look whose
+  first hit number (`TopHitNum`, counted afresh in each look) it has
+  already written, so for it all three looks is strict with that rule, and
+  three hits cannot be told. Blocks run before the tracks were kept get
+  them from `matched.py tracks`, which judges their true choice again and
+  writes nothing unless what was recorded comes out the same (block 6: the
+  same). Each pipeline is matched at its own reference time:
   turboSETI's frequency is the channel of its first spectrum, half a
   spectrum (about 9 s) after the look's start, which at 1 Hz/s is 9 Hz
   from this search's.
@@ -226,16 +244,25 @@ planted in the true ON looks (S_in 10 to 400, drifts to 4 Hz/s);
   cut to the SNR before its event stage, ON and OFF alike (its own SNR_cut
   would cut only the ON table and keep every weaker OFF hit as a veto). On
   blocks 35 and 45, the 504 hits so cut are exactly those of its search run
-  at 10 (frequency, drift and SNR).
+  at 10 (frequency, drift and SNR): checked on those two, not shown for
+  every block.
 - **No matched rate is invented:** if no cut in the range tested gives 0.1
   false candidates a block, the page says so and makes no matched table;
-  if the lowest cut tested already does, that cut is an upper bound.
+  if the lowest cut tested already does, that cut is an upper bound. A rate
+  under 0.1 whose interval reaches above it is said to be so: where the
+  intervals are wide, the comparison is unresolved, and neither pipeline
+  is shown the better.
+- **Kept as test cases:** two wrong-choice candidates the checks left
+  unexplained, block 6 judged with looks (0, 1, 2) as ON, 1837.510106 and
+  1837.510134 MHz at −1.3674 Hz/s (SNR 30.1 and 15.9): what the checks
+  pass though the roles were wrong, for testing better checks against.
 - **The intervals** describe this sample of blocks from one session: blocks
   near each other share interference, so they are not fully independent.
 - **Speed:** `onoff.py`'s track sums and hit matching now work on arrays,
   with the same additions in the same order (old and new judge give
   identical events on blocks 6 and 50, about twice as fast), and the run
-  remembers each look's measured tracks across choices and cuts. A first
+  remembers each look's measured tracks across choices and cuts. Its most
+  memory so far is 3.4 GB, on block 35 (12,000 hits a look). A first
   run in a format without each event's member hits (42 blocks) is kept in
   `data/matched/KIC8462852-AGBT17A_999_68/v1/`.
 

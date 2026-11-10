@@ -151,8 +151,15 @@ def _our_kept(looks, events, order):
             continue
         members = [[order[p], int(i), looks[p].hits[i]["frequency_mhz"], looks[p].hits[i]["drift_hz_s"]]
                    for p, i in enumerate(e["matches"]) if i is not None and p % 2 == 0]
+        # An ON look with no hit at the cut: the track judge measured there
+        # (its start in MHz, drift, S/N), which made the candidate.
+        tracks = [[order[p], looks[p].fch1 + x["track_channel"] * looks[p].foff, x["track_drift_hz_s"],
+                   x["track_snr"]]
+                  for p, x in enumerate(e["looks"])
+                  if p % 2 == 0 and e["matches"][p] is None and x.get("track_channel") is not None]
         out.append({"f_mhz": round(e["frequency_mhz"], 6), "drift": round(e["drift_hz_s"], 4),
-                    "snr": round(e["snr"], 2), "look": order[e["seed_position"]], "members": members})
+                    "snr": round(e["snr"], 2), "look": order[e["seed_position"]], "members": members,
+                    "tracks": tracks})
     return out
 
 
@@ -222,29 +229,50 @@ def _match(t_f, t_drift, rows):
     return within, (None if best is None else {"df_hz": best[1], "dd_hz_s": best[2]})
 
 
-def _event_fit(t_f, t_drift, ev):
-    """How many of a kept event's ON members match a planted signal, of how many."""
-    ok = sum(abs((f - t_f[j]) * 1e6) <= TOL_HZ and abs(d - t_drift) <= TOL_DRIFT
-             for j, _, f, d in ev["members"] if j in t_f)
-    return ok, len(ev["members"])
+def _event_fit(t_f, t_drift, ev, tracks=False):
+    """How many of a kept event's ON members (with `tracks`, also the tracks
+    measured in ON looks without a hit) match a planted signal, of how many."""
+    looks = [m[:1] + m[2:4] for m in ev["members"]] + ([x[:3] for x in ev.get("tracks", [])] if tracks else [])
+    ok = sum(abs((f - t_f[j]) * 1e6) <= TOL_HZ and abs(d - t_drift) <= TOL_DRIFT for j, f, d in looks if j in t_f)
+    return ok, len(looks)
 
 
-def _status(t_f, t_drift, planted, plain):
+# Recovery, weakest to strongest. Lenient: an event with any ON member hit
+# matching. Strict: every ON member hit matching. Three hits: a member hit in
+# each of the three ON looks, all matching. Three looks: each ON look matching,
+# by its member hit or, where it has none at the cut, by the track measured
+# there.
+RECOVERY = (("lenient", False, lambda ok, n: ok >= 1), ("strict", False, lambda ok, n: n >= 1 and ok == n),
+            ("three_hits", False, lambda ok, n: ok == n == len(TRUE)),
+            ("three_looks", True, lambda ok, n: ok == n == len(TRUE)))
+
+
+def _status(t_f, t_drift, planted, plain, turboseti=False):
     """A planted signal against a pipeline's kept events, planted and
-    unplanted. Lenient: an event with any ON member matching it. Strict: an
-    event whose every ON member matches it. Each is a recovery, or a false
-    association when the unplanted block already had such an event."""
+    unplanted: each way of RECOVERY a recovery, or a false association when
+    the unplanted block already had such an event.
+
+    turboSETI: its event needs a hit in every ON look (within its own follow
+    window of the first ON look's hit), but its table of an event's hits
+    leaves out a look whose first hit's number (TopHitNum, counted afresh in
+    each look) it has already written, so the rows do not show every look.
+    For it, three looks is strict (every hit it lists matching) together
+    with that rule of its own; three hits cannot be told."""
     rows = [{"look": j, "f_mhz": f, "drift": d} for ev in planted for j, _, f, d in ev["members"]]
     _, off = _match(t_f, t_drift, rows)
     out = {"nearest": off}
-    for name, test in (("lenient", lambda ok, n: ok >= 1), ("strict", lambda ok, n: n >= 1 and ok == n)):
-        hit = [ev for ev in planted if test(*_event_fit(t_f, t_drift, ev))]
+    for name, tracks, test in RECOVERY:
+        if turboseti and name in ("three_hits", "three_looks"):
+            continue
+        hit = [ev for ev in planted if test(*_event_fit(t_f, t_drift, ev, tracks))]
         if not hit:
             out[name] = None
             continue
-        before = any(test(*_event_fit(t_f, t_drift, ev)) for ev in plain)
+        before = any(test(*_event_fit(t_f, t_drift, ev, tracks)) for ev in plain)
         out[name] = "false association" if before else "recovered"
-    best = max(planted, key=lambda ev: _event_fit(t_f, t_drift, ev)[0], default=None)
+    if turboseti:
+        out["three_looks"] = out["strict"]
+    best =max(planted, key=lambda ev: _event_fit(t_f, t_drift, ev)[0], default=None)
     out["members"] = list(_event_fit(t_f, t_drift, best)) if best else None
     return out
 
@@ -310,15 +338,31 @@ def shared_hits(by_choice):
     return list(groups.values())
 
 
+def _ours_true(cad, searched):
+    """The true choice at every cut: {cut: kept events}."""
+    caches = [{} for _ in range(6)]
+    out = {}
+    for cut in CUTS_OURS:
+        looks, events, order = our_events(cad, searched, TRUE, cut, caches)
+        out[str(cut)] = _our_kept(looks, events, order)
+        for lk in looks:
+            lk.flat = None
+    return out
+
+
+def _cadence(slices, urls):
+    out = []
+    for u in urls:
+        s = slices[u]
+        out.append({"s": s, "raw": s["spectra"], "spectra": s["spectra"], "sigma": measure.channel_noise(s["spectra"])})
+    return out
+
+
 def block(k, cls, slices, urls, work, source, vet, rng):
     """Everything for one block: its record."""
     times = {}
     t = time.monotonic()
-    cad = []
-    for u in urls:
-        s = slices[u]
-        cad.append({"s": s, "raw": s["spectra"], "spectra": s["spectra"],
-                    "sigma": measure.channel_noise(s["spectra"])})
+    cad = _cadence(slices, urls)
     plain_dir, planted_dir = work / "plain", work / "planted"
     plain_paths = [seti.save(c["s"], plain_dir / f"{j}.h5") for j, c in enumerate(cad)]
 
@@ -364,15 +408,7 @@ def block(k, cls, slices, urls, work, source, vet, rng):
     planted_paths = [seti.save(dict(p["s"], spectra=p["spectra"]), planted_dir / f"{j}.h5")
                      for j, p in enumerate(planted)]
     cad_p = [dict(c, spectra=p["spectra"]) for c, p in zip(cad, planted)]
-    searched_p = our_search(cad_p)
-    ours_true_planted = {}
-    caches = [{} for _ in range(6)]
-    for cut in CUTS_OURS:
-        looks, events, order = our_events(cad_p, searched_p, TRUE, cut, caches)
-        ours_true_planted[str(cut)] = _our_kept(looks, events, order)
-        for lk in looks:
-            lk.flat = None
-    del searched_p
+    ours_true_planted = _ours_true(cad_p, our_search(cad_p))
     times["ours_planted_s"] = round(time.monotonic() - t, 1)
     t = time.monotonic()
     pipelines._tool("turbo_curves.py", work / "turbo_planted.json", ",".join(map(str, CUTS_TURBO)), "true",
@@ -401,7 +437,8 @@ def block(k, cls, slices, urls, work, source, vet, rng):
         t_f_turbo = {j: f + tone["drift"] * cad[j]["s"]["tsamp"] / 2 / 1e6 for j, f in t_f.items()}
         r["turboseti"] = {str(c): _status(t_f_turbo, tone["drift"],
                                           _turbo_kept(turbo_at(turbo_planted, TRUE, float(c))),
-                                          _turbo_kept(turbo_at(turbo_plain, TRUE, float(c)))) for c in CUTS_TURBO}
+                                          _turbo_kept(turbo_at(turbo_plain, TRUE, float(c))), turboseti=True)
+                           for c in CUTS_TURBO}
         r["turboseti_hit_looks"] = sum(
             _match({j: t_f_turbo[j]}, tone["drift"],
                    [{"look": j, "f_mhz": h["freq_mhz"], "drift": h["drift_hz_s"]}
@@ -479,8 +516,10 @@ def run(target, count=None, say=print):
             (base / f"block_{k:03d}.json").write_text(json.dumps(rec), encoding="utf-8")
             n = len(rec["tones"])
             line = (f"block {k} ({chosen[k]}): at the published cuts, recovered here "
-                    f"{sum(t['ours']['10']['strict'] == 'recovered' for t in rec['tones'])}/{n}, turboSETI "
-                    f"{sum(t['turboseti']['10']['strict'] == 'recovered' for t in rec['tones'])}/{n} (strict); "
+                    f"{sum(t['ours']['10']['three_looks'] == 'recovered' for t in rec['tones'])}/{n}, turboSETI "
+                    f"{sum(t['turboseti']['10']['three_looks'] == 'recovered' for t in rec['tones'])}/{n} "
+                    f"(all three ON looks; here {sum(t['ours']['10']['strict'] == 'recovered' for t in rec['tones'])}"
+                    " strict); "
                     f"wrong-ON candidates here {len(shared_hits(rec['ours']['false']['10']))}, "
                     f"turboSETI {len(shared_hits(rec['turboseti']['false']['10']))} (by shared hits); "
                     f"{rec['times']['block_s']} s")
@@ -493,6 +532,56 @@ def run(target, count=None, say=print):
     return {"done": done, "of": len(chosen)}
 
 
+def _kept_same(a, b):
+    key = ("f_mhz", "drift", "snr", "look", "members")
+    return [[ev[x] for x in key] for ev in a] == [[ev[x] for x in key] for ev in b]
+
+
+def add_tracks(target, say=print):
+    """Blocks recorded before the tracks measured in ON looks without a hit
+    were kept: their true choice judged again at every cut, unplanted and
+    with the same signals planted, so this search's recovery is redone with
+    every way of RECOVERY. What was recorded before must come out the same,
+    or the block is left as it was. turboSETI's three looks is its strict
+    (see _status)."""
+    db = store.connect()
+    session, urls = store.cadence_files(db, target)
+    db.close()
+    base = folder(target, session)
+    block_list = seti.blocks(seti.reading.prepare(urls[:1])[0])
+    pub = ck(PUBLISHED["ours"])
+    for p in sorted(base.glob("block_*.json")):
+        rec = json.loads(p.read_text(encoding="utf-8"))
+        if rec.get("format") != FORMAT or "three_looks" in rec["tones"][0]["ours"][pub]:
+            continue
+        started = time.monotonic()
+        cad = _cadence(seti.read_looks(urls, *block_list[rec["block"]]), urls)
+        plain = _ours_true(cad, our_search(cad))
+        planted_c = plant(cad, rec["tones"])
+        cad_p = [dict(c, spectra=x["spectra"]) for c, x in zip(cad, planted_c)]
+        planted = _ours_true(cad_p, our_search(cad_p))
+        differ = [c for c in plain if not _kept_same(plain[c], rec["ours"]["true_plain"][c])]
+        for t in rec["tones"]:
+            t_f = {j: where(cad, t, j)[1] for j in TRUE}
+            new = {str(c): _status(t_f, t["drift"], planted[str(c)], plain[str(c)]) for c in CUTS_OURS}
+            differ += [(t["f_mhz"], c) for c in new for x in ("nearest", "lenient", "strict", "members")
+                       if new[c][x] != t["ours"][c][x]]
+            t["ours"] = new
+            for st in t["turboseti"].values():
+                st["three_looks"] = st["strict"]          # as _status for turboSETI
+        if differ:
+            say(f"  block {rec['block']}: judged again, {len(differ)} results differ from the record "
+                f"(first {differ[:3]}); left as it was", flush=True)
+            continue
+        rec["ours"]["true_plain"] = plain
+        rec["tracks_added_utc"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        p.write_text(json.dumps(rec), encoding="utf-8")
+        n = len(rec["tones"])
+        say(f"  block {rec['block']}: tracks added, the record otherwise the same; recovered here "
+            f"{sum(t['ours'][pub]['three_looks'] == 'recovered' for t in rec['tones'])}/{n} in all three ON "
+            f"looks; {round(time.monotonic() - started, 1)} s", flush=True)
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = p.add_subparsers(dest="command", required=True)
@@ -501,10 +590,14 @@ def main(argv=None):
     r.add_argument("--blocks", type=int)
     t = sub.add_parser("tables")
     t.add_argument("target")
+    t = sub.add_parser("tracks", help="add the measured ON tracks to blocks recorded without them")
+    t.add_argument("target")
     a = p.parse_args(argv)
     try:
         if a.command == "run":
             run(a.target, a.blocks)
+        elif a.command == "tracks":
+            add_tracks(a.target)
         else:
             import matched_tables
             matched_tables.write(a.target)

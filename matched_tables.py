@@ -9,16 +9,26 @@ wrong choices. How two candidates are taken to be one signal is a choice, so
 it is made several ways and all are shown:
 
 - shared hits (the one used for the curves): candidates with any member hit
-  in common are one signal (this search: the same hit of the same look;
-  turboSETI: the same look, frequency and drift). No tolerance.
+  in common are one group (this search: the same hit of the same look;
+  turboSETI: the same look, frequency and drift), joined through any chain
+  of shared hits: connected groups of detections, which need not be one
+  physical signal (A sharing a hit with B, and B another with C, makes one
+  group even if A and C share none). No tolerance.
 - frequency and drift: each candidate's start projected to the first look
   along its drift; within TOL_HZ and TOL_DRIFT of another is the same.
 - frequency only, within 6 Hz, 100 Hz or 3 kHz (the first run's merging).
 - none: every candidate of every wrong choice counted.
 
-Recovery is strict (an event every one of whose ON members matches the
-planted signal) and lenient (any member), each with false associations
-(the block had such an event before planting) counted apart."""
+Recovery is counted four ways (matched.RECOVERY), each with false
+associations (the block had such an event before planting) apart: in all
+three ON looks (the main one: each ON look matching, by its hit or by the
+track measured where it has none), three hits, strict (every ON member hit
+matching) and lenient (any member).
+
+The false-candidate rate is a wrong-cadence control: real looks of the
+target given the wrong roles, not empty sky, so it is how often the
+cadence logic keeps something when the roles are wrong, not a probability
+of false detection in other observations."""
 import json
 import time
 
@@ -31,6 +41,9 @@ import yoke
 
 RATE = 0.1                  # false candidates a block the cuts are matched at
 BOOT = 4000
+HOWS = ("three_looks", "three_hits", "strict", "lenient")
+HOW_NAME = {"three_looks": "All three ON looks", "three_hits": "Three hits", "strict": "Strict (member hits)",
+            "lenient": "Lenient"}
 WAYS = ("shared hits", "frequency and drift", "frequency within 6 Hz", "frequency within 100 Hz",
         "frequency within 3 kHz", "none")
 NAME = {"ours": "this search", "turboseti": "turboSETI", "pickles": "pickles"}
@@ -44,6 +57,10 @@ def load(target):
     meta = json.loads((base / "blocks.json").read_text(encoding="utf-8"))
     recs = [json.loads(p.read_text(encoding="utf-8")) for p in sorted(base.glob("block_*.json"))]
     return session, meta, [r for r in recs if r.get("format") == matched.FORMAT]
+
+
+def _has_tracks(r):
+    return "three_looks" in r["tones"][0]["ours"][matched.ck(matched.PUBLISHED["ours"])]
 
 
 def _single_link(items, close):
@@ -109,7 +126,7 @@ def _got(t, p, cut, how):
         x = t["pickles"]["unmasked"]
         return x.get("level") is not None and x["level"] >= cut and \
             (x.get("level_before") is None or x["level_before"] < cut)
-    return t[p][matched.ck(cut)][how] == "recovered"
+    return t[p][matched.ck(cut)].get(how) == "recovered"
 
 
 def _false_assoc(t, p, cut, how):
@@ -117,7 +134,7 @@ def _false_assoc(t, p, cut, how):
         x = t["pickles"]["unmasked"]
         return x.get("level") is not None and x["level"] >= cut and \
             x.get("level_before") is not None and x["level_before"] >= cut
-    return t[p][matched.ck(cut)][how] == "false association"
+    return t[p][matched.ck(cut)].get(how) == "false association"
 
 
 def recovery(tones, cuts, how):
@@ -143,7 +160,7 @@ def recovery(tones, cuts, how):
     return out
 
 
-def s_in_at(tones, p, cut, how="strict", share=0.8):
+def s_in_at(tones, p, cut, how="three_looks", share=0.8):
     """By drift bin, the lowest S_in from which at least `share` are
     recovered at it and every higher S_in."""
     out = {}
@@ -199,7 +216,9 @@ def write(target, say=print):
                 recs, lambda r: len({x[0] for v in r["pickles"]["false"][run][level].values() for x in v}),
                 weights, rng)
     checks = [dict(c, block=r["block"], cls=r["class"]) for r in recs for c in r["ours"]["checks_at_published_cut"]]
-    tones = [dict(t, cls=r["class"], block=r["block"]) for r in recs for t in r["tones"]]
+    # Recovery only from blocks with the measured ON tracks (matched.py tracks adds them to older ones).
+    tones = [dict(t, cls=r["class"], block=r["block"]) for r in recs if _has_tracks(r) for t in r["tones"]]
+    without = [r["block"] for r in recs if not _has_tracks(r)]
     published = dict(pub, pickles=1)
     at_matched = {p: float(cuts[p]["cut"]) for p in ("ours", "turboseti") if cuts[p]["cut"] is not None}
     rec = {
@@ -208,10 +227,12 @@ def write(target, say=print):
         "crowded_hits": meta["crowded_hits"], "rate_matched": RATE, "tolerances": [matched.TOL_HZ, matched.TOL_DRIFT],
         "false_curves": curves, "dedup_ways": ways, "matched_cuts": cuts, "both_matched": len(at_matched) == 2,
         "checks_on_false_at_published_cut": checks, "tones": len(tones),
-        "recovery_published": {how: {c: recovery([t for t in tones if c == "all" or t["cls"] == c], published, how)
-                                     for c in ("all", "clean", "crowded")} for how in ("strict", "lenient")},
+        "recovery_blocks_without_tracks": without,
+        "recovery_published": {how: {c: recovery([t for t in tones if c == "all" or t["cls"] == c],
+                                                 published if how != "three_hits" else {"ours": pub["ours"]}, how)
+                                     for c in ("all", "clean", "crowded")} for how in HOWS},
         "recovery_matched": ({how: {c: recovery([t for t in tones if c == "all" or t["cls"] == c], at_matched, how)
-                                    for c in ("all", "clean", "crowded")} for how in ("strict", "lenient")}
+                                    for c in ("all", "clean", "crowded")} for how in ("three_looks", "strict")}
                              if len(at_matched) == 2 else None),
         "s_in_80": {p: {"published": s_in_at(tones, p, published[p]),
                         "matched": s_in_at(tones, p, at_matched[p]) if p in at_matched else None}
@@ -259,9 +280,11 @@ def markdown(r):
            "none of this is a false-alarm rate for other observations.", "",
            "## False candidates against the cut", "",
            "Each block judged with the 19 wrong choices of three ON looks: what a choice keeps cannot come from the "
-           "target. Distinct signals a block, candidates sharing a member hit taken as one (the other ways of "
-           "merging are below); 95% intervals (all blocks: stratified bootstrap over blocks; a class: Poisson on "
-           "its count).", ""]
+           "target. These are real looks of the target in the wrong roles, not empty sky: a wrong-cadence control "
+           "rate, how often the cadence logic keeps something when the roles are wrong. Counted a block as groups "
+           "of candidates joined through shared member hits (connected groups of detections, which need not each "
+           "be one physical signal; the other ways of counting are below); 95% intervals (all blocks: stratified "
+           "bootstrap over blocks; a class: Poisson on its count).", ""]
     for p in ("ours", "turboseti"):
         out += [f"**{NAME[p]}**", "", "| cut (its SNR) | all blocks | clean | crowded | most in one block |",
                 "|---|---|---|---|---|"]
@@ -272,8 +295,12 @@ def markdown(r):
                        f"({_iv(v['crowded']['interval'])}) | {most} |")
         m = r["matched_cuts"][p]
         lowest = min(r["false_curves"][p], key=float)
+        hi = r["false_curves"][p][m["cut"]]["interval"][1] if m["cut"] is not None else None
         out += ["", (f"Cut for {r['rate_matched']} a block: {m['cut']} (interval {m['interval'][0]} to "
-                     f"{m['interval'][1]})." if m["cut"] is not None else
+                     f"{m['interval'][1]})."
+                     + (f" The rate's interval at that cut reaches {hi:.3g}, above {r['rate_matched']}: the rate "
+                        "there is not shown to be under it." if hi > r["rate_matched"] else "")
+                     if m["cut"] is not None else
                      f"No cut in the tested range gives {r['rate_matched']} a block or fewer.")
                 + (" That is the lowest cut tested: a lower one might give the same rate, so this is an upper "
                    "bound on its matched cut." if m["cut"] == lowest else ""), ""]
@@ -307,23 +334,36 @@ def markdown(r):
             f"(±{r['tolerances'][0]:g} Hz, ±{r['tolerances'][1]:g} Hz/s), each pipeline at its own reference time: "
             "this search's frequency is at the look's start, turboSETI's half a spectrum in (the channel of its "
             "first spectrum); pickles by the window holding the signal in an ON look's eighth spectrum, the one it "
-            "scores. **Strict:** an event every one of whose ON member hits matches the planted signal. "
-            "**Lenient:** an event with any member matching. A match the block already had unplanted is a false "
+            "scores. **All three ON looks** (the main one): an event matching the planted signal in each ON look, "
+            "by its hit there or, where it has no hit at the cut, by the track this search measured there (which "
+            "made it a candidate). For turboSETI, every hit it lists matching, with its own rule that each ON look "
+            "has a hit within its follow window: its table of an event's hits leaves out a look whose first hit "
+            "number it has already written, so its rows do not show all three. **Three hits:** this search only, "
+            "a matching hit in each ON look. **Strict:** every ON member hit matching (an event may have fewer "
+            "than three). **Lenient:** any member matching. A match the block already had unplanted is a false "
             "association, not a recovery (in brackets).", ""]
-    for how in ("strict", "lenient"):
-        out += [f"### {how.capitalize()}, at the published cuts (this search 10, turboSETI 10, pickles level 1, "
-                "its masks off)", ""] + _rec_table(r["recovery_published"][how], ["ours", "turboseti", "pickles"])
+    if r["recovery_blocks_without_tracks"]:
+        out += ["Blocks left out of recovery until `matched.py tracks` adds their measured tracks: "
+                + ", ".join(map(str, r["recovery_blocks_without_tracks"])) + ".", ""]
+    for how in HOWS:
+        ps = ["ours"] if how == "three_hits" else ["ours", "turboseti", "pickles"]
+        out += [f"### {HOW_NAME[how]}, at the published cuts (this search 10"
+                + (", turboSETI 10, pickles level 1, its masks off)" if how != "three_hits" else ")"), ""] \
+            + _rec_table(r["recovery_published"][how], ps)
     if r["recovery_matched"]:
         cm = {p: r["matched_cuts"][p]["cut"] for p in ("ours", "turboseti")}
-        out += [f"### Strict, at the matched cuts (this search {cm['ours']}, turboSETI {cm['turboseti']}: "
-                f"{r['rate_matched']} false candidates a block)", ""] + \
-            _rec_table(r["recovery_matched"]["strict"], ["ours", "turboseti"])
+        for how in ("three_looks", "strict"):
+            out += [f"### {HOW_NAME[how]}, at the matched cuts (this search {cm['ours']}, turboSETI "
+                    f"{cm['turboseti']}: {r['rate_matched']} false candidates a block)", ""] + \
+                _rec_table(r["recovery_matched"][how], ["ours", "turboseti"])
+        out += ["Each cut's false-candidate rate has its interval above; where those are wide, this comparison "
+                "is not resolved by them, and neither pipeline is shown the better.", ""]
     else:
         out += ["### At matched cuts", "",
                 f"Not made: no cut in the tested range gives {r['rate_matched']} false candidates a block for both "
                 "pipelines, so they cannot be set at the same rate here. The curves above and the recovery at each "
                 "cut in the record are the comparison; a matched one needs a common rate both reach.", ""]
-    out += ["## S_in from which 80% are recovered (strict)", "",
+    out += ["## S_in from which 80% are recovered (all three ON looks)", "",
             "| drift (Hz/s) | this search, published | turboSETI, published | this search, matched | turboSETI, "
             "matched |", "|---|---|---|---|---|"]
     m = r["s_in_80"]
