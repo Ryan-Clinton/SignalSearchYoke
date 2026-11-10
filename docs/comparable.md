@@ -232,11 +232,17 @@ planted in the true ON looks (S_in 10 to 400, drifts to 4 Hz/s);
   81 of 110. turboSETI's event needs a hit in each ON look within its own
   follow window, but its table of an event's hits leaves out a look whose
   first hit number (`TopHitNum`, counted afresh in each look) it has
-  already written, so for it all three looks is strict with that rule, and
-  three hits cannot be told. Blocks run before the tracks were kept get
-  them from `matched.py tracks`, which judges their true choice again and
-  writes nothing unless what was recorded comes out the same (block 6: the
-  same). Each pipeline is matched at its own reference time:
+  already written. So for it, all three looks is strict together with its
+  own hit tables at the cut holding a hit matching by the same tolerances
+  in each ON look (which hits its event used is not recorded), and three
+  hits cannot be told. On block 6, every turboSETI recovery under strict
+  also had a matching hit in all three ON looks, at cuts 5 and 10. Blocks
+  run before the tracks and those hit counts were kept get them from
+  `matched.py tracks`: it plants the recorded signals again, judges the
+  true choice and runs turboSETI again, and writes nothing unless what was
+  recorded comes out the same (block 6: the same). It ends by naming any
+  block still without them, and the page gives the number of blocks the
+  false rates and the recovery each come from. Each pipeline is matched at its own reference time:
   turboSETI's frequency is the channel of its first spectrum, half a
   spectrum (about 9 s) after the look's start, which at 1 Hz/s is 9 Hz
   from this search's.

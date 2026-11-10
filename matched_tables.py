@@ -60,7 +60,7 @@ def load(target):
 
 
 def _has_tracks(r):
-    return "three_looks" in r["tones"][0]["ours"][matched.ck(matched.PUBLISHED["ours"])]
+    return matched.complete(r)
 
 
 def _single_link(items, close):
@@ -126,7 +126,11 @@ def _got(t, p, cut, how):
         x = t["pickles"]["unmasked"]
         return x.get("level") is not None and x["level"] >= cut and \
             (x.get("level_before") is None or x["level_before"] < cut)
-    return t[p][matched.ck(cut)].get(how) == "recovered"
+    got = t[p][matched.ck(cut)].get(how) == "recovered"
+    if p == "turboseti" and how == "three_looks":
+        # Its event rule, checked: a matching hit in each true ON look of its own hit table at the cut.
+        got = got and t["turboseti_on_hits"][matched.ck(cut)] == len(matched.TRUE)
+    return got
 
 
 def _false_assoc(t, p, cut, how):
@@ -278,6 +282,10 @@ def markdown(r):
            f"{r['of']['clean'] + r['of']['crowded']}. The intervals describe this sample of blocks from one session "
            "at one telescope: blocks near each other share interference, so they are not fully independent, and "
            "none of this is a false-alarm rate for other observations.", "",
+           f"False candidates are from all {r['blocks']} blocks; recovery from "
+           f"{r['blocks'] - len(r['recovery_blocks_without_tracks'])}"
+           + (f" (waiting for `matched.py tracks`: {', '.join(map(str, r['recovery_blocks_without_tracks']))})"
+              if r["recovery_blocks_without_tracks"] else "") + ".", "",
            "## False candidates against the cut", "",
            "Each block judged with the 19 wrong choices of three ON looks: what a choice keeps cannot come from the "
            "target. These are real looks of the target in the wrong roles, not empty sky: a wrong-cadence control "
@@ -336,9 +344,10 @@ def markdown(r):
             "first spectrum); pickles by the window holding the signal in an ON look's eighth spectrum, the one it "
             "scores. **All three ON looks** (the main one): an event matching the planted signal in each ON look, "
             "by its hit there or, where it has no hit at the cut, by the track this search measured there (which "
-            "made it a candidate). For turboSETI, every hit it lists matching, with its own rule that each ON look "
-            "has a hit within its follow window: its table of an event's hits leaves out a look whose first hit "
-            "number it has already written, so its rows do not show all three. **Three hits:** this search only, "
+            "made it a candidate). For turboSETI, every hit it lists in the event matching, and its own hit table "
+            "at the cut holding a matching hit in each ON look (its event table leaves out a look whose first hit "
+            "number it has already written, so the event's rows alone do not show all three; the hit tables are "
+            "checked by the same tolerances, though which hits its event used is not recorded). **Three hits:** this search only, "
             "a matching hit in each ON look. **Strict:** every ON member hit matching (an event may have fewer "
             "than three). **Lenient:** any member matching. A match the block already had unplanted is a false "
             "association, not a recovery (in brackets).", ""]

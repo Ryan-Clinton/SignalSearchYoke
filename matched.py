@@ -256,8 +256,9 @@ def _status(t_f, t_drift, planted, plain, turboseti=False):
     window of the first ON look's hit), but its table of an event's hits
     leaves out a look whose first hit's number (TopHitNum, counted afresh in
     each look) it has already written, so the rows do not show every look.
-    For it, three looks is strict (every hit it lists matching) together
-    with that rule of its own; three hits cannot be told."""
+    For it, three looks here is strict (every hit it lists matching); the
+    tables add the check of its own hit tables (turboseti_on_hits, a
+    matching hit in each ON look at the cut). Three hits cannot be told."""
     rows = [{"look": j, "f_mhz": f, "drift": d} for ev in planted for j, _, f, d in ev["members"]]
     _, off = _match(t_f, t_drift, rows)
     out = {"nearest": off}
@@ -336,6 +337,16 @@ def shared_hits(by_choice):
     for n, ev in enumerate(events):
         groups.setdefault(root(n), []).append(ev)
     return list(groups.values())
+
+
+def _turbo_on_hits(planted, t_f_turbo, drift, cut):
+    """In how many true ON looks turboSETI's own hit table (planted run, SNR
+    over `cut`) has a hit matching the planted signal: its three-look
+    evidence checked by the same tolerances as this search's, not by its
+    event rule."""
+    return sum(_match({j: t_f_turbo[j]}, drift,
+                      [{"look": j, "f_mhz": h["freq_mhz"], "drift": h["drift_hz_s"]}
+                       for h in planted["look_hits"][j] if h["snr"] > cut])[0] for j in TRUE)
 
 
 def _ours_true(cad, searched):
@@ -439,10 +450,9 @@ def block(k, cls, slices, urls, work, source, vet, rng):
                                           _turbo_kept(turbo_at(turbo_planted, TRUE, float(c))),
                                           _turbo_kept(turbo_at(turbo_plain, TRUE, float(c))), turboseti=True)
                            for c in CUTS_TURBO}
-        r["turboseti_hit_looks"] = sum(
-            _match({j: t_f_turbo[j]}, tone["drift"],
-                   [{"look": j, "f_mhz": h["freq_mhz"], "drift": h["drift_hz_s"]}
-                    for h in turbo_planted["look_hits"][j] if h["snr"] > PUBLISHED["turboseti"]])[0] for j in TRUE)
+        r["turboseti_hit_looks"] = _turbo_on_hits(turbo_planted, t_f_turbo, tone["drift"], PUBLISHED["turboseti"])
+        r["turboseti_on_hits"] = {str(c): _turbo_on_hits(turbo_planted, t_f_turbo, tone["drift"], c)
+                                  for c in CUTS_TURBO}
         r["pickles"] = _pickles_status(cad, tone, pk_true_planted, pk_true_plain)
         rows.append(r)
 
@@ -517,7 +527,7 @@ def run(target, count=None, say=print):
             n = len(rec["tones"])
             line = (f"block {k} ({chosen[k]}): at the published cuts, recovered here "
                     f"{sum(t['ours']['10']['three_looks'] == 'recovered' for t in rec['tones'])}/{n}, turboSETI "
-                    f"{sum(t['turboseti']['10']['three_looks'] == 'recovered' for t in rec['tones'])}/{n} "
+                    f"{sum(t['turboseti']['10']['three_looks'] == 'recovered' and t['turboseti_on_hits']['10'] == 3 for t in rec['tones'])}/{n} "
                     f"(all three ON looks; here {sum(t['ours']['10']['strict'] == 'recovered' for t in rec['tones'])}"
                     " strict); "
                     f"wrong-ON candidates here {len(shared_hits(rec['ours']['false']['10']))}, "
@@ -537,49 +547,90 @@ def _kept_same(a, b):
     return [[ev[x] for x in key] for ev in a] == [[ev[x] for x in key] for ev in b]
 
 
+def complete(rec):
+    """Whether a block's record has everything recovery is counted from."""
+    return "three_looks" in rec["tones"][0]["ours"][ck(PUBLISHED["ours"])] and "turboseti_on_hits" in rec["tones"][0]
+
+
 def add_tracks(target, say=print):
-    """Blocks recorded before the tracks measured in ON looks without a hit
-    were kept: their true choice judged again at every cut, unplanted and
-    with the same signals planted, so this search's recovery is redone with
-    every way of RECOVERY. What was recorded before must come out the same,
-    or the block is left as it was. turboSETI's three looks is its strict
-    (see _status)."""
+    """Blocks recorded before the measured ON tracks (this search) or the
+    matching ON hits at every cut (turboSETI) were kept: the signals planted
+    again from the record, and
+
+    - this search: its true choice judged again at every cut, unplanted and
+      planted, and its recovery redone with every way of RECOVERY;
+    - turboSETI: run again on the planted looks, its recovery redone, and
+      its ON hits matching each signal counted at every cut.
+
+    What was recorded before must come out the same, or the block is left
+    as it was. At the end, the blocks still without either are named."""
     db = store.connect()
     session, urls = store.cadence_files(db, target)
     db.close()
     base = folder(target, session)
     block_list = seti.blocks(seti.reading.prepare(urls[:1])[0])
     pub = ck(PUBLISHED["ours"])
+    work = ROOT / "work_tracks"
     for p in sorted(base.glob("block_*.json")):
         rec = json.loads(p.read_text(encoding="utf-8"))
-        if rec.get("format") != FORMAT or "three_looks" in rec["tones"][0]["ours"][pub]:
+        if rec.get("format") != FORMAT or complete(rec):
             continue
+        need_tracks = "three_looks" not in rec["tones"][0]["ours"][pub]
+        need_turbo = "turboseti_on_hits" not in rec["tones"][0]
         started = time.monotonic()
         cad = _cadence(seti.read_looks(urls, *block_list[rec["block"]]), urls)
-        plain = _ours_true(cad, our_search(cad))
         planted_c = plant(cad, rec["tones"])
-        cad_p = [dict(c, spectra=x["spectra"]) for c, x in zip(cad, planted_c)]
-        planted = _ours_true(cad_p, our_search(cad_p))
-        differ = [c for c in plain if not _kept_same(plain[c], rec["ours"]["true_plain"][c])]
+        differ = []
+        if need_tracks:
+            plain = _ours_true(cad, our_search(cad))
+            cad_p = [dict(c, spectra=x["spectra"]) for c, x in zip(cad, planted_c)]
+            planted = _ours_true(cad_p, our_search(cad_p))
+            differ += [c for c in plain if not _kept_same(plain[c], rec["ours"]["true_plain"][c])]
+        if need_turbo:
+            shutil.rmtree(work, ignore_errors=True)
+            paths = [seti.save(dict(x["s"], spectra=x["spectra"]), work / f"{j}.h5") for j, x in enumerate(planted_c)]
+            pipelines._tool("turbo_curves.py", work / "turbo_planted.json", ",".join(map(str, CUTS_TURBO)), "true",
+                            *paths)
+            turbo = json.loads((work / "turbo_planted.json").read_text(encoding="utf-8"))
+            shutil.rmtree(work, ignore_errors=True)
         for t in rec["tones"]:
             t_f = {j: where(cad, t, j)[1] for j in TRUE}
-            new = {str(c): _status(t_f, t["drift"], planted[str(c)], plain[str(c)]) for c in CUTS_OURS}
-            differ += [(t["f_mhz"], c) for c in new for x in ("nearest", "lenient", "strict", "members")
-                       if new[c][x] != t["ours"][c][x]]
-            t["ours"] = new
-            for st in t["turboseti"].values():
-                st["three_looks"] = st["strict"]          # as _status for turboSETI
+            if need_tracks:
+                new = {str(c): _status(t_f, t["drift"], planted[str(c)], plain[str(c)]) for c in CUTS_OURS}
+                differ += [(t["f_mhz"], c) for c in new for x in ("nearest", "lenient", "strict", "members")
+                           if new[c][x] != t["ours"][c][x]]
+                t["ours"] = new
+            if need_turbo:
+                t_f_turbo = {j: f + t["drift"] * cad[j]["s"]["tsamp"] / 2 / 1e6 for j, f in t_f.items()}
+                for c in CUTS_TURBO:
+                    rows = next(e["rows"] for e in turbo["events"] if tuple(e["as_on"]) == TRUE and e["cut"] == c)
+                    new = _status(t_f_turbo, t["drift"], _turbo_kept(rows),
+                                  rec["turboseti"]["true_plain"].get(ck(c), []), turboseti=True)
+                    differ += [(t["f_mhz"], "turboSETI", c) for x in ("nearest", "lenient", "strict", "members")
+                               if new[x] != t["turboseti"][str(c)][x]]
+                    t["turboseti"][str(c)] = new
+                hl = _turbo_on_hits(turbo, t_f_turbo, t["drift"], PUBLISHED["turboseti"])
+                if hl != t["turboseti_hit_looks"]:
+                    differ.append((t["f_mhz"], "turboSETI hit looks"))
+                t["turboseti_on_hits"] = {str(c): _turbo_on_hits(turbo, t_f_turbo, t["drift"], c) for c in CUTS_TURBO}
         if differ:
             say(f"  block {rec['block']}: judged again, {len(differ)} results differ from the record "
                 f"(first {differ[:3]}); left as it was", flush=True)
             continue
-        rec["ours"]["true_plain"] = plain
+        if need_tracks:
+            rec["ours"]["true_plain"] = plain
         rec["tracks_added_utc"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         p.write_text(json.dumps(rec), encoding="utf-8")
         n = len(rec["tones"])
-        say(f"  block {rec['block']}: tracks added, the record otherwise the same; recovered here "
-            f"{sum(t['ours'][pub]['three_looks'] == 'recovered' for t in rec['tones'])}/{n} in all three ON "
-            f"looks; {round(time.monotonic() - started, 1)} s", flush=True)
+        say(f"  block {rec['block']}: completed ({'tracks' if need_tracks else ''}"
+            f"{', ' if need_tracks and need_turbo else ''}{'turboSETI ON hits' if need_turbo else ''}), "
+            f"the record otherwise the same; in all three ON looks here "
+            f"{sum(t['ours'][pub]['three_looks'] == 'recovered' for t in rec['tones'])}/{n}, turboSETI "
+            f"{sum(t['turboseti'][pub]['three_looks'] == 'recovered' and t['turboseti_on_hits'][pub] == 3 for t in rec['tones'])}"
+            f"/{n}; {round(time.monotonic() - started, 1)} s", flush=True)
+    left = [json.loads(p.read_text(encoding="utf-8")) for p in sorted(base.glob("block_*.json"))]
+    left = [r["block"] for r in left if r.get("format") == FORMAT and not complete(r)]
+    say(f"Blocks still without them: {', '.join(map(str, left)) if left else 'none'}.")
 
 
 def main(argv=None):
