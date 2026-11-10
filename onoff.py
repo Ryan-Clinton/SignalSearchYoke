@@ -85,15 +85,42 @@ class Look:
         """The summed line (box included) from channel `start` + each offset."""
         w = self.box(k)
         back = w - 1 if k < 0 else 0
-        out = np.zeros(len(offsets))
         steps = np.arange(self.n_t) / max(self.n_t - 1, 1)
-        cols = np.arange(w)
+        shift = np.array([int(round(k * steps[t])) for t in range(self.n_t)])
+        idx = (start - back + shift)[:, None, None] + np.asarray(offsets)[None, :, None] + np.arange(w)[None, None, :]
+        ok = (idx >= 0) & (idx < self.n_f)
+        vals = np.where(ok, self.flat[np.arange(self.n_t)[:, None, None], np.clip(idx, 0, self.n_f - 1)], np.nan)
+        # Each spectrum's box summed, then the spectra added in turn: the
+        # same additions in the same order as a spectrum at a time.
+        per_t = vals.sum(axis=2)
+        out = np.zeros(len(offsets))
         for t in range(self.n_t):
-            pos = start + int(round(k * steps[t])) - back + offsets
-            idx = pos[:, None] + cols[None, :]
+            out += per_t[t]
+        return out
+
+    def sums_many(self, start, ks, offsets):
+        """sums() for several drifts at once, one row a drift: the same
+        additions in the same order for each, gathered together by box width."""
+        offsets = np.asarray(offsets)
+        out = np.zeros((len(ks), len(offsets)))
+        steps = np.arange(self.n_t) / max(self.n_t - 1, 1)
+        by_w = {}
+        for n, k in enumerate(ks):
+            by_w.setdefault(self.box(k), []).append(n)
+        rows_t = np.arange(self.n_t)[None, :, None, None]
+        for w, rows in by_w.items():
+            kk = [ks[n] for n in rows]
+            back = np.array([w - 1 if k < 0 else 0 for k in kk])
+            shift = np.array([[int(round(k * steps[t])) for t in range(self.n_t)] for k in kk])
+            idx = ((start - back[:, None] + shift)[:, :, None, None] + offsets[None, None, :, None]
+                   + np.arange(w)[None, None, None, :])
             ok = (idx >= 0) & (idx < self.n_f)
-            vals = np.where(ok, self.flat[t, np.clip(idx, 0, self.n_f - 1)], np.nan)
-            out += vals.sum(axis=1)
+            vals = np.where(ok, self.flat[rows_t, np.clip(idx, 0, self.n_f - 1)], np.nan)
+            per_t = vals.sum(axis=3)
+            acc = np.zeros((len(kk), len(offsets)))
+            for t in range(self.n_t):
+                acc += per_t[:, t, :]
+            out[rows] = acc
         return out
 
     def track_snr(self, start, k):
@@ -119,8 +146,8 @@ class Look:
         reach = int(math.ceil(f_tol))
         tries = np.arange(-reach, reach + 1)
         offsets = np.concatenate([tries, REF_OFFSETS])
-        for k in range(k0 - dk, k0 + dk + 1):
-            s = self.sums(start, k, offsets)
+        ks = list(range(k0 - dk, k0 + dk + 1))
+        for k, s in zip(ks, self.sums_many(start, ks, offsets)):
             ref = s[len(tries):]
             ref = ref[np.isfinite(ref)]
             if len(ref) < 16:
@@ -173,19 +200,66 @@ def distance(a, b, la, lb, fixed=False):
     return math.hypot(df / f_tol, dd / d_tol)
 
 
+def _columns(lk):
+    """A look's hits as arrays (MHz, Hz/s, box), made once a hit list."""
+    got = getattr(lk, "_cols", None)
+    if got is None or got[0] is not lk.hits:
+        got = (lk.hits, np.array([h["frequency_mhz"] for h in lk.hits], dtype=np.float64),
+               np.array([h["drift_hz_s"] for h in lk.hits], dtype=np.float64),
+               np.array([h.get("box_channels", 1) for h in lk.hits], dtype=np.float64))
+        lk._cols = got
+    return got[1:]
+
+
+def _close(a, la, lb, rows=None, fixed_too=False):
+    """Which of lb's hits (or of `rows`, indices into them) may lie within
+    distance 1 of hit a: distance() for all of them at once, with a margin.
+    Only a screen: each one it passes is decided by distance() itself, so
+    what matches is exactly what distance() alone would give."""
+    f, d, box = _columns(lb)
+    if rows is not None:
+        f, d, box = f[rows], d[rows], box[rows]
+    dt = (lb.tstart - la.tstart) * 86400
+    drift_error = max(la.step / 2, DRIFT_ERROR * abs(a["drift_hz_s"]))
+    f_tol = 3 + (a.get("box_channels", 1) + box) / 2 + abs(dt) * drift_error / la.width_hz
+    d_tol = 2 + 0.05 * abs(a["drift_hz_s"]) / la.step
+    dd = np.abs(d - a["drift_hz_s"]) / la.step / d_tol
+    x = np.hypot(np.abs(f - (a["frequency_mhz"] + a["drift_hz_s"] * dt / 1e6)) * 1e6 / la.width_hz / f_tol, dd)
+    if fixed_too:
+        x = np.minimum(x, np.hypot(np.abs(f - a["frequency_mhz"]) * 1e6 / la.width_hz / f_tol, dd))
+    return np.nonzero(x <= 1 + 1e-6)[0]
+
+
+def _near_any(top, ltop, lk):
+    """lk's hits within distance 1 of `top`, projected along its drift or
+    where it started (fixed), in lk's order."""
+    return [int(i) for i in _close(top, ltop, lk, fixed_too=True)
+            if min(distance(top, lk.hits[i], ltop, lk), distance(top, lk.hits[i], ltop, lk, fixed=True)) <= 1]
+
+
 def _events(looks):
     """ON hits at the cut grouped into events, one-to-one, closest first:
     each event a dict {position: hit index}."""
     seeds = [(lk.position, i) for lk in looks if lk.on for i, h in enumerate(lk.hits) if not h.get("shadow")]
+    # Every pair of seeds in different looks within distance 1 (the earlier
+    # seed in `seeds` order first), closest first, ties in that order.
+    order = {s: x for x, s in enumerate(seeds)}
+    by_look = {}
+    for pos, i in seeds:
+        by_look.setdefault(pos, []).append(i)
     pairs = []
-    for x, (pa, ia) in enumerate(seeds):
-        for pb, ib in seeds[x + 1:]:
-            if pa == pb:
-                continue
-            d = distance(looks[pa].hits[ia], looks[pb].hits[ib], looks[pa], looks[pb])
-            if d <= 1:
-                pairs.append((d, (pa, ia), (pb, ib)))
-    pairs.sort(key=lambda p: p[0])
+    ons = list(by_look)
+    for u, pa in enumerate(ons):
+        for pb in ons[u + 1:]:
+            rows = np.array(by_look[pb])
+            for ia in by_look[pa]:
+                a = looks[pa].hits[ia]
+                for k in _close(a, looks[pa], looks[pb], rows=rows):
+                    ib = int(rows[k])
+                    d = distance(a, looks[pb].hits[ib], looks[pa], looks[pb])
+                    if d <= 1:
+                        pairs.append((d, (pa, ia), (pb, ib)))
+    pairs.sort(key=lambda p: (p[0], order[p[1]], order[p[2]]))
     close = {frozenset((a, b)) for _, a, b in pairs}
     group = {s: {s[0]: s[1]} for s in seeds}          # each seed starts as its own event
     owner = {s: s for s in seeds}
@@ -234,8 +308,7 @@ def null_off(looks, n=NULL_TRACKS, seed=0):
             s1, _, _ = lk.best_track(lk.channel(top["frequency_mhz"] + drift * dt / 1e6), drift, f_tol, d_tol)
             s2, _, _ = lk.best_track(lk.channel(top["frequency_mhz"]), drift, f_tol, d_tol)
             best = max([best] + [x for x in (s1, s2) if x is not None])
-            hit = hit or any(min(distance(top, h, l0, lk), distance(top, h, l0, lk, fixed=True)) <= 1
-                             for h in lk.hits)
+            hit = hit or bool(_near_any(top, l0, lk))
         over = bool(best >= OFF_MAX)
         out["over_off_max"] += over
         out["with_hit"] += hit
@@ -278,8 +351,7 @@ def judge(looks):
                     entry["track_snr_fixed"] = None if s2 is None else round(s2, 2)
                     snr = max(x for x in (snr, s2, -np.inf) if x is not None)
                     # Any hit of any strength near either projection.
-                    near = [i for i, h in enumerate(lk.hits)
-                            if min(distance(top, h, ltop, lk), distance(top, h, ltop, lk, fixed=True)) <= 1]
+                    near = _near_any(top, ltop, lk)
                     if near:
                         best = max(near, key=lambda i: lk.hits[i]["snr"])
                         matches[lk.position] = best

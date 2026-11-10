@@ -58,6 +58,8 @@ settings file.
 ./pipelines.py run KIC8462852                      turboSETI and pickles over the swept cadence (about 2 hours; resumes)
 ./pipelines.py compare KIC8462852                  each pipeline's events against the others' (then the report again)
 ./pipelines.py followup KIC8462852                 taken to the signal: pickles' windows with our tracks blanked, turboSETI's own SNR
+./matched.py run KIC8462852                        steps 4 and 7: false candidates (wrong ON choices) and planted-signal recovery, all three pipelines
+./matched.py tables KIC8462852                     their curves, matched cuts and recovery tables (docs/results/...-matched.md)
 ./measure.py WHAT [FILE...]                       desmear, pairs, kurtosis, false, scale, noise, cadence, vetting, setigen, voyager, price,
                                                   response, sefd, dropped TARGET SESSION
 ```
@@ -189,8 +191,10 @@ the default place.
   page written (above). A sweep searches blocks done by an older search
   version again first. comparable.md step 3 is done (9 November 2026,
   13:05 to 15:06 UTC): turboSETI and pickles over all 308 blocks, every
-  disagreement explained in the result page. Next: step 4 (the pipelines
-  at matched sensitivity).
+  disagreement explained in the result page. Steps 4 and 7 (the pipelines
+  at matched sensitivity, false candidates on 121 blocks) are running as
+  `matched.py run` (10 November 2026); a stopped run goes on from the last
+  finished block.
 - **Real signals:** Voyager 1's carrier and sidebands found at turboSETI's
   published frequencies and drifts, the drift the Earth's; wide signals
   (its 322 Hz sidebands) are tiled with many hits, a known gap. HIP 91699's

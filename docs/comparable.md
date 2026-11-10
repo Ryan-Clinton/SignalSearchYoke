@@ -199,6 +199,46 @@ So the comparison is done in two parts, each measured on its own:
 pipeline's false-candidate curve, the cut each needed for the chosen rate
 and its interval. Needs step 7 first.
 
+**Running (10 November 2026),** with step 7, as `matched.py run`: 121 blocks
+(the 61 crowded, more than 20 hits at the cut in the six looks, and 60 of
+the 247 clean at random), each read once, then judged by all three
+pipelines with the 19 wrong choices of ON looks (this search at cuts 8 to
+100, turboSETI 5 to 100, pickles at its levels) and again with 110 signals
+planted in the true ON looks (S_in 10 to 400, drifts to 4 Hz/s);
+`matched.py tables` writes the page
+`docs/results/KIC8462852-AGBT17A_999_68-matched.md`. How it is measured:
+
+- **One signal, in the false counts:** wrong choices share their looks, so
+  candidates are merged per block. The count depends on how: in block 34,
+  158 candidate frequencies under 13 wrong choices were 21 signals merged
+  within 3 kHz (combs of zero-drift lines 100 Hz apart, switching between
+  looks; the checks called every one likely interference). The curves
+  merge candidates that share a member hit (no tolerance); merging by
+  frequency and drift, by frequency within 6 Hz, 100 Hz and 3 kHz, and no
+  merging are shown beside it.
+- **Recovery, strict and lenient:** strict, a kept event every one of whose
+  ON member hits matches the planted signal (±6 Hz, ±0.05 Hz/s); lenient,
+  any member. Each pipeline is matched at its own reference time:
+  turboSETI's frequency is the channel of its first spectrum, half a
+  spectrum (about 9 s) after the look's start, which at 1 Hz/s is 9 Hz
+  from this search's.
+- **turboSETI at a cut:** its hit search is run once at SNR 5 and its tables
+  cut to the SNR before its event stage, ON and OFF alike (its own SNR_cut
+  would cut only the ON table and keep every weaker OFF hit as a veto). On
+  blocks 35 and 45, the 504 hits so cut are exactly those of its search run
+  at 10 (frequency, drift and SNR).
+- **No matched rate is invented:** if no cut in the range tested gives 0.1
+  false candidates a block, the page says so and makes no matched table;
+  if the lowest cut tested already does, that cut is an upper bound.
+- **The intervals** describe this sample of blocks from one session: blocks
+  near each other share interference, so they are not fully independent.
+- **Speed:** `onoff.py`'s track sums and hit matching now work on arrays,
+  with the same additions in the same order (old and new judge give
+  identical events on blocks 6 and 50, about twice as fast), and the run
+  remembers each look's measured tracks across choices and cuts. A first
+  run in a format without each event's member hits (42 blocks) is kept in
+  `data/matched/KIC8462852-AGBT17A_999_68/v1/`.
+
 ### Step 5: rank, and measure discovery completeness
 
 Being kept is not being looked at: 62% of planted candidates were marked

@@ -57,8 +57,8 @@ import store
 import yoke
 
 ROOT = yoke.DATA / "matched"
-CUTS_OURS = (8, 10, 12, 15, 20, 30)
-CUTS_TURBO = (5, 6, 7, 8, 10, 12, 15, 20, 30)
+CUTS_OURS = (8, 10, 12, 15, 20, 30, 50, 100)
+CUTS_TURBO = (5, 6, 7, 8, 10, 12, 15, 20, 30, 50, 100)
 PUBLISHED = {"ours": 10, "turboseti": 10}
 STRENGTHS = (10, 15, 20, 30, 40, 50, 60, 80, 120, 200, 400)     # S_in
 TONES = 110                     # a block: two in each drift bin and strength
@@ -67,7 +67,8 @@ TOL_DRIFT = 0.05
 CROWDED_HITS = 20               # a block with more hits than this at the cut, six looks together, is crowded
 N_CLEAN = 60
 SEED = 4
-APART_MHZ = 0.003               # signals kept in several wrong choices closer than this are one
+APART_MHZ = 0.003               # the first run's merging of false candidates (frequency only): kept as one variant
+FORMAT = 2                      # 2: kept events with their member hits; recovery lenient and strict
 TRUE = (0, 2, 4)
 
 
@@ -140,16 +141,29 @@ def our_events(cad, searched, ons, cut, caches):
 
 
 def _our_kept(looks, events, order):
-    """Candidates: each with its matched hit in each ON look (look index, MHz, Hz/s)."""
+    """Candidates: each with the look of its strongest hit and its member hit
+    in each ON look as [look, hit index, MHz, Hz/s]. A hit index is into that
+    look's one hit list, the same in every choice and cut, so two candidates
+    sharing one are the same signal."""
     out = []
     for e in events:
         if e["label"] != "candidate":
             continue
-        members = [(order[p], looks[p].hits[i]["frequency_mhz"], looks[p].hits[i]["drift_hz_s"])
+        members = [[order[p], int(i), looks[p].hits[i]["frequency_mhz"], looks[p].hits[i]["drift_hz_s"]]
                    for p, i in enumerate(e["matches"]) if i is not None and p % 2 == 0]
         out.append({"f_mhz": round(e["frequency_mhz"], 6), "drift": round(e["drift_hz_s"], 4),
-                    "snr": round(e["snr"], 2), "on_hits": members})
+                    "snr": round(e["snr"], 2), "look": order[e["seed_position"]], "members": members})
     return out
+
+
+def _turbo_kept(rows):
+    """turboSETI's events (rows grouped by its Hit_ID): each with its member
+    hits as [look, None, MHz, Hz/s] (a hit is known by its look, frequency
+    and drift)."""
+    by = {}
+    for r in rows:
+        by.setdefault(r["hit_id"], []).append([r["look"], None, r["freq_mhz"], r["drift_hz_s"]])
+    return [{"f_mhz": round(m[0][2], 6), "drift": m[0][3], "look": m[0][0], "members": m} for m in by.values()]
 
 
 # --- the planted signals -------------------------------------------------------
@@ -208,20 +222,31 @@ def _match(t_f, t_drift, rows):
     return within, (None if best is None else {"df_hz": best[1], "dd_hz_s": best[2]})
 
 
-def _rows_ours(kept):
-    return [{"look": j, "f_mhz": f, "drift": d} for c in kept for j, f, d in c["on_hits"]]
+def _event_fit(t_f, t_drift, ev):
+    """How many of a kept event's ON members match a planted signal, of how many."""
+    ok = sum(abs((f - t_f[j]) * 1e6) <= TOL_HZ and abs(d - t_drift) <= TOL_DRIFT
+             for j, _, f, d in ev["members"] if j in t_f)
+    return ok, len(ev["members"])
 
 
-def _rows_turbo(events):
-    return [{"look": r["look"], "f_mhz": r["freq_mhz"], "drift": r["drift_hz_s"]} for r in events]
-
-
-def _status(t_f, t_drift, planted_rows, plain_rows):
-    hit, off = _match(t_f, t_drift, planted_rows)
-    if not hit:
-        return {"status": None, "nearest": off}
-    before, _ = _match(t_f, t_drift, plain_rows)
-    return {"status": "false association" if before else "recovered", "nearest": off}
+def _status(t_f, t_drift, planted, plain):
+    """A planted signal against a pipeline's kept events, planted and
+    unplanted. Lenient: an event with any ON member matching it. Strict: an
+    event whose every ON member matches it. Each is a recovery, or a false
+    association when the unplanted block already had such an event."""
+    rows = [{"look": j, "f_mhz": f, "drift": d} for ev in planted for j, _, f, d in ev["members"]]
+    _, off = _match(t_f, t_drift, rows)
+    out = {"nearest": off}
+    for name, test in (("lenient", lambda ok, n: ok >= 1), ("strict", lambda ok, n: n >= 1 and ok == n)):
+        hit = [ev for ev in planted if test(*_event_fit(t_f, t_drift, ev))]
+        if not hit:
+            out[name] = None
+            continue
+        before = any(test(*_event_fit(t_f, t_drift, ev)) for ev in plain)
+        out[name] = "false association" if before else "recovered"
+    best = max(planted, key=lambda ev: _event_fit(t_f, t_drift, ev)[0], default=None)
+    out["members"] = list(_event_fit(t_f, t_drift, best)) if best else None
+    return out
 
 
 def _pickles_status(cad, t, planted, plain):
@@ -246,12 +271,43 @@ def _pickles_status(cad, t, planted, plain):
 
 # --- one block -----------------------------------------------------------------
 
-def _distinct(freqs):
+def _distinct(freqs, apart=APART_MHZ):
     seen = []
     for f in sorted(freqs):
-        if all(abs(f - g) > APART_MHZ for g in seen):
+        if all(abs(f - g) > apart for g in seen):
             seen.append(f)
     return seen
+
+
+def _hit_key(m):
+    j, i, f, d = m
+    return (j, i) if i is not None else (j, round(f, 6), round(d, 6))
+
+
+def shared_hits(by_choice):
+    """The distinct signals among the candidates of all the wrong choices
+    ({choice: [kept event]}): candidates sharing any member hit are one
+    signal (joined through any chain of shared hits)."""
+    events = [ev for evs in by_choice.values() for ev in evs]
+    parent = list(range(len(events)))
+
+    def root(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+    owner = {}
+    for n, ev in enumerate(events):
+        for m in ev["members"]:
+            key = _hit_key(m)
+            if key in owner:
+                parent[root(n)] = root(owner[key])
+            else:
+                owner[key] = n
+    groups = {}
+    for n, ev in enumerate(events):
+        groups.setdefault(root(n), []).append(ev)
+    return list(groups.values())
 
 
 def block(k, cls, slices, urls, work, source, vet, rng):
@@ -280,13 +336,14 @@ def block(k, cls, slices, urls, work, source, vet, rng):
             if ons == TRUE:
                 ours_true_plain[str(cut)] = kept
             else:
-                ours_false.setdefault(str(cut), {})[str(ons)] = [c["f_mhz"] for c in kept]
+                ours_false.setdefault(str(cut), {})[str(ons)] = kept
                 if cut == PUBLISHED["ours"] and kept and vet is not None:
                     for e in events:
                         if e["label"] == "candidate":
                             v = vet(e, looks)
                             checks.append({"as_on": list(ons), "f_mhz": round(e["frequency_mhz"], 6),
-                                           "verdict": v.get("verdict")})
+                                           "drift": round(e["drift_hz_s"], 4), "snr": round(e["snr"], 2),
+                                           "verdict": v.get("verdict"), "reasons": v.get("reasons")})
             for lk in looks:
                 lk.flat = None
     times["ours_judge_s"] = round(time.monotonic() - t, 1)
@@ -337,14 +394,14 @@ def block(k, cls, slices, urls, work, source, vet, rng):
         r["f_mhz"] = round(t_f[0], 6)
         r["flux_jy_hz"] = round(injection.flux_jy_hz(tone["s_in"], cad[0]["raw"].shape[0],
                                                       abs(cad[0]["s"]["foff"]) * 1e6, cad[0]["s"]["tsamp"]), 2)
-        r["ours"] = {str(c): _status(t_f, tone["drift"], _rows_ours(ours_true_planted[str(c)]),
-                                     _rows_ours(ours_true_plain[str(c)])) for c in CUTS_OURS}
+        r["ours"] = {str(c): _status(t_f, tone["drift"], ours_true_planted[str(c)], ours_true_plain[str(c)])
+                     for c in CUTS_OURS}
         # turboSETI's frequency is the channel in the first spectrum: where the signal is on average over
         # that spectrum, half a spectrum after the look's start. Matched at its own reference time.
         t_f_turbo = {j: f + tone["drift"] * cad[j]["s"]["tsamp"] / 2 / 1e6 for j, f in t_f.items()}
         r["turboseti"] = {str(c): _status(t_f_turbo, tone["drift"],
-                                          _rows_turbo(turbo_at(turbo_planted, TRUE, float(c))),
-                                          _rows_turbo(turbo_at(turbo_plain, TRUE, float(c)))) for c in CUTS_TURBO}
+                                          _turbo_kept(turbo_at(turbo_planted, TRUE, float(c))),
+                                          _turbo_kept(turbo_at(turbo_plain, TRUE, float(c)))) for c in CUTS_TURBO}
         r["turboseti_hit_looks"] = sum(
             _match({j: t_f_turbo[j]}, tone["drift"],
                    [{"look": j, "f_mhz": h["freq_mhz"], "drift": h["drift_hz_s"]}
@@ -356,8 +413,7 @@ def block(k, cls, slices, urls, work, source, vet, rng):
         out = {}
         for e in rec_events:
             if tuple(e["as_on"]) != TRUE:
-                out.setdefault(ck(e["cut"]), {})[
-                    str(tuple(e["as_on"]))] = sorted({round(x["freq_mhz"], 6) for x in e["rows"]})
+                out.setdefault(ck(e["cut"]), {})[str(tuple(e["as_on"]))] = _turbo_kept(e["rows"])
         return out
 
     pk_false = {}
@@ -367,14 +423,14 @@ def block(k, cls, slices, urls, work, source, vet, rng):
         for run, rws in c["runs"].items():
             for level in (1, 2):
                 pk_false.setdefault(run, {}).setdefault(str(level), {})[str(tuple(c["as_on"]))] = sorted(
-                    {round(x["Freq"], 6) for x in rws if x["level"] >= level})
+                    {(x["Index"], round(x["Freq"], 6)) for x in rws if x["level"] >= level})
     s0 = cad[0]["s"]
-    return {"block": k, "class": cls, "from_mhz": round(min(s0["fch1"], s0["fch1"] + s0["foff"] * cad[0]["raw"].shape[1]), 6),
+    return {"format": FORMAT, "block": k, "class": cls, "tstarts": [c["s"]["tstart"] for c in cad], "from_mhz": round(min(s0["fch1"], s0["fch1"] + s0["foff"] * cad[0]["raw"].shape[1]), 6),
             "to_mhz": round(max(s0["fch1"], s0["fch1"] + s0["foff"] * cad[0]["raw"].shape[1]), 6),
             "complete": complete, "times": times,
             "ours": {"false": ours_false, "true_plain": ours_true_plain, "checks_at_published_cut": checks},
             "turboseti": {"false": wrong(turbo_plain["events"]), "hits_plain": turbo_plain["hits"],
-                          "true_plain": {ck(e["cut"]): e["rows"] for e in turbo_plain["events"]
+                          "true_plain": {ck(e["cut"]): _turbo_kept(e["rows"]) for e in turbo_plain["events"]
                                          if tuple(e["as_on"]) == TRUE}},
             "pickles": {"false": pk_false, "true_plain": pk_true_plain},
             "tones": rows,
@@ -423,10 +479,10 @@ def run(target, count=None, say=print):
             (base / f"block_{k:03d}.json").write_text(json.dumps(rec), encoding="utf-8")
             n = len(rec["tones"])
             line = (f"block {k} ({chosen[k]}): at the published cuts, recovered here "
-                    f"{sum(t['ours']['10']['status'] == 'recovered' for t in rec['tones'])}/{n}, turboSETI "
-                    f"{sum(t['turboseti']['10']['status'] == 'recovered' for t in rec['tones'])}/{n}; wrong-ON "
-                    f"candidates here {len(_distinct(f for v in rec['ours']['false']['10'].values() for f in v))}, "
-                    f"turboSETI {len(_distinct(f for v in rec['turboseti']['false']['10'].values() for f in v))}; "
+                    f"{sum(t['ours']['10']['strict'] == 'recovered' for t in rec['tones'])}/{n}, turboSETI "
+                    f"{sum(t['turboseti']['10']['strict'] == 'recovered' for t in rec['tones'])}/{n} (strict); "
+                    f"wrong-ON candidates here {len(shared_hits(rec['ours']['false']['10']))}, "
+                    f"turboSETI {len(shared_hits(rec['turboseti']['false']['10']))} (by shared hits); "
                     f"{rec['times']['block_s']} s")
             say("  " + line, flush=True)
             with open(base / "progress.log", "a", encoding="utf-8") as f:
