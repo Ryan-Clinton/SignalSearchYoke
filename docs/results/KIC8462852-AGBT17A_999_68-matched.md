@@ -41,7 +41,7 @@ Cut for 0.1 a block: 30 (interval 30 to 50). The rate's interval at that cut rea
 | 50 | 0.013 (0-0.0357) | 0 (0-0.0615) | 0.0656 (0-0.18) | 3 |
 | 100 | 0.0097 (0-0.0292) | 0 (0-0.0615) | 0.0492 (0-0.147) | 3 |
 
-Cut for 0.1 a block: 30 (interval 5 to 50). The rate's interval at that cut reaches 0.13, above 0.1: the rate there is not shown to be under it.
+Cut for 0.1 a block: 30 (interval 5 to 50). The rate's interval at that cut reaches 0.13, above 0.1: the rate there is not shown to be under it. The rate does not fall at every step of the cut: a higher cut also removes OFF hits that vetoed events, so the cut taken is the lowest from which the rate stays under the target at every higher cut tested.
 
 **pickles** (windows kept, by level; not an SNR cut; one window kept in several choices counts once)
 

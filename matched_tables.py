@@ -116,15 +116,32 @@ def _rate(recs, count, weights, rng):
     return {"per_block": round(est, 4), "interval": (round(float(lo), 4), round(float(hi), 4)), **by}
 
 
+def _from(cuts, ok):
+    """The lowest cut from which ok holds at it and at every higher cut tested
+    (None if it fails at the highest)."""
+    best = None
+    for c in reversed(cuts):
+        if not ok(c):
+            break
+        best = c
+    return best
+
+
 def _matched_cut(curve):
-    """The lowest cut whose rate is at most RATE (None if none in the tested
-    range is: then nothing is matched). Its interval: from the lowest cut
-    whose interval reaches down to RATE to the lowest whose whole interval is
-    under it."""
+    """The lowest cut from which the rate stays at most RATE at every higher
+    cut tested (None if it is above RATE at the highest: then nothing is
+    matched). The curve need not fall with the cut: a higher cut can remove
+    the OFF hits that vetoed an event (turboSETI, block 129), so a dip under
+    RATE followed by a rise is not taken. Its interval: from the lowest cut
+    from which every interval reaches down to RATE to the lowest from which
+    every whole interval is under it. "monotonic" says whether the rate never
+    rises with the cut."""
     cuts = sorted(curve, key=float)
-    return {"cut": next((c for c in cuts if curve[c]["per_block"] <= RATE), None),
-            "interval": (next((c for c in cuts if curve[c]["interval"][0] <= RATE), None),
-                         next((c for c in cuts if curve[c]["interval"][1] <= RATE), None))}
+    rates = [curve[c]["per_block"] for c in cuts]
+    return {"cut": _from(cuts, lambda c: curve[c]["per_block"] <= RATE),
+            "interval": (_from(cuts, lambda c: curve[c]["interval"][0] <= RATE),
+                         _from(cuts, lambda c: curve[c]["interval"][1] <= RATE)),
+            "monotonic": all(b <= a for a, b in zip(rates, rates[1:]))}
 
 
 def _got(t, p, cut, how):
@@ -317,7 +334,11 @@ def markdown(r):
                      if m["cut"] is not None else
                      f"No cut in the tested range gives {r['rate_matched']} a block or fewer.")
                 + (" That is the lowest cut tested: a lower one might give the same rate, so this is an upper "
-                   "bound on its matched cut." if m["cut"] == lowest else ""), ""]
+                   "bound on its matched cut." if m["cut"] == lowest else "")
+                + ("" if m.get("monotonic", True) else
+                   " The rate does not fall at every step of the cut: a higher cut also removes OFF hits that "
+                   "vetoed events, so the cut taken is the lowest from which the rate stays under the target at "
+                   "every higher cut tested."), ""]
     out += ["**pickles** (windows kept, by level; not an SNR cut; one window kept in several choices counts once)",
             "", "| run | all blocks | clean | crowded |", "|---|---|---|---|"]
     for k, v in r["false_curves"]["pickles"].items():

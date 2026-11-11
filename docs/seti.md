@@ -952,10 +952,16 @@ none at any cut. Some blocks are far from typical: one gave this search
 and one gave turboSETI 73. Other ways of counting one signal (frequency
 and drift, frequency within 6 Hz, 100 Hz, 3 kHz, none) change these by up
 to about a factor of two at the cut of 10 (3.3 a block, 1.5 merged
-within 3 kHz) and hardly at all at 30. pickles kept 1.1 windows a block at
+within 3 kHz) and hardly at all at 30. turboSETI's rate does not fall
+at every step of the cut (0.26 at 5, 0.29 at 10): a higher cut removes OFF
+hits as well as ON ones, and in block 129 looks 0, 3 and 4 hold about 300
+hits at both cuts while looks 1, 2 and 5 fall from 521 to 66, so with (0,
+3, 4) as ON the vetoes go and 72 events survive at 10 against 12 at 5. The
+cut taken is therefore the lowest from which the rate stays under the
+target at every higher cut tested. pickles kept 1.1 windows a block at
 level 1 unmasked, 0.08 at level 2, 0.03 and 0.003 with its masks.
 
-**At 0.1 false candidates a block, both pipelines need SNR 30** (this
+**At an estimated 0.1 false candidates a block, both pipelines need SNR 30** (this
 search 0.068, turboSETI 0.049; each interval reaches about 0.13, and the
 cut's own interval runs from 30 to 50 here, 5 to 50 for turboSETI).
 There, of the 13,310 planted signals, in all three ON looks:
@@ -973,10 +979,18 @@ At the matched cut, 7 signals turboSETI found were missed here, and 4,085
 the other way. 80% are recovered from S_in 50 (near zero drift), 60, 120
 and 200 (to 2 Hz/s) here, and from S_in 400 near zero drift for turboSETI
 (above 0.15 Hz/s it never reaches 80%). No recovery was a false
-association.
+association. The ratio of the counts (4,520 to 442, about ten) belongs to
+this planted population (strengths spread evenly from S_in 10 to 400,
+drifts to 4 Hz/s), not to the instruments: in strength, near zero drift
+this search reaches 80% at a signal 8 times weaker (S_in 50 against 400),
+and for strong signals there the two come close (238 and 210 of 242 at
+S_in 400); at higher drifts turboSETI does not reach 80% at all, so no
+ratio can be given there.
 
-**The result does not hang on the rate chosen.** At every rate both reach
-in the cuts tested (0.026 to 0.26 a block), this search recovers more: at
+**The result does not hang on the rate chosen.** At every estimated rate
+both reach in the cuts tested (0.026 to 0.26 a block), this search recovers
+more on these blocks (the rates' own intervals are wide, so this is a
+comparison at about matched rates, not at rates shown equal): at
 its cut of 30 (0.068 a block) 4,520, more than turboSETI at its loosest
 cut of 5 (3,128, at 0.26 a block); at 20 (0.22) 6,189 against 2,762 for
 turboSETI at 6 (0.24); at 50 (0.049) 2,785 against 442 at 30 (0.049).
@@ -989,9 +1003,12 @@ also recovers five times as many near zero drift.
 What this does not show: it is one session at one telescope, and blocks
 near each other share interference, so the intervals describe this sample
 of blocks, not observations in general; the recovery intervals are for
-signals, which within a block are not independent either. turboSETI's
+signals, which within a block are not independent either. The cuts were
+chosen on the same blocks they are judged on, so they may be optimistic
+for another session; comparable.md step 10 tests them, fixed beforehand,
+on one. turboSETI's
 three-look recovery uses its own hit tables at the cut (its event table
 does not list every look), so which hits its events used is not
 recorded. Two false candidates of this search that the checks left
 unexplained (block 6, 1837.5101 MHz) and the 22 others it called unexplained are kept as
-test cases for the checks.
+test cases for the checks, held out from fitting step 5's score.

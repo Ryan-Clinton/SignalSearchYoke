@@ -40,7 +40,7 @@ numbers hold for.
 ## 2. The steps, in order of value
 
 Each has a **done when**. Steps 1 to 4 belong with the first result; 5 to
-9 widen it.
+10 widen it (10 tests step 4 on another session).
 
 ### Step 1: say what was searched for
 
@@ -203,9 +203,17 @@ and its interval. Needs step 7 first.
 and their intervals are in `docs/seti.md`, "The pipelines at matched
 sensitivity". At 0.1 false candidates a block both pipelines need SNR 30;
 there, of 13,310 planted signals, this search recovers 4,520 in all three
-ON looks and turboSETI 442, and at every rate both reach in the cuts
-tested (0.026 to 0.26 a block) this search recovers more. The rates'
-intervals reach about 0.13 at that cut, and the result is one session's.
+ON looks and turboSETI 442, and at every estimated rate both reach in the
+cuts tested (0.026 to 0.26 a block) this search recovers more on these
+blocks. The rates' intervals reach about 0.13 at that cut, so the rates are
+about matched, not shown equal; the cuts were chosen on the blocks they are
+judged on; and the result is one session's (step 10 tests it on another).
+The tenfold count is of this planted population: in signal strength, near
+zero drift this search reaches 80% recovery at S_in 50 and turboSETI at
+400, and above 0.15 Hz/s turboSETI never reaches it. turboSETI's false
+rate does not fall at every step of its cut (a higher cut removes OFF
+vetoes too: block 129), so the cut taken is the lowest from which the rate
+stays under 0.1 at every higher cut tested (the same cuts here).
 
 **How it was run,** with step 7, as `matched.py run`: 121 blocks
 (the 61 crowded, more than 20 hits at the cut in the six looks, and 60 of
@@ -297,6 +305,12 @@ whether a planted signal ranks among the top few real ones.
   sensitivity: the S_in (and Jy Hz) at which 80% are uncovered, by drift,
   inside and outside the known bands.
 
+- **A held-out set:** the 24 wrong-choice candidates step 4 left
+  unexplained (its result page lists them) are not used to set the score's
+  terms or scales; they test it afterwards, with the false candidates of
+  step 10's session, which the score has never seen. A score tuned until
+  these 24 rank last would show nothing.
+
 **Done when:** `check.py` ranks every candidate, and the result page
 quotes candidate sensitivity beside detection sensitivity.
 
@@ -364,6 +378,30 @@ in the bands of every candidate, and check 6 is run with them.
 
 **Done when:** the losses for the setigen paths are measured and on the
 result page; the `.0002` search has its own spec.
+
+### Step 10: the matched comparison on another session, fixed beforehand
+
+Step 4's cuts were chosen on the blocks they were judged on, from one
+session at one telescope. They are tested, unchanged, on a whole cadence
+from another session (KIC8462852 has no other whole cadence in the
+archive: `find` lists one ON look each for AGBT17A_999_67 and
+AGBT18A_999_30, so another target's, from a different session and if
+possible a different band or year). Fixed now, before any of it is read:
+
+- **The cuts:** SNR 30 for both pipelines; no other cut is chosen on the
+  new session (the curves are measured and shown, not used to choose).
+- **The blocks:** at least 40 (every crowded one up to 20, and clean ones
+  at random to make up the rest), by the same rule for crowded, read once.
+- **The same measurement:** the 19 wrong choices; 110 signals a block from
+  the same S_in and drift grid; recovery in all three ON looks at ±6 Hz,
+  ±0.05 Hz/s; turboSETI checked from its own hit tables.
+- **What counts as holding:** both rates at SNR 30 at most 0.1 a block
+  (with their intervals), and this search's recovery in all three ON looks
+  above turboSETI's with the two intervals apart. If a rate comes out above
+  0.1, that is reported as the result, not fixed by a new cut.
+
+**Done when:** the new session's page is in `docs/results/` and
+`docs/seti.md` says whether step 4's result held there.
 
 ## 3. What this plan does not do
 
