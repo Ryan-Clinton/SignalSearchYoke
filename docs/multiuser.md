@@ -1,6 +1,6 @@
 # Many people searching: the plan
 
-Written 11 November 2026, revised twice the same day. **Nothing here is
+Written 11 November 2026, revised three times the same day. **Nothing here is
 built.** It says how the search would run on many people's computers, what
 stays in one place, how an answer from a stranger's computer is checked and
 what that checking cannot do, and in what order it is built and tested.
@@ -111,10 +111,17 @@ search by the project. What stands against it:
 
 - **Pairing:** the two identities given a block are drawn at random from
   those active, and a new identity's answers are paired with an
-  established one's. An attacker must hold both of a block's identities;
-  holding a share f of the active identities, that happens for about f²
-  of blocks. Identities need no email, so f is not bounded: this raises
-  the cost, it does not prevent it.
+  established one's. An attacker must hold both of a block's identities.
+  *Only as an illustration,* if both were drawn independently and
+  uniformly and an attacker held a share f of the active identities,
+  about f² of blocks would go to two of theirs; the real policy is not
+  uniform (new identities are paired with established ones), and an
+  attacker can shape it (by how many identities they make, when they ask
+  for work, how fast they answer, and by building up a history first), so
+  f² is not a property of the system. The assignment policy is fixed in
+  stage 3 and the pairs it actually makes are measured there. Identities
+  need no email, so nothing shows two are different people or computers:
+  pairing raises the cost of collusion, it does not prevent it.
 - **The random audit** (below): a share p of accepted blocks, chosen after
   both answers are in, is searched again by the project. A pair that leaves
   out a candidate from one block escapes with probability 1 − p (97% at
@@ -147,8 +154,14 @@ held for a person.
 A share p of accepted blocks (a target of 2 to 5%, set by what the
 project's computer can keep up with; stage 4 measures that) is searched
 again by the project. **They are chosen after both answers are in,** by
-the server, at random, so no computer can know while it works whether its
-block will be audited. An audited block whose accepted answer disagrees
+the server, from a cryptographic random source (not a seeded sequence),
+using nothing a volunteer sends (not its timing, identity or answer), so
+no computer can know or steer while it works whether its block will be
+audited. Every selection is recorded with the decision. The share actually
+audited is measured by stratum (band, hit density, block time), so heavy
+or awkward blocks are not left out in practice; the escape odds above hold
+only for selection independent of the block, which these measurements
+check. An audited block whose accepted answer disagrees
 with the project's is set aside with every other answer of both its
 identities until each is searched again or replaced.
 
@@ -195,6 +208,24 @@ from the archive and searches it (the same release, the same unit). Its
 events, stamps and measurements are what the store keeps for that block,
 and the volunteers' answers must agree with it.
 
+**That search is a comparison, not a replacement.** The project's answer
+is compared whole with the accepted one, and the outcome recorded:
+
+- **confirmed:** it agrees within the tolerances; the project's events,
+  stamps and measurements become the block's (level 3);
+- **reconcilable:** it differs only in ways stage 1 showed honest computers
+  differ (a hit at the cut, a near-equal peak); recorded, and treated as
+  confirmed;
+- **disputed:** the candidate is not there, or its members, label or the
+  block's other events differ beyond that; the block goes back to
+  disputed, nothing from it is used, and a person looks;
+- **more found:** the project's search finds a candidate (or hits) both
+  agreeing answers left out: both identities' other answers are set aside
+  and searched again, as with a failed audit.
+
+The volunteers' answers are kept whatever the outcome; the disagreement is
+recorded, never overwritten.
+
 That protects the candidate's own spectra. **The rest of its evidence
 mostly does not come from the project:** recurrence (check 6) and its
 background, harmonics (check 8) and crowding (check 9) use hits from other
@@ -213,10 +244,41 @@ Every hit in the store carries the level of the block it came from. A
 check's record says how much of what it used was at each level (for
 recurrence: how many of its matches and of its background's blocks). A
 candidate that comes out unexplained, or ranks near the top, is
-**escalated**: the blocks its recurrence matches and nearest background
-came from are searched by the project too, and the checks run again on
-the project's own evidence. Nothing is said publicly about a candidate
-before that.
+**escalated**, and escalation covers the evidence of absence as well as of
+presence: a candidate with no recurrence is only as trustworthy as the
+blocks that reported nothing near it, and if those answers left something
+out, there is no match to search again. So escalation searches again:
+
+- the blocks its recurrence matches came from;
+- **the blocks behind its no-match evidence:** the looks of other sessions
+  and targets covering its frequency within check 6's window (its own
+  session's OFF looks first, then the sessions closest in time, up to a
+  set number, the number recorded), whether they reported hits there or
+  not;
+- the blocks of its nearest background (check 6's 1.5 MHz) and of check
+  9's crowding count, up to a set number.
+
+The candidate's record then says which of its evidence is the project's
+own and which only volunteer-agreed: "no recurrence in N looks searched by
+the project, and in M more agreed by volunteers", not "no recurrence".
+Nothing is said publicly about a candidate before that.
+
+### What each level is used for
+
+| use | submitted | accepted (volunteers agree) | the project's own |
+|---|---|---|---|
+| shown on the live progress page | counts only | yes, marked so | yes |
+| the checks' evidence about *other* candidates (recurrence, background, crowding) | no | yes, its level recorded | yes |
+| a candidate's own spectra and measurements | no | no: waits for the project's search | yes |
+| ranked, provisionally (marked so) | no | once its block is the project's own | yes |
+| completeness and sensitivity | no | no | yes (and audited planted units) |
+| a public statement about a candidate | no | no | only after escalation, every evidence level stated |
+
+**When the project's search changes accepted data** (disputed, more found,
+a failed audit), every check that used that block's hits, through any
+candidate's recurrence, background or crowding, is marked stale and run
+again; the old verdicts are kept with the store revision they saw, so
+earlier rankings can be rebuilt.
 
 ### Every submission kept
 
@@ -301,23 +363,30 @@ The queue (units, leases, submissions, decisions) is in PostgreSQL; the
 science store (`data/ssy.sqlite`'s shape) is SQLite. They cannot share a
 transaction, so:
 
-- An accepted decision writes an **ingestion row** in PostgreSQL in the
-  same transaction: (decision id, the canonical submission, the target
-  block).
-- One ingester process takes ingestion rows in order and writes each with
-  `store.save_block` in one SQLite transaction, recording the decision id
-  in the block's record; it then marks the ingestion row done.
-- If it stops between the two, the row is still pending: on restart it
-  looks for the decision id in the store, and writes the block only if it
-  is not there. Writing is retried until done; it is never done twice.
+- An accepted decision writes an **ingestion task** in PostgreSQL in the
+  same transaction: (task id, decision id, the canonical submission, the
+  block, and the block's **decision sequence**: 1 for its first accepted
+  decision, one more for each later one).
+- One ingester process takes tasks in order. In one SQLite transaction it
+  writes the block (`store.save_block`) and a row in a new **ingestions**
+  table: (store revision, task id, decision id, block, decision sequence,
+  time). The store revision is a counter the store raises by one with
+  every ingestion that commits, so it names the store's state exactly.
+  Then the ingester marks the task done in PostgreSQL.
+- **Recovery:** on restart, a task whose id is already in `ingestions` was
+  written: it is only marked done. Otherwise it is written, unless
+  `ingestions` already holds a *later* decision sequence for that block,
+  in which case the task is marked obsolete and nothing is written: an old
+  decision retried after a crash can never bring back superseded data.
+- Stage 3 tests exactly that: a decision superseded, the ingester stopped,
+  the old task retried.
 
 **History:** `store.save_block` now marks a block's earlier hits, events
 and looks superseded and replaces the block's own record (`INSERT OR
 REPLACE`). That keeps the hits' history, not the decisions'. The full
-history is in PostgreSQL's submissions and decisions, each science-store
-block record naming the decision it came from; the block record's own
-replacement needs to keep its predecessors (a history table), a change
-made with the server, not before.
+history is in PostgreSQL's submissions and decisions and in the store's
+`ingestions` table; a block's earlier records go to a block-history table
+when replaced. Both tables are added with the server, not before.
 
 ## Checks that change
 
@@ -341,8 +410,12 @@ made with the server, not before.
   (a summary table) rather than every check querying every hit; built
   when the store's size calls for it, but the behaviour is set now.
 - **Reproducible verdicts:** a check record keeps the checks version and
-  the **store revision** it saw (the highest decision id ingested), not
-  only a date; the store keeps enough history to rebuild that revision.
+  the **store revision** it saw (the store's own counter above, not a
+  decision id: decisions can be ingested out of order, so the highest
+  decision id does not name a state), not only a date. The store can
+  rebuild any revision's data: superseded hits, events and looks are kept
+  with the run that superseded them, and the `ingestions` and
+  block-history tables say what was current at each revision.
 
 ## Ranking across a survey
 
@@ -367,11 +440,17 @@ with its other services. So:
 - **Separate budgets** for the science store, kept submissions, the
   queue's records, backups and temporary files, each measured in stage 4
   from compressed answers.
-- **Retention:** accepted science data and every decision are kept;
-  a submission that agreed is kept as its digest and comparison result
-  once its block is accepted, its content dropped after a set time (the
-  canonical one is in the science store); rejected, disputed and wrong
-  submissions are kept whole (they are the evidence about a worker).
+- **Retention:** accepted science data and every decision are kept.
+  Rejected, disputed and wrong submissions are kept whole (they are the
+  evidence about a worker). A submission that agreed is kept whole for at
+  least a set window, longer than an audit or escalation takes to reach
+  it (the verification backlog's age, measured in stage 4, with a margin);
+  after that its content may be compressed and moved off the server to
+  cheaper storage, and dropped only when that is full, oldest first.
+  **Once an identity or pair is suspect (a failed audit, a "more found"),
+  nothing of theirs is dropped.** A digest shows what was sent; it cannot
+  rebuild it: once content is dropped, that answer can no longer be looked
+  into, only the canonical result that replaced it.
 - **Admission by disk:** the server stops handing out work before free
   disk falls below a floor that protects the other services.
 - **Before the survey outgrows the box:** the science store moves to
@@ -458,10 +537,18 @@ and pickles are not part of it.
   memory, network and electricity, how much per block (from stage 1), and
   how to stop it.
 - **Controls:** how many blocks at once (one by default), a CPU share or
-  low priority, a memory check before taking work (a unit says the memory
-  its block needs, from its hit counts; a computer without it is not
-  given it), hours to run in, pause and stop (a key, and a file the
-  program watches).
+  low priority, a memory check before taking work, hours to run in, pause
+  and stop (a key, and a file the program watches).
+- **Memory a unit needs:** from what is known before the search, not
+  after: the block's size (spectra by channels in each of six looks, from
+  the files' headers) times the search's working arrays, plus an overhead
+  measured in stage 1 on each platform, plus a margin. Hit counts are
+  known only for blocks already searched (they can raise the figure for a
+  block searched again, as crowded ones need more: 3.4 GB for block 35 on
+  this computer, one measurement, not a bound); they are never needed to
+  hand out a new block. A computer whose free memory is under the figure
+  is not given the unit, and a unit that runs out of memory anyway is
+  reported and given a higher figure.
 - **A minimum computer** (memory, disk for one block's data) from stage 1's
   measurements, refused politely below it.
 - **Keeps little:** a log and the current unit's retry state; no
@@ -475,9 +562,14 @@ and pickles are not part of it.
    limit, the 7 blocks with candidates, clean blocks, the coarse channels'
    edges; at least 20 blocks. (`seti.py sweep --blocks N` searches the next
    N blocks in order; choosing blocks needs a small option, which does not
-   change the search.) Every hit, shadow hit, event and label is compared
-   with this computer's, and each computer's time and memory per block
-   recorded. *Done when:* at least three other computers, Windows and at
+   change the search.) **The reference is frozen first:** the chosen blocks
+   searched again on this computer at one tagged commit, into a fresh
+   store, with a manifest of the commit, the six files' ETags, the blocks'
+   frequencies, the search parameters and a digest of every expected
+   output; the sweep's store is not the reference (it was made over many
+   runs and versions). The reference does not change during stage 1. Every
+   hit, shadow hit, event and label each computer gives is compared with
+   it, and each computer's time and memory per block recorded. *Done when:* at least three other computers, Windows and at
    least one other operating system, have done the set, and the
    differences are written up (how many hits and events differ, by how
    much, why, the tolerances they give), with the minimum computer.
@@ -495,7 +587,12 @@ and pickles are not part of it.
    to leave out a real candidate** (planted, so its place is known), a
    candidate whose recurrence evidence comes from blocks accepted on two
    volunteers' agreement only, the project's computer off for days, a
-   source file's ETag changing, the disk floor reached.
+   source file's ETag changing, the disk floor reached, an old ingestion
+   task retried after its block's decision was superseded, the project's
+   search disagreeing with two agreeing answers (each outcome: confirmed,
+   reconcilable, disputed, more found), a candidate escalated whose
+   no-recurrence evidence includes a block where two identities left a
+   planted match out.
    *Done when:* each is caught, survived or reported as this plan says,
    and what was not caught is written down with why: in particular, that
    the left-out candidate is not caught by the candidate searches, and
