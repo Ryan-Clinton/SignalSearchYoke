@@ -446,16 +446,25 @@ trajectories tried paid for. Neither would show an artificial origin.
 result page; the `.0002` search has its own spec.
 
 **Curved tracks measured, 11 November 2026** (docs/seti.md, "Curved
-tracks"): the cadence test loses signals from an acceleration of about
-3×10⁻⁵ Hz/s² for drifts under 0.5 Hz/s (twice the Earth's own 1.4×10⁻⁵),
-and of the rest by 10⁻⁴ (41 of 100 kept at S_in 60), the search
-from about 10⁻³; turboSETI keeps 26 of 40 at 10⁻⁴ where this search keeps
-none (its event stage does not compare drifts). An experimental curved
-cadence test (`curved.py`, apart from the search) recovers them up to the
-search's limit at about 2.6 times the false candidates on ten crowded
-blocks. Next for it: a second pass on step 4's 121 blocks, its false rate
-per block with intervals, before any change to `onoff.py`. The setigen
-paths (sine, random walk, partial looks) remain.
+tracks", corrected the same evening: the first count took only the first
+event of a signal split into several, and overstated the loss). At S_in
+60 the cadence test keeps 97 of 100 at an acceleration of 10⁻⁴ Hz/s², 49
+at 3×10⁻⁴, 1 at 10⁻³; the search itself loses the hits from about 10⁻³.
+turboSETI keeps fewer at 10⁻⁴ (26 of 40 against 40 at S_in 400, slow
+drifts), a few more at 3×10⁻⁴ (9 against 4).
+
+**A curved second pass at matched rates, 11 November 2026**
+(`curved_pass.py`, experimental, apart from the search; docs/seti.md,
+"a second pass over step 4's blocks"): after the production test, on what
+it left unsettled, over step 4's 121 blocks, every wrong-choice hit
+through it. Every configuration is matched at 0.1 false candidates a block
+at the same cut (30); the false rate there goes from 0.068 to 0.071 at
+a_max 10⁻³. Recovered at that cut: at 3×10⁻⁴, 54% to 97% (S_in 400) and
+32% to 78% (120); at 10⁻³, 8% to 86% and 0% to 59%; 5,567 to 7,119 of
+14,520 planted in all, nothing changed below 10⁻⁴. **Before any change to
+`onoff.py`:** the same on step 10's session, the checks on the pass's
+candidates, and orbital (sine) tracks planted. The setigen paths (sine,
+random walk, partial looks) remain.
 
 ### Step 10: the matched comparison on another session, fixed beforehand
 

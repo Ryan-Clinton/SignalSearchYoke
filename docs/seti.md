@@ -1187,7 +1187,12 @@ held-out candidates in block 14 (1861.56 to 1861.58 MHz, drift −0.02 Hz/s)
 are unexplained again: by drift, their place is as crowded as 8% of the
 band's places, so crowding no longer marks them (it did under the old
 rule, 10 times the median); their scores still put them behind 85% or
-more of the kept birdies. And the real candidates now score higher than
+more of the kept birdies. What they are: one family, all three at drift
+−0.0204 Hz/s within 14 kHz of each other, each in a choice that takes look
+1 (an OFF look of the true cadence) as an ON look, so interference by the
+true cadence. A check for several candidates of the same drift within a
+few kHz would mark them; it is not added, since it would be written from
+the held-out cases themselves. And the real candidates now score higher than
 almost every held-out one (11 held-out ahead of every real candidate),
 because their own crowding and look-alikes are measured to be unusual: the
 11 real candidates are a weaker bar than ever.
@@ -1241,81 +1246,86 @@ by a T²/12: 0.7 Hz at 10⁻⁴, 7 Hz at 10⁻³, 21 Hz at 3×10⁻³ (the chann
 2.79 Hz). Across the cadence, 22 minutes from the first ON look to the
 last, it moves its drift by a × 1,320 s: 0.13 Hz/s at 10⁻⁴.
 
+**A correction (11 November 2026, evening).** The first version of the
+measurements below counted a planted signal as lost when the first event
+holding one of its hits was not a candidate. A curved track at slow drift
+often comes out as several events, one a look (the drifts no longer agree,
+so the cadence test does not join them), and one of those is usually a
+candidate on its own (its straight track measured in the other ON looks
+clears S/N 5): what a person would see. Checked on one saved cadence at
+10⁻⁴: 34 of 35 such signals had a candidate among their events, the first
+event of most was "unconfirmed". `injection.trial` now also says whether
+any event holding a signal's hits is a candidate (`any_candidate`; its
+`label` is unchanged, and nothing else that uses it changes), the three
+measurements were run again with the same seeds (the same plantings), and
+the first versions are kept (data/measurements/*-v1.json). **The first
+version overstated the loss**: it put the start of the loss at 2 to 3×10⁻⁵
+Hz/s² for slow drifts (twice the Earth's own curvature) and had turboSETI
+keeping, at 10⁻⁴, signals this search lost. Neither holds.
+
 **Measured** (`measure.py curvature`; signals planted at S_in 60, where
 straight tracks are kept at every drift, in the five saved cadences, 100
 at each |a|, both signs, drifts to 4 Hz/s; the acceleration held over the
-whole cadence):
+whole cadence). "Kept" is any event holding its hits a candidate; the first
+version's count in brackets:
 
-| a (Hz/s²) | kept as candidates | lost in the search (not found in every ON look) | lost at the cadence test |
-|---|---|---|---|
-| 0 | 100/100 | 2 | 0 |
-| 1×10⁻⁵ | 99/100 | 3 | 1 |
-| 1×10⁻⁴ | 41/100 | 4 | 59 |
-| 3×10⁻⁴ | 5/100 | 10 | 90 |
-| 1×10⁻³ | 0/100 | 42 | 58 |
-| 3×10⁻³ | 0/100 | 96 | 4 |
-| 1×10⁻² | 0/100 | 100 | 0 |
+| a (Hz/s²) | kept as candidates | drifts under 0.5 Hz/s | not found by a hit in every ON look | found in every ON look, not kept |
+|---|---|---|---|---|
+| 0 | 100/100 (100) | 30/30 | 2 | 0 |
+| 1×10⁻⁵ | 100/100 (99) | 51/51 | 3 | 0 |
+| 1×10⁻⁴ | 97/100 (41) | 45/48 | 4 | 3 |
+| 3×10⁻⁴ | 49/100 (5) | 1/36 | 10 | 47 |
+| 1×10⁻³ | 1/100 (0) | 0/33 | 42 | 58 |
+| 3×10⁻³ | 0/100 | 0/36 | 96 | 4 |
+| 1×10⁻² | 0/100 | 0/46 | 100 | 0 |
 
-**The cadence test fails first, from about 10⁻⁴, and the search itself
-from about 10⁻³.** The cadence test joins a signal's hits across looks only
-if their drifts agree within 2 drift steps and 5% (onoff.py `_tolerance`),
-about 0.02 Hz/s plus 5%: 11 minutes between ON looks at 10⁻⁴ changes the
-drift by 0.07 Hz/s. At 10⁻⁴ it keeps none of the signals under 0.5 Hz/s
-and all from 1 Hz/s (where 5% of the drift is wider than the change).
-**Where the loss begins** (`measure.py curvature-fine`, the same planting,
-100 at each |a|):
+And between 10⁻⁵ and 10⁻⁴ (`measure.py curvature-fine`, 100 at each |a|):
+100/100 kept at 1, 2 and 3×10⁻⁵ (the first version: 100, 98, 86), 93 at 5
+and at 7×10⁻⁵ (70, 54), the few lost all at drifts under 0.5 Hz/s.
 
-| a (Hz/s²) | kept | drift under 0.15 Hz/s | 0.15 to 0.5 | 0.5 to 1 | 1 to 4 |
-|---|---|---|---|---|---|
-| 1×10⁻⁵ | 100/100 | 12/12 | 20/20 | 23/23 | 45/45 |
-| 2×10⁻⁵ | 98/100 | 26/28 | 14/14 | 23/23 | 35/35 |
-| 3×10⁻⁵ | 86/100 | 13/21 | 13/18 | 25/25 | 35/36 |
-| 5×10⁻⁵ | 70/100 | 3/20 | 9/22 | 14/14 | 44/44 |
-| 7×10⁻⁵ | 54/100 | 0/19 | 4/26 | 11/15 | 39/40 |
+**So at S_in 60 the cadence test starts to lose signals from about 5×10⁻⁵
+Hz/s² and loses half at 3×10⁻⁴; the search itself loses the hits from
+about 10⁻³.** The cadence test joins hits across looks only if their
+drifts agree within 2 drift steps and 5% (onoff.py `_tolerance`); a curved
+signal's looks then make separate events, each judged on its own, and one
+is still a candidate while its straight track in the other ON looks stays
+within the track's tolerance and S/N 5. At 3×10⁻⁴ the track has moved 65
+Hz (23 channels) off the line in the next ON look, and only fast drifts
+(where 5% of the drift is wide enough) keep it. The Earth's own curvature
+(up to 1.4×10⁻⁵, in every sky signal) is well below the loss.
 
-**For drifts under 0.5 Hz/s the loss begins at about 2 to 3×10⁻⁵, only
-twice the Earth's own curvature at Green Bank (1.4×10⁻⁵, which every sky
-signal carries, and which adds to the transmitter's own).** The margin is
-thin: a transmitter on a planet in a 10-day orbit (up to 2.9×10⁻⁵ while
-its drift stays within ±4 Hz/s), with the Earth's term of the same sign,
-is already where signals are lost. "Lost in the search"
-means no hit matching the track's best straight line in each ON look:
-mostly the search's own loss (the curve smears over channels), possibly
-partly the matching rule.
-
-**turboSETI keeps some of what this search loses** (`curved.py turboseti`;
-S_in 400 and drifts under 0.5 Hz/s, where turboSETI keeps straight
-signals; its hit search and event stage as step 4 runs them; 40 at each
-|a|; its three-look rule checked from its own hit tables):
+**turboSETI on the same curved tracks** (`curved.py turboseti`; S_in 400
+and drifts under 0.5 Hz/s, where turboSETI keeps straight signals; its hit
+search and event stage as step 4 runs them; 40 at each |a|; its three-look
+rule checked from its own hit tables):
 
 | a (Hz/s²) | this search | turboSETI |
 |---|---|---|
 | 0 | 39/40 | 40/40 |
 | 1×10⁻⁵ | 40/40 | 39/40 |
-| 1×10⁻⁴ | 0/40 | 26/40 (22 of 22 from 0.15 Hz/s) |
-| 3×10⁻⁴ | 0/40 | 9/40 |
+| 1×10⁻⁴ | 40/40 (first version 0) | 26/40 |
+| 3×10⁻⁴ | 4/40 (0) | 9/40 |
 | 1×10⁻³ and more | 0 | 0 |
 
 turboSETI's event stage follows a hit into the next ON look within ± the
 drift times twice the look's length and never asks the drifts to agree
-(`find_event.follow_event`), so a curve that stays near the line passes.
-**So this search's stricter cadence test, which keeps its false candidates
-down, also throws away curved signals that turboSETI keeps**, in a range
-(10⁻⁴ to 3×10⁻⁴) that a transmitter on a short-period planet reaches.
-Above 10⁻³ both lose everything, in the search.
+(`find_event.follow_event`). At 10⁻⁴ this search keeps more; at 3×10⁻⁴
+turboSETI keeps a few more (9 to 4 of 40); above 10⁻³ both lose
+everything, in the search.
 
-**A cadence test for curved tracks** (`curved.py study`, experimental and
-kept apart: nothing in the search or the store uses it). It joins a hit in
-the first ON look to one in the last under a constant acceleration up to
-a_max, needs the middle ON look on the curve (a hit or S/N 5), and measures
-the OFF looks along the curve. Run with a_max = 0 too, the same code as a
-straight-line test, so the comparison is with itself (it differs from
-onoff.py: it needs a hit in the first and last ON looks). Same plantings
-as above (S_in 60, 50 at each |a|), and its false candidates with the 19
-wrong choices of ON looks on ten blocks of the sweep read again (eight
-crowded ones with many wrong-choice candidates in step 4, two clean):
+**A cadence test for curved tracks, first version** (`curved.py study`,
+experimental and kept apart: nothing in the search or the store uses it).
+It joins a hit in the first ON look to one in the last under a constant
+acceleration up to a_max, needs the middle ON look on the curve (a hit or
+S/N 5), and measures the OFF looks along the curve. Run with a_max = 0 too,
+the same code as a straight-line test. Same plantings as above (S_in 60, 50
+at each |a|), and its false candidates with the 19 wrong choices of ON
+looks on ten blocks of the sweep read again (eight crowded ones with many
+wrong-choice candidates in step 4, two clean). Its production column is
+the first version's count (first event only) and is not run again: the
+second pass below replaces this study.
 
-| a (Hz/s²) | production | curved test, a_max 0 | a_max 10⁻⁴ | a_max 10⁻³ | a_max 10⁻² |
+| a (Hz/s²) | production (first event) | curved test, a_max 0 | a_max 10⁻⁴ | a_max 10⁻³ | a_max 10⁻² |
 |---|---|---|---|---|---|
 | 0 | 50/50 | 49 | 50 | 50 | 50 |
 | 1×10⁻⁵ | 49/50 | 43 | 47 | 47 | 47 |
@@ -1325,26 +1335,90 @@ crowded ones with many wrong-choice candidates in step 4, two clean):
 | 3×10⁻³ and more | 0 | 0 | 0 | 0 | 0-1 |
 | **false candidates, 190 wrong cadences** | | **8** | **14** | **21** | **21** |
 
-It recovers the cadence test's loss up to the search's own limit (from
-10⁻³ the search no longer finds the hits: 29 of 50 found in every ON look
-at 10⁻³, none from 3×10⁻³), and it costs false candidates: 8 to 21 in
-these 190 wrong cadences (95% Poisson intervals 3.5-16 and 13-32), about
-2.6 times, from a_max 10⁻³. The ten blocks were chosen for their many
-wrong-choice candidates, so these are not survey rates.
+On its own, in place of the straight test, it costs false candidates (8 to
+21 in these 190 wrong cadences, from a_max 10⁻³); the ten blocks were
+chosen for their many wrong-choice candidates, so these are not survey
+rates.
 
-**What this shows and does not.** Physically plausible curvature does
-defeat this search: at the cadence test from about 3×10⁻⁵ Hz/s² for drifts
-under 0.5 Hz/s (14% lost; 46% by 7×10⁻⁵, 59% at 10⁻⁴), and from about
-10⁻⁴ for the rest; in the search from about 10⁻³. The Earth's own
-curvature (1.4×10⁻⁵) is just below the loss, with little margin. In the 10⁻⁴ to 3×10⁻⁴ range turboSETI keeps signals this
-search loses: a weakness of this search's design, not of searches in
-general. A curvature-aware cadence test recovers them at a measured cost
-in false candidates. Not shown: the planted signals are at one strength
-(S_in 60; 400 for the turboSETI comparison); the acceleration is held
-constant over 22 minutes (a real orbit's changes slowly over that); the
-false candidates come from ten chosen blocks; and nothing is claimed about
-signals of other searches beyond turboSETI. **The production cadence test
-is not changed on this.** What would justify a change: the curved test (or
-a drift tolerance widened for a bounded acceleration) run as a second pass
-on step 4's 121 blocks, its false-candidate rate per block measured with
-intervals against the straight test's, and the matched comparison redone.
+### Curved tracks: a second pass over step 4's blocks, at matched rates (11 November 2026)
+
+`curved_pass.py`, experimental and kept apart (nothing in the search, the
+cadence test or the store uses it). **The production test runs first,
+unchanged; the second pass looks only at what it left unsettled**: hits at
+the cut that are no member of a production candidate or of a production
+interference event (an OFF veto along the straight track stands). From any
+two ON looks with such hits (not only the first and last), it joins a pair
+whose drifts differ by what a constant acceleration |a| ≤ a_max allows and
+whose frequencies agree with that curve, needs the third ON look on the
+curve (a hit, or the track at S/N 5), and measures the OFF looks along the
+curve and where the first hit was (any hit there, of any strength, or S/N
+6 is interference). What it keeps is added to the production candidates.
+
+On all 121 of step 4's blocks (61 crowded, 60 clean; the same blocks, read
+again from the archive), each searched once:
+
+- **false candidates:** every hit of every one of the 19 wrong choices of
+  ON looks goes through production and the pass (not only planted
+  signals), at each of step 4's cuts; distinct signals per block by shared
+  member hits, blocks the unit, weighted by class, bootstrap intervals
+  (step 4's rules, `matched_tables`);
+- **recovery:** 120 signals a block planted in the true ON looks (S_in 30,
+  60, 120 and 400; the five drift bins; |a| 0, 10⁻⁵, 3×10⁻⁵, 10⁻⁴, 3×10⁻⁴,
+  10⁻³, signs at random), 605 in each strength and |a|. Recovered: a kept
+  candidate whose every ON member hit is on the signal's track in its look
+  (frequency within 6 Hz + |a| T²/12 of the best line's start, drift within
+  0.05 Hz/s of its slope at mid-look); none matched what the unplanted
+  block already held.
+
+**False candidates a block** (95% interval):
+
+| cut | production | + pass, a_max 10⁻⁴ | 3×10⁻⁴ | 10⁻³ |
+|---|---|---|---|---|
+| 10 | 3.30 (1.32-6.17) | 3.30 | 3.30 | 3.31 |
+| 20 | 0.221 (0.110-0.357) | 0.221 | 0.221 | 0.224 |
+| 30 | 0.068 (0.023-0.133) | 0.068 | 0.068 | 0.071 (0.026-0.130) |
+| 50 | 0.049 | 0.049 | 0.049 | 0.049 |
+
+Every configuration is matched at 0.1 a block at the same cut, 30, and the
+pass's cost there is one false candidate in 121 blocks (in a crowded one)
+at a_max 10⁻³ and none below. Most of what the pass joins in the wrong
+choices already carries an OFF veto or is part of a production event; it
+adds distinct wrong-choice candidates mainly at the lowest cut: 8, 15 and
+20 at cut 8 (by a_max) to production's 1,836 over the 121 blocks, 1 to 3
+at cut 10 to its 991.
+
+**Recovered at the matched cut (30)**, of 605 each (95% interval):
+
+| \|a\| (Hz/s²) | S_in | production | + pass, a_max 3×10⁻⁴ | + pass, a_max 10⁻³ |
+|---|---|---|---|---|
+| 0 to 3×10⁻⁵ | 120 / 400 | 79-82% / 90-91% | the same | the same |
+| 10⁻⁴ | 60 | 31% | 33% | 33% |
+| 10⁻⁴ | 120 | 79% | 80% | 80% |
+| 10⁻⁴ | 400 | 96% | 96% | 96% |
+| 3×10⁻⁴ | 60 | 0% | 25% | 26% |
+| 3×10⁻⁴ | 120 | 32% (28-36) | 78% (75-81) | 78% |
+| 3×10⁻⁴ | 400 | 54% (50-58) | 97% (95-98) | 97% |
+| 10⁻³ | 120 | 0% | 0% | 59% (55-63) |
+| 10⁻³ | 400 | 8% (6-10) | 8% | 86% (83-88) |
+
+In all, 5,567 of the 14,520 planted signals with production, 7,119 with
+the pass at a_max 10⁻³ (+28%); straight and nearly straight signals are
+the same either way. S_in 30 is not recovered at cut 30 by any (its S/N is
+under the cut); at the published cut, 10, the pass gives the same kind of
+gain (at 10⁻³: 0-8% to 23-86% by strength).
+
+**What this shows and does not.** At step 4's matched false-candidate rate,
+on its 121 blocks, the second pass recovers signals accelerating at 3×10⁻⁴
+to 10⁻³ Hz/s² that the production test loses (up to the search's own
+limit for weak ones), at no measurable cost in false candidates (0.068 to
+0.071 a block, the intervals overlapping almost wholly). Below 10⁻⁴ it
+changes nothing, because production already keeps those. Not shown: the
+acceleration is held constant over 22 minutes (for a circular orbit it
+changes at the orbital rate, by at most 10% over the cadence for a 1-day
+orbit and 1% for 10 days, but 23% for a 10-hour spin); one session and one
+target's blocks; the checks (vetting.py) are not run on what the pass
+adds; and the planted signals are placed where the block's own hits are
+not, as in step 4. **The production cadence test is not changed on this.**
+What would justify a change: the same result on another session (step
+10's blocks), the checks run on the pass's candidates, and orbital
+(sinusoidal) tracks planted as well as constant accelerations.

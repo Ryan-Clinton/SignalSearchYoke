@@ -228,7 +228,8 @@ def study(runs=2, seed=41, say=print, with_false=True):
             for t, o in zip(tones, out):
                 hits = _tone_hits(looks, t, s0["tstart"], per_channel)
                 row = {"accel": t["accel"], "drift": t["drift"], "bin": t["bin"], "found_on_looks": len(hits),
-                       "production": o["label"]}
+                       "production": "candidate" if o["any_candidate"] else o["label"],
+                       "production_first_event": o["label"]}
                 for a, events in judged.items():
                     got = None
                     if 0 in hits and 4 in hits:
@@ -320,7 +321,8 @@ def turbo_compare(runs=2, seed=51, say=print):
                     got_looks += ok
                     in_event = in_event or any(row["look"] == j and abs(row["freq_mhz"] * 1e6 - f_hz) <= 6 and
                                                abs(row["drift_hz_s"] - d_mid) <= 0.05 for row in ev_rows)
-                rows.append({"accel": a, "drift": t["drift"], "bin": t["bin"], "ours": o["label"],
+                rows.append({"accel": a, "drift": t["drift"], "bin": t["bin"], "ours": "candidate" if o["any_candidate"] else o["label"],
+                             "ours_first_event": o["label"],
                              "ours_found_on_looks": o["found_on_looks"], "turbo_on_looks": got_looks,
                              "turbo_event": in_event, "turbo": in_event and got_looks == 3})
             for lk in looks:

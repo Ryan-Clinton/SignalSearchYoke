@@ -31,6 +31,7 @@ KIC 8462852.
 | `check.py` | the ten checks run on the store's candidates: records, reports in `docs/leads/`; then ranks them |
 | `occupancy.py` | the session's interference occupancy by frequency and drift, from its hits: checks 7 and 9's chances (step 6) |
 | `curved.py` | EXPERIMENTAL, apart from the search: a cadence test for curved tracks, and curved tracks through turboSETI (step 9) |
+| `curved_pass.py` | EXPERIMENTAL, apart from the search: a curved second pass after the production cadence test, over step 4's blocks at matched rates (step 9) |
 | `ranking.py` | comparable.md step 5: the score (the checks' chances), the OFF null, birdies ranked against the real candidates, the held-out wrong-cadence candidates |
 | `report.py` | the result of a swept cadence (`seti.py report`): `docs/results/TARGET-SESSION.md`, from the store and the measurements |
 | `yoke.py` | the data folder, the `--json` envelope, writing a record whole |
@@ -213,10 +214,15 @@ the default place.
   checks version 4): crowding and look-alikes by measured occupancy and
   drift; the worst held-out case falls from ahead of 44% of the planted
   signals to 15%, three in block 14 unexplained again. Curved tracks
-  (step 9) are measured: the cadence test loses signals from 2-3e-5
-  Hz/s^2 at slow drifts; `curved.py` is experimental, kept apart. Next:
-  step 10 (another session, cuts fixed), and a curved second pass on
-  step 4's blocks before any change to `onoff.py`.
+  (step 9) are measured (corrected the same evening: the first count
+  took only a split signal's first event): at S_in 60 the cadence test
+  keeps 97% at 1e-4 Hz/s^2, 49% at 3e-4, 1% at 1e-3. `curved_pass.py`
+  (experimental, apart) is a second pass over step 4's 121 blocks at
+  matched rates: the same matched cut (30), false rate 0.068 to 0.071 a
+  block, recovery at 3e-4 to 1e-3 up from 0-54% to 59-97% for S_in 120
+  and 400. Next: step 10 (another session, cuts fixed, the second pass
+  with it), the checks on the pass's candidates, and orbital tracks,
+  before any change to `onoff.py`.
 - **Real signals:** Voyager 1's carrier and sidebands found at turboSETI's
   published frequencies and drifts, the drift the Earth's; wide signals
   (its 322 Hz sidebands) are tiled with many hits, a known gap. HIP 91699's

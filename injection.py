@@ -112,7 +112,11 @@ def trial(cadence, tones, vet=None, keep_looks=False):
         event = next((i for i, e in enumerate(events)
                       if any(e["matches"][p] == idx for p, idx in found_in.items())), None)
         e = events[event] if event is not None else None
-        out.append(dict(tone, found_on_looks=len(found_in),
+        # A curved track can come out as several events (one a look): `label` is the first's, as before;
+        # any_candidate says whether any event holding one of its hits is a candidate (what a person sees).
+        any_candidate = any(ev["label"] == "candidate" and any(ev["matches"][p] == idx for p, idx in found_in.items())
+                            for ev in events)
+        out.append(dict(tone, found_on_looks=len(found_in), any_candidate=any_candidate,
                         label=e["label"] if e else None,
                         off_snr_max=e["off_snr_max"] if e else None, on_snr_min=e["on_snr_min"] if e else None,
                         drift_flag=e["drift_flag"] if e else None,

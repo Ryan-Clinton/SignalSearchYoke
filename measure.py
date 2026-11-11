@@ -835,9 +835,10 @@ def curvature(paths=None, runs=4, seed=31, say=print, accels=ACCELS, name="curva
             out, _ = injection.trial(cad, tones)
             for t in out:
                 rows.append({k2: t.get(k2) for k2 in ("x0", "drift", "accel", "bin", "s_in", "found_on_looks",
-                                                       "label", "off_snr_max")} | {"cadence": Path(files[0]).name})
+                                                       "label", "any_candidate", "off_snr_max")}
+                            | {"cadence": Path(files[0]).name})
             say(f"{Path(files[0]).name}: run {r + 1} of {runs}: "
-                f"{sum(t['label'] == 'candidate' for t in out)} of {len(out)} candidates", flush=True)
+                f"{sum(bool(t['any_candidate']) for t in out)} of {len(out)} candidates", flush=True)
         del cad
     table = []
     for a in accels:
@@ -846,13 +847,17 @@ def curvature(paths=None, runs=4, seed=31, say=print, accels=ACCELS, name="curva
             if not cell:
                 continue
             n = len(cell)
-            k = sum(t["label"] == "candidate" for t in cell)
+            # Kept: any event holding one of its hits is a candidate. Until 11 November 2026 (record
+            # format 1) only the first such event's label was taken, which counted a curved track split
+            # into several events, one of them a candidate, as lost: kept here as candidates_first_event.
+            k = sum(bool(t["any_candidate"]) for t in cell)
             table.append({"accel_hz_s2": a, "drift_hz_s": [lo, hi], "planted": n, "candidates": k,
                           "rate": round(k / n, 3), "interval": wilson(k, n),
+                          "candidates_first_event": sum(t["label"] == "candidate" for t in cell),
                           "lost_at_search": sum(t["found_on_looks"] < 3 for t in cell),
-                          "lost_at_cadence": sum(t["found_on_looks"] == 3 and t["label"] != "candidate"
+                          "lost_at_cadence": sum(t["found_on_looks"] == 3 and not t["any_candidate"]
                                                  for t in cell)})
-    record = {"accels_hz_s2": accels, "s_in": CURVE_S_IN, "runs": runs, "seed": seed,
+    record = {"format": 2, "accels_hz_s2": accels, "s_in": CURVE_S_IN, "runs": runs, "seed": seed,
               "cadences": [Path(g[0]).name for g in groups], "table": table, "rows": rows, "kind": "measured"}
     _keep(name, record)
     say("\nCandidates of those planted (S_in 60), by |acceleration|, all drifts:")
