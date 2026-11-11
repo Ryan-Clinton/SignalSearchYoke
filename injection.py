@@ -54,10 +54,11 @@ def position_bin(channel_in_file, per, reach):
     return "middle"
 
 
-def trial(cadence, tones, vet=None):
+def trial(cadence, tones, vet=None, keep_looks=False):
     """One cadence with `tones` planted, searched, judged (and checked, with
     `vet`): each tone's journey. A tone: {x0 (fractional channel at the first
-    look's start), drift (Hz/s), s_in, where ("on" or "all")}."""
+    look's start), drift (Hz/s), s_in, where ("on" or "all")}. With
+    `keep_looks`, the judged looks are returned too, their noise maps kept."""
     first = cadence[0]["s"]
     t0 = first["tstart"]
     per_channel = first["foff"] * 1e6
@@ -110,7 +111,11 @@ def trial(cadence, tones, vet=None):
                         off_snr_max=e["off_snr_max"] if e else None, on_snr_min=e["on_snr_min"] if e else None,
                         drift_flag=e["drift_flag"] if e else None,
                         verdict=verdicts.get(event, {}).get("verdict") if event is not None else None,
-                        reasons=verdicts.get(event, {}).get("reasons") if event is not None else None))
+                        reasons=verdicts.get(event, {}).get("reasons") if event is not None else None,
+                        **({"ranking": verdicts[event]["ranking"]} if event in verdicts and
+                           "ranking" in verdicts[event] else {})))
+    if keep_looks:
+        return out, events, looks
     for lk in looks:
         lk.flat = None
     return out, events

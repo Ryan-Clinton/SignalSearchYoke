@@ -163,6 +163,7 @@ def build(target, session):
                                                 "off_snr_max", "on_snr_min", "verdict", "checks", "checks_version")}
                        for c in candidates],
         "off_null": {"tracks": null_tracks, "vetoed": null_vetoed, "over_off_max": null_over},
+        "ranking": _ranking(session), "ranking_tables": _load("ranking_tables"),
         "sefd_jy": sefd, "sefd_measured": bool(sefd_rec), "sefd_assumed_before_jy": injection.SEFD_JY,
         "sefd_16_84_jy": sefd_rec and sefd_rec["sefd_jy_16_84"],
         "sefd_pairs": sefd_rec and [{k: p.get(k) for k in ("utc", "elevation_on_deg", "sefd_jy_median", "kept",
@@ -440,6 +441,68 @@ def _turbo_reason(c):
     return "; ".join(parts)
 
 
+def _ranking(session):
+    """ranking.py's ranks of this session's candidates, by event: {event_id: {rank, score, terms, shown}}."""
+    p = yoke.DATA / "checks" / "ranking.json"
+    if not p.exists():
+        return None
+    got = json.load(open(p))["sessions"].get(session)
+    return {str(s["event_id"]): {k: s[k] for k in ("rank", "score", "terms", "shown")}
+            for s in got["ranked"]} if got else None
+
+
+def candidate_sensitivity(r):
+    """ranking.py's birdies: kept, and uncovered in the first N, by drift."""
+    t = r.get("ranking_tables")
+    if not t:
+        return []
+    lines = ["### Candidate sensitivity: kept, and ranked where a person looks", "",
+             f"{t['birdies']:,} signals planted in the ON looks of the same five saved cadences "
+             "(`ranking.py birdies`), checked with the store's evidence as this sweep's candidates are, "
+             f"scored and ranked against the sweep's {len(t['real']['ranked'])} real candidates "
+             "(`ranking.py`: the sum of -log10 of each check's chance, each capped at "
+             f"{t['cap']:g}; nothing fitted). Uncovered at N: kept, and within the first N of the real "
+             "candidates and itself. The S_in from which "
+             f"{t['share']:.0%} are kept / uncovered at N = 10 / uncovered at N = 1 (ahead of every real "
+             "candidate), with its flux:", "",
+             "| drift (Hz/s) | all | outside the listed bands | inside the listed bands |", "|---|---|---|---|"]
+
+    def cell(x):
+        return "not reached" if x is None else f"S_in {x} ({flux(x, r):.0f} Jy Hz)"
+    for d in measure_bins(t):
+        row = []
+        for w in ("all", "outside the listed bands", "inside the listed bands"):
+            s = next(x for x in t["sensitivity"] if x["where"] == w and x["drift"] == d)
+            row.append(" / ".join(("not reached" if s[f] is None else str(s[f])) for f in ("kept", "top10", "top1")))
+        lines.append(f"| {d[0]:g} to {d[1]:g} | " + " | ".join(row) + " |")
+    held = [h for h in t.get("heldout", []) if h.get("found")]
+    lines += ["", "Detection sensitivity is the first figure of each cell (the search, cadence test and checks "
+              "keep it); candidate sensitivity the second and third (a person would come to it). S_in 1 is "
+              f"{flux(1, r):.2f} Jy Hz. The S_in is the lowest from which every stronger one tested reaches "
+              f"{t['share']:.0%}, so one cell just under it decides; the ranking's own loss, whatever the "
+              "strength, is the share of kept birdies ranked first (95% interval):", "",
+              "| drift (Hz/s) | outside the listed bands | inside the listed bands |", "|---|---|---|"]
+    for d in measure_bins(t):
+        row = []
+        for w in ("outside the listed bands", "inside the listed bands"):
+            s = next(x for x in t["sensitivity"] if x["where"] == w and x["drift"] == d)
+            v = s.get("of_kept_top1")
+            row.append(f"{v[0]}/{s['kept_n']} ({v[1][0] * 100:.0f}-{v[1][1] * 100:.0f}%)" if v else "")
+        lines.append(f"| {d[0]:g} to {d[1]:g} | " + " | ".join(row) + " |")
+    if held:
+        ahead = sorted(h["birdies_ahead"] for h in held)
+        lines += ["", f"Held out: {len(held)} candidates that wrong choices of ON looks made (comparable.md step 4) "
+                  "and its checks left unexplained, checked here with the store's evidence and scored: ranks "
+                  f"{min(h['rank_among_real'] for h in held)} to {max(h['rank_among_real'] for h in held)} among "
+                  f"the real candidates; the share of kept birdies ranked ahead of each runs from {ahead[0]:.0%} "
+                  f"to {ahead[-1]:.0%} (median {ahead[len(ahead) // 2]:.0%})."]
+    return lines + [""]
+
+
+def measure_bins(t):
+    return [list(d) for d in sorted({tuple(x["drift"]) for x in t["sensitivity"]})]
+
+
 def _load(name):
     p = yoke.DATA / "measurements" / f"{name}.json"
     return json.load(open(p)) if p.exists() else None
@@ -606,6 +669,7 @@ def markdown(r):
               f"on planted signals, 0.5%.", "",
               "The completeness was measured with search version 3; version 4 changed how hits join "
               "(no event changed on the planted cadences) and check 6, which the planted trials do not reach.", "",
+              *candidate_sensitivity(r),
               "### Sensitivity", "",
               f"S_min = S_in × SEFD / √(n_pol Δν τ) × Δν / √n: a signal of strength S_in gives SNR ≈ S_in at zero "
               f"drift. EIRP_min = 4π d² S_min at {t.get('distance_pc', '?')} pc; for a transmitter 1 Hz wide "
@@ -669,12 +733,19 @@ def markdown(r):
         lines.append(f"| after the checks: {k} | {n} |")
     lines.append("")
     if r["candidates"]:
-        lines += ["Every candidate, by SNR (reports in `docs/leads/`; the checks that gave a strength):", "",
-                  "| lead | MHz | drift (Hz/s) | SNR | OFF S/N max | verdict | signs |", "|---|---|---|---|---|---|---|"]
-        for c in r["candidates"]:
+        rk = r.get("ranking") or {}
+        order = sorted(r["candidates"], key=lambda c: rk.get(str(c["event_id"]), {}).get("rank", 10 ** 6))
+        lines += ["Every candidate, by rank (`ranking.py rank`: the score is the sum of -log10 of each check's "
+                  "chance, lower is more worth a look; a candidate shown to be interference ranks last; reports "
+                  "in `docs/leads/`; the checks that gave a strength):", "",
+                  "| rank | score | lead | MHz | drift (Hz/s) | SNR | OFF S/N max | verdict | signs |",
+                  "|---|---|---|---|---|---|---|---|---|"]
+        for c in order:
             signs = "; ".join(f"{x['name'].split('. ', 1)[-1]}: {x['strength']}" for x in c["checks"]
                               if x["strength"] and not x["name"].startswith("10."))
-            lines.append(f"| {c['lead'] or c['event_id']} | {c['f_start_mhz']:.6f} | {c['drift_hz_s']:+.4f} | "
+            got = rk.get(str(c["event_id"]))
+            lines.append(f"| {got['rank'] if got else ''} | {got['score'] if got else ''} | "
+                         f"{c['lead'] or c['event_id']} | {c['f_start_mhz']:.6f} | {c['drift_hz_s']:+.4f} | "
                          f"{c['snr']:.1f} | {c['off_snr_max'] if c['off_snr_max'] is not None else ''} | "
                          f"{c['verdict'] or 'not checked'} | {signs} |")
         lines += ["", "Candidates are listed one by one, never merged. Those marked only for their band are a "

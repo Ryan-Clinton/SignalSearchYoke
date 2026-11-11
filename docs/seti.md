@@ -1011,4 +1011,85 @@ three-look recovery uses its own hit tables at the cut (its event table
 does not list every look), so which hits its events used is not
 recorded. Two false candidates of this search that the checks left
 unexplained (block 6, 1837.5101 MHz) and the 22 others it called unexplained are kept as
-test cases for the checks, held out from fitting step 5's score.
+test cases for the checks, held out from fitting step 5's score (which
+fits nothing); checked again with the store's evidence, none is
+unexplained (below).
+
+### Candidates ranked, and candidate sensitivity (11 November 2026)
+
+`ranking.py` (comparable.md step 5; `check.py` ranks after every run, or
+`check.py --rank`). **The score** is the sum, over what the checks measure,
+of −log10 of the chance that a signal from the sky at a random place in
+this session's band would show it by accident, each term capped at 4 (a
+chance of 1e-4): the OFF looks' S/N along the track against 10,000 random
+tracks in the five saved cadences' OFF looks (`ranking.py offnull`: median
+3.6, 66 over the OFF level of 6); a listed band (their share of the band
+searched, 0.44, so 0.35); drift under one step (2.6); check 6's recurrence
+chance; check 7's look-alike chance where the drift is 0.1 Hz/s or more
+(nearer zero the check's chance takes OFF hits' drifts as even, which they
+are not, and the check itself calls those coincidence; with it, every real
+candidate took the cap); check 8's share of random frequencies with a
+relation; and the share of places in the band with as many hits within
+0.5 MHz (check 9). The drift against the Earth's is not a term: a
+transmitter at the target needs no particular drift. **Nothing is fitted:**
+the terms are the checks' own chances and this session's measured shares,
+the cap is fixed, and no candidate, planted or real, set any of it. Lower
+is more worth a look; one shown to be interference ranks after every
+other.
+
+The 11 candidates rank: first the three drifting ones at 2104.6 to 2106.5
+MHz (0.07 to 0.09 Hz/s, in the space-uplink band; scores 3.4 to 4.3), then
+the zero-drift and crowded ones (5.4 to 7.7), the two shown by recurrence
+last.
+
+**Birdies** (`ranking.py birdies`): 1,400 signals planted in the ON looks of
+the five saved cadences (S_in 15 to 120, drifts to 4 Hz/s; 35 a run, 8 runs
+a cadence), searched and judged, every candidate they made put through the
+checks with the store's evidence exactly as the sweep's candidates are
+(`check.vet_from_store`), scored and ranked against the 11. 1,057 were
+kept. **Uncovered at N = 10** (within the first ten of the real candidates
+and itself) every kept one was; **at N = 1** (ahead of every real candidate,
+the bar for a survey of many cadences):
+
+| drift (Hz/s) | outside the listed bands | inside the listed bands |
+|---|---|---|
+| 0 to 0.15 | 110/110 (97-100%) | 154/167 (87-95%) |
+| 0.15 to 0.5 | 97/97 (96-100%) | 148/149 (96-100%) |
+| 0.5 to 1 | 84/85 (94-100%) | 124/125 (96-100%) |
+| 1 to 2 | 71/71 (95-100%) | 99/101 (93-100%) |
+| 2 to 4 | 61/61 (94-100%) | 89/91 (92-99%) |
+
+So against this sweep's candidates, candidate sensitivity is detection
+sensitivity: 80% are uncovered from the same S_in as are kept (15 near
+zero drift, 20, 30, 45 and 45 to 4 Hz/s), outside the bands and in. The
+loss is in the bands near zero drift, where 13 of 167 fall behind the
+first real candidate (a drift under one step, or look-alikes at 0.1 to
+0.15 Hz/s), whatever their strength: the per-strength table puts that
+cell's 80% at S_in 90 only because one cell, 19 of 24 at S_in 60, falls
+just under it.
+
+**That is a low bar, and the held-out candidates show it.** Every one of
+the sweep's 11 carries marked interference, so beating them is easy. The
+24 candidates that step 4's wrong choices of ON looks made and its checks
+left unexplained (held out from everything above) were read again
+(`ranking.py heldout`; all 24 found again) and checked with the store's
+evidence. **None is unexplained now:** 6 are shown to be interference
+(recurrence), 18 likely interference (recurrence and crowding). In step
+4's run the checks had only the cadence's own hits (no recurrence, no
+session-wide crowding); with the store's evidence they mark all 24. **But
+the score does not put all of them behind the planted signals.** Four, in
+block 14 (1861.56 to 1861.58 MHz, crowding their only mark), score 1.07 to
+4.05, the best two ahead of every real candidate; 1.07 is ahead of 44% of
+the kept birdies (21% of those outside the bands, 60% of those inside). A
+survey with interference like it would show a person such things before
+many real signals. Their one mark, crowding, adds little to the score,
+because crowded places are common in this session (the term is the share
+of places as crowded): the score uses the measured occupancy only through
+that share, and step 6 replaces it with the occupancy by frequency and
+drift.
+
+What this does not show: the birdies are in five blocks of one session,
+the real candidates are one cadence's eleven, and the held-out ones are
+24 from one session's wrong cadences; across a survey a person looks at
+the first few of thousands, and that is measured at the survey's scale
+(docs/multiuser.md, "Ranking across a survey").

@@ -28,7 +28,8 @@ KIC 8462852.
 | `tools/setigen_frame.py` | setigen's planted signals, run in turboSETI's environment, for `measure.py setigen` |
 | `tools/turbo_events.py` | Price et al. 2020's pipeline (turboSETI hits, then its event pipeline at threshold 3) on a cadence's six slices, for `measure.py price` |
 | `store.py` | the hit store, `data/ssy.sqlite`: runs, files, blocks, hits, events, checks, injections |
-| `check.py` | the ten checks run on the store's candidates: records, reports in `docs/leads/` |
+| `check.py` | the ten checks run on the store's candidates: records, reports in `docs/leads/`; then ranks them |
+| `ranking.py` | comparable.md step 5: the score (the checks' chances), the OFF null, birdies ranked against the real candidates, the held-out wrong-cadence candidates |
 | `report.py` | the result of a swept cadence (`seti.py report`): `docs/results/TARGET-SESSION.md`, from the store and the measurements |
 | `yoke.py` | the data folder, the `--json` envelope, writing a record whole |
 | `docs/seti.md` | how the search works, and everything measured so far |
@@ -200,9 +201,14 @@ the default place.
   turboSETI 442 (docs/seti.md, "The pipelines at matched sensitivity").
   The cuts were chosen on the same blocks, so step 10 (fixed beforehand:
   SNR 30 both, another session's whole cadence) tests them unchanged.
-  Next: step 5 (rank, and measure discovery completeness; the 24
-  unexplained wrong-choice candidates held out from fitting it), then
-  step 10 before any claim beyond this session.
+  Step 5 is done (11 November 2026, `ranking.py`): every candidate
+  ranked by the sum of the checks' chances (nothing fitted); planted
+  signals rank ahead of every real candidate as often as they are kept,
+  except in the bands near zero drift; the 24 held-out wrong-cadence
+  candidates, checked with the store's evidence, are all marked
+  interference, but the best of four marked only for crowding outranks
+  44% of the planted ones. Next: step 10 (another session, cuts fixed), then step 6
+  (the measured occupancy, which the crowding term needs).
 - **Real signals:** Voyager 1's carrier and sidebands found at turboSETI's
   published frequencies and drifts, the drift the Earth's; wide signals
   (its 322 Hz sidebands) are tiled with many hits, a known gap. HIP 91699's

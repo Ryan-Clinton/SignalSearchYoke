@@ -24,7 +24,7 @@ owner's go.
 | ON-OFF test | every ON look seeds; every look measured along the track | turboSETI: hits only; BLISS: distance cut "made up" |
 | vetting | ten checks after blc1, with chance rates | blc1 by hand; SETI@home and UCLA by filters and scores |
 | completeness | 3,257 planted, end to end, by drift | SETI@home: birdies through the back end; UCLA: 10,000 chirps in voltages; BL: none in Price 2020 |
-| **discovery completeness** (does a planted signal rank high enough to be looked at?) | **not measured** | SETI@home: top-100 rank, power at 80% uncovered |
+| discovery completeness (does a planted signal rank high enough to be looked at?) | step 5: ranked first among this sweep's 11 for 94-100% of kept birdies (87-95% in bands near zero drift); a low bar: held-out wrong-cadence candidates marked only for crowding outrank 44% | SETI@home: top-100 rank, power at 80% uncovered |
 | pipelines compared at matched sensitivity | against turboSETI, one session (step 4: 4,520 against 442 of 13,310 at about matched wrong-cadence rates); step 10 tests another | UCLA: equal injected power and tolerances |
 | **against the pipelines made to improve on turboSETI** | **not run: BLISS, hyperseti** (step 11) | UCLA against turboSETI only (Margot 2023) |
 | **interference history across sessions** | **one cadence's OFF looks** | SETI@home: 14 years of frequency zones; Price: like events at other stars |
@@ -317,6 +317,28 @@ whether a planted signal ranks among the top few real ones.
 
 **Done when:** `check.py` ranks every candidate, and the result page
 quotes candidate sensitivity beside detection sensitivity.
+
+**Done, 11 November 2026** (`ranking.py`; docs/seti.md, "Candidates ranked,
+and candidate sensitivity"). The score is the sum of −log10 of each
+check's chance, capped at 4 a term; nothing is fitted, so there was nothing
+to tune on the held-out set. Two departures from the plan above, both
+said there: each term is capped rather than scaled by its spread (the
+sweep has 11 candidates, too few to measure spreads), and check 7's
+chance is used only from 0.1 Hz/s (nearer zero it assumes even drifts and
+gave every real candidate the cap). Of 1,400 birdies in five saved
+cadences, 1,057 were kept; every one ranked within the first 10, and 94
+to 100% ahead of every real candidate, except in the bands near zero
+drift (154 of 167): candidate sensitivity equals detection sensitivity
+against this sweep. The held-out 24, checked with the store's evidence,
+are all marked interference (6 shown, 18 likely), but four in block 14,
+marked only for crowding, score 1.07 to 4.05; the best is ahead of every
+real candidate and of 44% of the kept birdies. The bar of this sweep's
+11 is low; the crowding term is weak (step 6).
+- **Measured:** the OFF null from 10,000 random tracks (`ranking.py
+  offnull`, about 18 minutes); 1,400 birdies (`ranking.py birdies --runs
+  8`, about 93 minutes, mostly the checks at about 5 s a candidate); the
+  held-out 24 re-read and re-judged (`ranking.py heldout`, 7 blocks, about
+  70 minutes, block 35 alone 28).
 
 ### Step 6: chance rates from the measured sky, not a uniform one
 

@@ -5,6 +5,7 @@ each kept in the store's `checks` table, with a record and a report.
     ./check.py                every current candidate not yet checked by this version of the checks
     ./check.py --all          every current candidate again
     ./check.py --event ID     one event of the store, whatever its label (to see the checks at work)
+    ./check.py --rank         rank every current candidate only (ranking.py; done after every check run too)
     ./check.py --json
 
 A candidate (onoff.py: seen in every ON look along its track, nowhere in the
@@ -16,6 +17,9 @@ possible" or nothing; none deletes a candidate. The verdict is
 "interference", "likely interference", "unexplained, strong" or
 "unexplained, weak". "Unexplained" is the end of these checks, not a
 discovery.
+
+Then every current candidate is ranked (ranking.py: the sum of -log10 of
+each check's chance; data/checks/ranking.json).
 
 Records: data/checks/LEAD.json; reports: docs/leads/LEAD.md (with a PNG of
 the six looks around the track).
@@ -85,14 +89,19 @@ def _event(db, row, where):
     return e
 
 
-def recurrence_files(db, session):
+def recurrence_files(db, session, on_positions=None):
     """The files check 6 looks in: the session's OFF looks and every look of
-    other sessions."""
-    return db.execute("SELECT file_id, tstart_mjd, target, session FROM files"
-                      " WHERE is_on = 0 OR session != ? OR is_on IS NULL", (session,)).fetchall()
+    other sessions. With `on_positions` (a candidate judged with other
+    looks as ON), the session's looks at the other positions instead."""
+    if on_positions is None:
+        return db.execute("SELECT file_id, tstart_mjd, target, session FROM files"
+                          " WHERE is_on = 0 OR session != ? OR is_on IS NULL", (session,)).fetchall()
+    rows = db.execute("SELECT file_id, tstart_mjd, target, session, cadence_position FROM files").fetchall()
+    return [r for r in rows if r["session"] != session or
+            (r["cadence_position"] is not None and r["cadence_position"] not in on_positions)]
 
 
-def recurrence_hits(db, e, looks, session):
+def recurrence_hits(db, e, looks, session, on_positions=None):
     """The store's hits check 6 could match: for each file at another
     target or time, the same window vetting.py's check 6 tests (100 Hz, plus
     the drift's travel over the time between when that is under a day,
@@ -101,7 +110,7 @@ def recurrence_hits(db, e, looks, session):
     f, drift = e["frequency_mhz"], e["drift_hz_s"]
     t0 = looks[e.get("seed_position", 0)].tstart
     out = []
-    for fl in recurrence_files(db, session):
+    for fl in recurrence_files(db, session, on_positions):
         dt = ((fl["tstart_mjd"] or t0) - t0) * 86400
         within = abs(dt) < 86400
         reach = (vetting.RECUR_HZ + (abs(drift) * abs(dt) if within else 0.0)) / 1e6
@@ -139,24 +148,44 @@ def recurrence_background(db, e, file_ids):
     return out
 
 
+def session_hits(db, session):
+    """Every current hit at the cut of the session: checks 8 and 9's input."""
+    return [{"frequency_mhz": h["f_start_mhz"], "drift_hz_s": h["drift_hz_s"], "snr": h["snr"]}
+            for h in db.execute("SELECT f_start_mhz, drift_hz_s, snr FROM hits WHERE session=? AND"
+                                " superseded_run IS NULL AND origin='search'", (session,))]
+
+
+def target_of(db, session):
+    on = db.execute("SELECT * FROM files WHERE session=? AND cadence_position=0", (session,)).fetchone()
+    return {"name": on["cadence_target"] or on["target"], "ra_hours": on["ra_hours"], "dec_deg": on["dec_degrees"]}
+
+
+def vet_from_store(db, e, looks, session, target, own=(), on_positions=None, hits=None, report_dir=None,
+                   lead=None):
+    """The checks on an event with the store's evidence, as every candidate
+    of a sweep gets them: recurrence in the files `recurrence_files` names
+    (the store's hits `own` left out), check 6's background, and the
+    session's hits for checks 8 and 9 (`hits`, from `session_hits`, may be
+    passed in to save reading them again). Planted signals and candidates
+    judged with other ON looks (ranking.py) go through this too, so their
+    checks see what a real candidate's see."""
+    others = [h for h in recurrence_hits(db, e, looks, session, on_positions) if h.pop("hit_id") not in own]
+    for h in others:
+        h.pop("file_id")
+    background = recurrence_background(db, e, [fl["file_id"] for fl in recurrence_files(db, session, on_positions)])
+    return vetting.vet(e, looks, target, others, hits if hits is not None else session_hits(db, session),
+                       report_dir=report_dir, lead=lead, background=background)
+
+
 def check_event(db, row, say=print, report_dir=REPORTS):
     session, block_idx = row["session"], row["block_idx"]
     looks, where, by_pos = _cadence(db, session, block_idx)
     e = _event(db, row, where)
-    on = by_pos[0]
-    target = {"name": on["cadence_target"] or on["target"], "ra_hours": on["ra_hours"], "dec_deg": on["dec_degrees"]}
+    target = target_of(db, session)
     own = {h for h in (r["hit_id"] for r in db.execute("SELECT hit_id FROM event_hits WHERE event_id=?",
                                                          (row["event_id"],)))}
-    others = [h for h in recurrence_hits(db, e, looks, session) if h.pop("hit_id") not in own]
-    for h in others:
-        h.pop("file_id")
-    background = recurrence_background(db, e, [fl["file_id"] for fl in recurrence_files(db, session)])
-    session_hits = [{"frequency_mhz": h["f_start_mhz"], "drift_hz_s": h["drift_hz_s"], "snr": h["snr"]}
-                    for h in db.execute("SELECT f_start_mhz, drift_hz_s, snr FROM hits WHERE session=? AND"
-                                        " superseded_run IS NULL AND origin='search'", (session,))]
     lead = lead_id(target["name"], session, e["frequency_mhz"])
-    result = vetting.vet(e, looks, target, others, session_hits, report_dir=report_dir, lead=lead,
-                         background=background)
+    result = vet_from_store(db, e, looks, session, target, own, report_dir=report_dir, lead=lead)
     for c in result["checks"]:
         store.save_check(db, lead, f"{c['n']}. {c['name']}", c["result"], c["evidence"], vetting.VERSION,
                          event_id=row["event_id"], strength=c["strength"])
@@ -169,6 +198,9 @@ def check_event(db, row, say=print, report_dir=REPORTS):
 
 
 def run(args, say=print):
+    import ranking
+    if args.rank:
+        return ranking.rank(say)
     db = store.connect()
     if args.event:
         rows = db.execute("SELECT * FROM events WHERE event_id=?", (args.event,)).fetchall()
@@ -184,13 +216,15 @@ def run(args, say=print):
         say("No candidate waiting: every current candidate has been checked by this version of the checks.")
     count = db.execute("SELECT count(*) FROM events WHERE label='candidate' AND superseded_run IS NULL").fetchone()[0]
     db.close()
-    return {"checked": out, "candidates": count}
+    ranked = ranking.rank(say) if count and not args.event else None
+    return {"checked": out, "candidates": count, "ranked": ranked is not None}
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--all", action="store_true", help="check every current candidate again")
     ap.add_argument("--event", type=int, help="check this one event of the store, whatever its label")
+    ap.add_argument("--rank", action="store_true", help="only rank every current candidate")
     ap.add_argument("--json", action="store_true", help="answer in JSON")
     args = ap.parse_args()
     yoke.main("check", lambda: run(args), args.json)
