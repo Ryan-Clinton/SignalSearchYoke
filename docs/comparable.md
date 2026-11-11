@@ -333,7 +333,22 @@ against this sweep. The held-out 24, checked with the store's evidence,
 are all marked interference (6 shown, 18 likely), but four in block 14,
 marked only for crowding, score 1.07 to 4.05; the best is ahead of every
 real candidate and of 44% of the kept birdies. The bar of this sweep's
-11 is low; the crowding term is weak (step 6).
+11 is low; the crowding term is weak (step 6). The score is a heuristic
+ranking, not a calibrated probability, and every ranked list keeps its
+calibration (`ranking.py`). Taking terms out one at a time (seti.md):
+no single term carries the planted signals; crowding and recurrence carry
+the held-out interference down.
+- **What step 5 has not shown:** discovery completeness at survey scale.
+  It ranked planted signals against one cadence's 11 candidates, a weak
+  population. **Still to do, after steps 6 and 8:** a ranking challenge
+  with many realistic false candidates from several sessions (wrong-cadence
+  candidates and real ones), independent of anything that set the score:
+  how many planted signals reach the first 10, 50 and 100, how many
+  interference candidates fill those places, and how that changes by
+  session and band.
+- **The held-out 24 stay regression cases** through step 6: whether the
+  measured occupancy moves them down is measured, without any rule or
+  weight chosen for them.
 - **Measured:** the OFF null from 10,000 random tracks (`ranking.py
   offnull`, about 18 minutes); 1,400 birdies (`ranking.py birdies --runs
   8`, about 93 minutes, mostly the checks at about 5 s a candidate); the
@@ -389,6 +404,16 @@ within 100 Hz of where the signal started.
 
 **Done when:** at least three other sessions' OFF looks are in the store
 in the bands of every candidate, and check 6 is run with them.
+
+**Recurrence across sessions is a research question, not only a
+matching rule.** A transmitter on an orbiting planet moves far more than a
+channel between sessions months apart, so same-frequency matching cannot
+find it, and widening the window lets chance matches in. Defensible
+intermediate tests, once the history exists: whether weak features recur
+when the telescope points at the same sky position more than at controls
+(other targets, the same frequencies), and whether a family of weak
+signals fits some bounded acceleration model, with the number of
+trajectories tried paid for. Neither would show an artificial origin.
 
 ### Step 9: other kinds of signal
 

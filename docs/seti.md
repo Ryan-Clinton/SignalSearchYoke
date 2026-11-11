@@ -1035,7 +1035,14 @@ transmitter at the target needs no particular drift. **Nothing is fitted:**
 the terms are the checks' own chances and this session's measured shares,
 the cap is fixed, and no candidate, planted or real, set any of it. Lower
 is more worth a look; one shown to be interference ranks after every
-other.
+other. **It is a heuristic ranking, not a probability:** the terms are of
+different kinds (chances of coincidence, shares of the band, a place in a
+random-track distribution) and not independent (a crowded place also
+tends to have recurrences and relations), so the sum is neither a combined
+chance nor a likelihood ratio, and says nothing of how likely a candidate
+is to be a signal. Every ranked list keeps its calibration (the session
+whose hits gave the shares, the OFF null's file and its digest, the cap,
+the versions); scores from different calibrations are not compared.
 
 The 11 candidates rank: first the three drifting ones at 2104.6 to 2106.5
 MHz (0.07 to 0.09 Hz/s, in the space-uplink band; scores 3.4 to 4.3), then
@@ -1076,10 +1083,12 @@ left unexplained (held out from everything above) were read again
 evidence. **None is unexplained now:** 6 are shown to be interference
 (recurrence), 18 likely interference (recurrence and crowding). In step
 4's run the checks had only the cadence's own hits (no recurrence, no
-session-wide crowding); with the store's evidence they mark all 24. **But
+session-wide crowding); with the store's evidence they mark all 24. That
+is the checks' doing, with more evidence, not the ranking's: the ranking
+only orders what the checks found. **But
 the score does not put all of them behind the planted signals.** Four, in
 block 14 (1861.56 to 1861.58 MHz, crowding their only mark), score 1.07 to
-4.05, the best two ahead of every real candidate; 1.07 is ahead of 44% of
+4.05, the best three ahead of every real candidate; 1.07 is ahead of 44% of
 the kept birdies (21% of those outside the bands, 60% of those inside). A
 survey with interference like it would show a person such things before
 many real signals. Their one mark, crowding, adds little to the score,
@@ -1087,6 +1096,29 @@ because crowded places are common in this session (the term is the share
 of places as crowded): the score uses the measured occupancy only through
 that share, and step 6 replaces it with the occupancy by frequency and
 drift.
+
+**How much the ranking leans on each term** (`ranking.py tables`, each
+term set to 0 for every candidate in turn, nothing refitted):
+
+| taken out | kept birdies ahead of every real candidate | best held-out candidate ahead of (of kept birdies) | held-out ahead of every real |
+|---|---|---|---|
+| nothing | 1037/1057 | 44% | 3 |
+| OFF S/N | 997 | 32% | 2 |
+| band | 1035 | 29% | 3 |
+| zero drift | 1040 | 43% | 3 |
+| recurrence | 1037 | 34% | 12 |
+| look-alikes | 1045 | 44% | 3 |
+| relations | 1036 | 44% | 3 |
+| crowding | 981 | 94% | 3 |
+
+No one term carries the planted signals (981 to 1,045 stay first whatever
+is taken out). Two carry the interference down: without crowding the best
+held-out candidate would be ahead of 94% of the planted signals, and
+without recurrence 12 of the 24 would be ahead of every real candidate.
+Taking out the OFF term or the band lowers the best held-out candidate's
+place (to 32% and 29%): those terms count against planted signals more
+than against it, so the ranking is not monotone in evidence, as a
+heuristic sum need not be.
 
 What this does not show: the birdies are in five blocks of one session,
 the real candidates are one cadence's eleven, and the held-out ones are

@@ -1,3 +1,12 @@
+> **Status (11 November 2026, added by the project):** an AI-written
+> literature report, kept as research notes, **not a validated review**.
+> Its citations were conversation-specific markers that did not survive
+> export (0 of them); each is now shown as **†**. A statement
+> marked † is unverified until its source is found again; the sources
+> named in the text itself with a stable identifier are listed at the end.
+> Nothing here is used by the project until its primary source has been
+> read.
+
 # SETI’s Forgotten Search Space: Historically Proposed Radio-Signal Hypotheses Worth Re-testing
 
 ## Scope, evidential standard and main conclusion
@@ -124,3 +133,24 @@ Finally, broad-band technosignatures are no longer an untouched frontier. By 202
 **Second: Doppler-corrected sparse periodic narrowband pulses.** The historical anchor is Cullers, 1986, *Sensitive Detection of Narrowband Pulses* ([NASA bibliographic record](https://ntrs.nasa.gov/citations/20040090093)). Its key claim was that low-duty-cycle pulse trains can outperform continuous accumulation for fixed energy, and the work progressed as far as field-test software. citeturn119554search0turn119554search1 The decisive modern experiment is to inject and recover pulse trains with duty cycles below 10%, unknown periods, missing pulses and non-zero Doppler drift, then run the validated detector over repeated GBT observations with strict on/off-source controls. `blipss` makes periodicity itself established; the potentially useful contribution is the joint sparse-periodic/de-Doppler parameter search. citeturn878954academia7 It may fail because rotating radars and satellite transmitters inhabit exactly this morphology, because public data do not simultaneously provide Hz spectral resolution and sub-second timing, or because low-duty-cycle beacons are no more physically probable than continuous ones.
 
 **Third: curvature-aware Doppler recovery.** The historical anchor is Horowitz & Sagan’s 1993 META analysis ([NASA record](https://ntrs.nasa.gov/citations/19930072472)), which explicitly recognised the changing Doppler signature caused by terrestrial motion. citeturn897160search20turn897160search1 The decisive experiment is a hierarchical quadratic-drift search on BL HSR data: ordinary linear de-Doppler first, then a curvature grid around weak candidates, followed by cross-scan fitting to a smooth physically allowed trajectory and aggressive RFI controls. The existing 2.79-Hz/18.25-s data are adequate for curvature that accumulates several channels over a scan or observing sequence. citeturn223321search0 This is computationally realistic on a 16-core CPU and GTX 1080 if implemented hierarchically rather than as a brute-force three-dimensional search. It may fail because five-minute scans are short enough that curvature rarely matters, because terrestrial oscillators and satellites generate equally convincing nonlinear drifts, because candidate gains over an optimal linear fit may be negligible, or because the most interesting curvature lies below the resolution already lost during filterbank formation. The technique would therefore be an **extension of established de-Doppler searches, not a new technosignature class**. citeturn160431search21turn878954search2
+
+## Sources named in the text with a stable identifier
+
+Listed as the report names them; not yet read by the project.
+
+- Cordes, J. M., Lazio, T. J. W. & Sagan, C. (1997), *Scintillation-Induced
+  Intermittency in SETI*, ApJ 487, 782: arXiv:astro-ph/9707039.
+- Cullers, D. K. (1986), *Sensitive detection of narrowband pulses*, Acta
+  Astronautica: DOI 10.1016/0094-5765(86)90005-6; NASA NTRS 20040090093.
+- Horowitz, P. & Sagan, C. (1993), *Five years of Project META*: NASA NTRS
+  19930072472.
+- NASA (1981), *Project OASIS*: NASA NTRS 19820016111.
+
+Named without an identifier (to be found): Project Cyclops (Oliver &
+Billingham 1971); Horowitz & Forster's Sentinel paper (1985); the later
+re-analysis constraining scintillating META sources; Brzycki et al. (2023)
+on scintillation as an interference discriminator; the 2024 Breakthrough
+Listen Galactic-centre scintillation search; Suresh et al. on `blipss`;
+the `blc1` analyses (Sheikh et al. 2021; Smith et al. 2021); Breakthrough
+Listen's data-product and public-archive descriptions; the COSMIC/VLA
+programme; the 2026 broadband-technosignature framework.

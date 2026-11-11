@@ -38,7 +38,20 @@ sanity (check 1) is not a term either: it is shown beside the rank.
 
 Nothing in the score is fitted: the terms are the checks' own chances and
 shares measured on this session's hits, the cap is fixed, and no candidate,
-planted or real, set any of it. Lower is more worth a look. A candidate
+planted or real, set any of it. Lower is more worth a look. **It is a
+heuristic ranking score, not a probability:** the terms are of different
+kinds (a chance of coincidence, a share of the band, a place in a random-
+track distribution), and they are not independent (a crowded place also
+tends to have recurrences and relations), so their sum is neither a
+combined chance nor a likelihood ratio, and says nothing of how likely a
+candidate is to be a signal. `tables` measures how much the ranking leans
+on each term by taking it out.
+
+**A score belongs to its calibration:** the session whose hits gave the
+band and crowding shares, the OFF null's file and the cadences it came
+from, the cap, the look-alike line and the ranking version. They are kept
+with every ranked list (`calibration`); scores made with different
+calibrations (another session, receiver or telescope) are not compared. A candidate
 whose checks *show* interference (check 2 or 6) ranks after every other;
 ties go to the higher SNR.
 
@@ -58,6 +71,7 @@ with the store's evidence (recurrence in the choice's own OFF looks) and
 scores them, to see where interference the checks cannot explain ranks.
 """
 import argparse
+import hashlib
 import json
 import math
 import time
@@ -73,6 +87,7 @@ import store
 import vetting
 import yoke
 
+VERSION = "1 (11 Nov 2026: the checks' chances summed, capped at 4; look-alikes from 0.1 Hz/s)"
 CAP = 4.0                               # a term's most: -log10 of a chance of 1e-4
 TERMS = ("off", "band", "zero_drift", "recurrence", "lookalikes", "relations", "crowding")
 LOOKALIKE_MIN_DRIFT = 0.1               # Hz/s: check 7's chance is used from here (vetting.py's own line)
@@ -129,9 +144,23 @@ def context(db, session):
     grid = np.concatenate([np.arange(lo, hi, GRID_MHZ) for lo, hi in blocks]) if blocks else np.array([])
     counts = np.sort(np.searchsorted(freqs, grid + CROWD_MHZ, "right") - np.searchsorted(freqs, grid - CROWD_MHZ))
     null_path = _p("off_null.json")
-    null = np.array(json.loads(null_path.read_text(encoding="utf-8"))["values"]) if null_path.exists() else None
+    null_rec = json.loads(null_path.read_text(encoding="utf-8")) if null_path.exists() else None
+    null = np.array(null_rec["values"]) if null_rec else None
+    calibration = {
+        "ranking_version": VERSION, "checks_version": vetting.VERSION, "cap": CAP,
+        "lookalike_min_drift_hz_s": LOOKALIKE_MIN_DRIFT,
+        "band_and_crowding": {"session": session, "hits_at_cut": len(hits), "span_mhz": round(span, 3),
+                              "blocks": len(blocks), "band_share": round(in_band / span, 4) if span else None,
+                              "crowding_window_mhz": CROWD_MHZ, "grid_mhz": GRID_MHZ,
+                              "bands": "vetting.BANDS"},
+        "off_null": None if not null_rec else {
+            "file": "data/measurements/off_null.json",
+            "sha256": hashlib.sha256(null_path.read_bytes()).hexdigest(),
+            "tracks": len(null), "cadences": [c["cadence"] for c in null_rec.get("cadences", [])],
+            "measured": null_rec.get("_stamp", {}).get("utc") if isinstance(null_rec.get("_stamp"), dict) else None}}
     return {"session": session, "hits": hits, "freqs": freqs, "span_mhz": span, "band_share": in_band / span,
-            "crowd_counts": counts, "off_null": null, "target": check.target_of(db, session)}
+            "crowd_counts": counts, "off_null": null, "target": check.target_of(db, session),
+            "calibration": calibration}
 
 
 def _by_n(result):
@@ -211,13 +240,13 @@ def rank(say=print):
     db = store.connect()
     sessions = [r[0] for r in db.execute("SELECT DISTINCT session FROM events WHERE label='candidate' AND"
                                          " superseded_run IS NULL")]
-    record = {"cap": CAP, "terms": TERMS, "version": vetting.VERSION, "sessions": {}}
+    record = {"cap": CAP, "terms": TERMS, "version": VERSION, "checks_version": vetting.VERSION, "sessions": {}}
     for session in sessions:
         ctx = context(db, session)
         ranked = real(db, session, ctx)
         record["sessions"][session] = {"band_share": round(ctx["band_share"], 4), "span_mhz": round(ctx["span_mhz"], 3),
                                        "off_null_tracks": None if ctx["off_null"] is None else len(ctx["off_null"]),
-                                       "ranked": ranked}
+                                       "calibration": ctx["calibration"], "ranked": ranked}
         say(f"{session}: {len(ranked)} candidates, ranked (lower score is more worth a look)")
         for s in ranked:
             say(f"  {s['rank']:>2}. {s['frequency_mhz']:.6f} MHz {s['drift_hz_s']:+.4f} Hz/s SNR {s['snr']:.1f}: "
@@ -399,9 +428,16 @@ def tables(say=print):
                          max(1, sum(1 for t in kept_birdies if pick(t))), 3)
                 for w, pick in (("outside the listed bands", lambda t: not t["in_band"]),
                                 ("inside the listed bands", lambda t: t["in_band"]))}
-    record = {"cells": cells, "sensitivity": sens, "heldout": held, "birdies": len(rows),
+    record = {"ablation": ablation(rows, ranked["sessions"][session]["ranked"], held),
+              "calibration": ranked["sessions"][session].get("calibration"),
+              "cells": cells, "sensitivity": sens, "heldout": held, "birdies": len(rows),
               "real": ranked["sessions"][session], "share": SHARE, "n_look": N_LOOK, "cap": CAP, "kind": "measured"}
     yoke.write(_p("ranking_tables.json"), record, stamp=True)
+    for a in record["ablation"]:
+        say(f"  without {a['without']:>10}: kept birdies ahead of every real {a['kept_ahead_of_every_real'][0]}/"
+            f"{a['kept_ahead_of_every_real'][1]}; best held-out ahead of {a['best_held_out_ahead_of_kept_share']} of "
+            f"them; held-out ahead of every real {a['held_out_ahead_of_every_real']}; real moved "
+            f"{a['real_candidates_moved']}")
     say(f"{len(rows)} birdies; S_in from which {SHARE:.0%} are kept / uncovered in the first "
         + " / ".join(map(str, N_LOOK)) + ":")
     for s in sens:
@@ -413,6 +449,42 @@ def tables(say=print):
                 f"{h['score']:.2f}, rank {h['rank_among_real']} among the real, {h['birdies_ahead']:.0%} of kept "
                 "birdies ahead of it")
     return record
+
+
+def ablation(rows, real_ranked, held):
+    """How much the ranking leans on each term: each taken out in turn (its
+    value set to 0 for every candidate, real, planted and held out), the
+    ranking redone. For each: the share of kept birdies ranked ahead of every
+    real candidate; the share of kept birdies the best-scoring held-out
+    candidate is ahead of; how many of the real candidates change place;
+    and the same with nothing taken out. Nothing is refitted: it shows
+    whether one term carries the ranking, not which weights would be best."""
+    kept = [t for t in rows if t["kept"] and t.get("ranking")]
+    found = [h for h in held if h.get("found")]
+
+    def without(s, term):
+        t = dict(s["terms"])
+        if term:
+            t[term] = 0.0
+        return {"shown": s["shown"], "score": round(sum(t.values()), 3), "snr": s.get("snr")}
+    out = []
+    base_order = None
+    for term in (None, *TERMS):
+        real = sorted(range(len(real_ranked)), key=lambda i: key(without(real_ranked[i], term)))
+        real_keys = sorted(key(without(s, term)) for s in real_ranked)
+        first = sum(key(without(t["ranking"], term)) < real_keys[0] for t in kept) if real_keys else len(kept)
+        hk = sorted((key(without(h, term)) for h in found)) if found else []
+        best_held_ahead = (sum(hk[0] < key(without(t["ranking"], term)) for t in kept) / len(kept)
+                           if hk and kept else None)
+        held_ahead_of_real = sum(k < real_keys[0] for k in hk) if real_keys else None
+        if base_order is None:
+            base_order = real
+        out.append({"without": term or "nothing", "kept_ahead_of_every_real": [first, len(kept)],
+                    "best_held_out_ahead_of_kept_share": None if best_held_ahead is None else round(best_held_ahead, 3),
+                    "held_out_ahead_of_every_real": held_ahead_of_real,
+                    "real_candidates_moved": sum(a != b for a, b in zip(base_order, real)),
+                    "terms_nonzero_in_kept": sum(bool(t["ranking"]["terms"].get(term)) for t in kept) if term else None})
+    return out
 
 
 def main(argv=None):

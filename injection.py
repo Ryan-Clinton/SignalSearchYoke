@@ -69,9 +69,10 @@ def trial(cadence, tones, vet=None, keep_looks=False):
         here = []
         for tone in tones:
             if tone["where"] == "all" or j % 2 == 0:
-                x = tone["x0"] + tone["drift"] * dt / per_channel
+                a = tone.get("accel", 0.0)          # Hz/s^2: a curved track (curvature study)
+                x = tone["x0"] + (tone["drift"] * dt + 0.5 * a * dt ** 2) / per_channel
                 c = int(min(max(round(x), 0), raw.shape[1] - 1))
-                here.append((x, tone["drift"], tone["s_in"] * sigma[c] / math.sqrt(raw.shape[0])))
+                here.append((x, tone["drift"] + a * dt, tone["s_in"] * sigma[c] / math.sqrt(raw.shape[0]), a))
         planted.append(measure.plant(raw, here, s["tsamp"], s["foff"]) if here else raw)
 
     def one(j):
@@ -98,9 +99,14 @@ def trial(cadence, tones, vet=None, keep_looks=False):
             if not lk.on:
                 continue
             dt = (lk.tstart - t0) * 86400
-            x = tone["x0"] + tone["drift"] * dt / per_channel
+            a = tone.get("accel", 0.0)
+            # A curved track's hit is the best straight line over the look (T long): its drift is the one at
+            # mid-look, and it starts a T^2/12 behind the curve's start (least squares on a parabola).
+            span_t = lk.n_t * lk.tsamp if a else 0.0
+            x = tone["x0"] + (tone["drift"] * dt + 0.5 * a * dt ** 2 - a * span_t ** 2 / 12) / per_channel
+            mid = dt + 0.5 * span_t
             before = set(used[lk.position])
-            hit = measure.matched(lk.hits, x, tone["drift"], lk.step, used[lk.position])
+            hit = measure.matched(lk.hits, x, tone["drift"] + a * mid, lk.step, used[lk.position])
             if hit:
                 found_in[lk.position] = (used[lk.position] - before).pop()
         event = next((i for i, e in enumerate(events)

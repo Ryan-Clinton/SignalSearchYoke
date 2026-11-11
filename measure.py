@@ -58,16 +58,20 @@ NEIGHBOURS = 4          # channels either side a tone's sinc-squared response is
 
 def plant(raw, tones, tsamp, foff, substeps=SUBSTEPS):
     """`raw` (time, channel) with drifting tones added: each (x0, drift Hz/s,
-    h), x0 the fractional channel at the look's start, h the power added to
-    each spectrum, spread over the channels crossed with sinc^2 leakage."""
+    h) or (x0, drift, h, accel Hz/s^2), x0 the fractional channel at the
+    look's start, h the power added to each spectrum, spread over the
+    channels crossed with sinc^2 leakage. With accel the track curves:
+    frequency f0 + drift t + accel t^2 / 2 from the look's start."""
     out = raw.copy()
     n_t, n_f = out.shape
     per_channel = foff * 1e6                          # Hz a channel, negative when the band runs downward
     offsets = np.arange(-NEIGHBOURS, NEIGHBOURS + 2)
-    for x0, drift, h in tones:
+    for tone in tones:
+        x0, drift, h = tone[:3]
+        accel = tone[3] if len(tone) > 3 else 0.0
         for t in range(n_t):
             tau = (t + (np.arange(substeps) + 0.5) / substeps) * tsamp
-            x = x0 + drift * tau / per_channel
+            x = x0 + (drift * tau + 0.5 * accel * tau ** 2) / per_channel
             base = np.floor(x).astype(int)
             cells = base[:, None] + offsets[None, :]
             weight = np.sinc(cells - x[:, None]) ** 2 * (h / substeps)
@@ -798,11 +802,73 @@ def price(say=print):
     return record
 
 
+# --- curved tracks (comparable.md step 9) -------------------------------------------
+
+# Hz/s^2. A sky signal at Green Bank curves by the Earth's spin, about 1.4e-5 at
+# 2.2 GHz (f/c x omega^3 R cos(latitude)); a transmitter on an Earth-like planet's
+# equator adds about the same. A planet in a one-day orbit (150 km/s) gives up to
+# about 6e-3 where its drift passes zero; a Jupiter-sized planet spinning in 10
+# hours, about 3e-3 (with drifts past this search's 4 Hz/s for most of the spin).
+ACCELS = (0.0, 1e-5, 1e-4, 3e-4, 1e-3, 3e-3, 1e-2)
+CURVE_S_IN = 60          # strong enough that straight tracks are kept at every drift (Phase 6: 97-100%)
+
+
+def curvature(paths=None, runs=4, seed=31, say=print):
+    """Signals with curved tracks (a frequency acceleration) planted in the ON
+    looks of the saved cadences, through the search and the cadence test:
+    how many come out candidates, by acceleration and drift, and where the
+    rest are lost (not found in every ON look by the search, or found but not
+    made a candidate). The acceleration holds over the whole cadence, so a
+    track's drift changes from look to look as well as curving within one.
+    The checks are not run: this measures the search and the cadence test."""
+    import injection
+    rng = np.random.default_rng(seed)
+    groups = cadences() if not paths else [paths[i:i + 6] for i in range(0, len(paths), 6)]
+    rows = []
+    for files in groups:
+        cad = injection.load(files)
+        for r in range(runs):
+            tones = injection.tones_for(cad, len(ACCELS) * len(DRIFT_BINS), 0, rng, strengths=(CURVE_S_IN,))
+            for k, t in enumerate(tones):
+                t["accel"] = ACCELS[k % len(ACCELS)] * (1 if rng.random() < 0.5 else -1)
+            out, _ = injection.trial(cad, tones)
+            for t in out:
+                rows.append({k2: t.get(k2) for k2 in ("x0", "drift", "accel", "bin", "s_in", "found_on_looks",
+                                                       "label", "off_snr_max")} | {"cadence": Path(files[0]).name})
+            say(f"{Path(files[0]).name}: run {r + 1} of {runs}: "
+                f"{sum(t['label'] == 'candidate' for t in out)} of {len(out)} candidates", flush=True)
+        del cad
+    table = []
+    for a in ACCELS:
+        for b, (lo, hi) in [(None, (0.0, 4.0))] + list(enumerate(DRIFT_BINS)):
+            cell = [t for t in rows if abs(abs(t["accel"]) - a) < 1e-12 and (b is None or t["bin"] == b)]
+            if not cell:
+                continue
+            n = len(cell)
+            k = sum(t["label"] == "candidate" for t in cell)
+            table.append({"accel_hz_s2": a, "drift_hz_s": [lo, hi], "planted": n, "candidates": k,
+                          "rate": round(k / n, 3), "interval": wilson(k, n),
+                          "lost_at_search": sum(t["found_on_looks"] < 3 for t in cell),
+                          "lost_at_cadence": sum(t["found_on_looks"] == 3 and t["label"] != "candidate"
+                                                 for t in cell)})
+    record = {"accels_hz_s2": ACCELS, "s_in": CURVE_S_IN, "runs": runs, "seed": seed,
+              "cadences": [Path(g[0]).name for g in groups], "table": table, "rows": rows, "kind": "measured"}
+    _keep("curvature", record)
+    say("\nCandidates of those planted (S_in 60), by |acceleration|, all drifts:")
+    for c in table:
+        if c["drift_hz_s"] == [0.0, 4.0]:
+            say(f"  {c['accel_hz_s2']:g} Hz/s^2: {c['candidates']}/{c['planted']} {c['interval']}; lost at the "
+                f"search {c['lost_at_search']}, at the cadence test {c['lost_at_cadence']}")
+    return record
+
+
+
 def main():
     import instrument
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("what", choices=("desmear", "pairs", "kurtosis", "false", "scale", "noise", "cadence",
-                                     "vetting", "setigen", "voyager", "price", "response", "sefd", "dropped"))
+                                     "vetting", "setigen", "voyager", "price", "response", "sefd", "dropped",
+                                     "curvature"))
     ap.add_argument("files", nargs="*")
     ap.add_argument("--json", action="store_true", help="answer in JSON")
     args = ap.parse_args()
@@ -810,7 +876,8 @@ def main():
             "noise": noise, "cadence": cadence, "vetting": lambda _files: vetting_demo(),
             "setigen": lambda _files: setigen_check(), "voyager": lambda _files: voyager(),
             "price": lambda _files: price(), "response": lambda _files: instrument.response(),
-            "sefd": lambda _files: instrument.sefd(), "dropped": lambda files: instrument.dropped(*files)}[args.what]
+            "sefd": lambda _files: instrument.sefd(), "dropped": lambda files: instrument.dropped(*files),
+            "curvature": curvature}[args.what]
     yoke.main("measure", lambda: work(args.files), args.json)
 
 
