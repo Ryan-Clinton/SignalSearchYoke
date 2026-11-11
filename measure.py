@@ -810,10 +810,11 @@ def price(say=print):
 # about 6e-3 where its drift passes zero; a Jupiter-sized planet spinning in 10
 # hours, about 3e-3 (with drifts past this search's 4 Hz/s for most of the spin).
 ACCELS = (0.0, 1e-5, 1e-4, 3e-4, 1e-3, 3e-3, 1e-2)
+ACCELS_FINE = (1e-5, 2e-5, 3e-5, 5e-5, 7e-5)   # between the Earth's own (1.4e-5) and the first loss seen (1e-4)
 CURVE_S_IN = 60          # strong enough that straight tracks are kept at every drift (Phase 6: 97-100%)
 
 
-def curvature(paths=None, runs=4, seed=31, say=print):
+def curvature(paths=None, runs=4, seed=31, say=print, accels=ACCELS, name="curvature"):
     """Signals with curved tracks (a frequency acceleration) planted in the ON
     looks of the saved cadences, through the search and the cadence test:
     how many come out candidates, by acceleration and drift, and where the
@@ -828,9 +829,9 @@ def curvature(paths=None, runs=4, seed=31, say=print):
     for files in groups:
         cad = injection.load(files)
         for r in range(runs):
-            tones = injection.tones_for(cad, len(ACCELS) * len(DRIFT_BINS), 0, rng, strengths=(CURVE_S_IN,))
+            tones = injection.tones_for(cad, len(accels) * len(DRIFT_BINS), 0, rng, strengths=(CURVE_S_IN,))
             for k, t in enumerate(tones):
-                t["accel"] = ACCELS[k % len(ACCELS)] * (1 if rng.random() < 0.5 else -1)
+                t["accel"] = accels[k % len(accels)] * (1 if rng.random() < 0.5 else -1)
             out, _ = injection.trial(cad, tones)
             for t in out:
                 rows.append({k2: t.get(k2) for k2 in ("x0", "drift", "accel", "bin", "s_in", "found_on_looks",
@@ -839,7 +840,7 @@ def curvature(paths=None, runs=4, seed=31, say=print):
                 f"{sum(t['label'] == 'candidate' for t in out)} of {len(out)} candidates", flush=True)
         del cad
     table = []
-    for a in ACCELS:
+    for a in accels:
         for b, (lo, hi) in [(None, (0.0, 4.0))] + list(enumerate(DRIFT_BINS)):
             cell = [t for t in rows if abs(abs(t["accel"]) - a) < 1e-12 and (b is None or t["bin"] == b)]
             if not cell:
@@ -851,9 +852,9 @@ def curvature(paths=None, runs=4, seed=31, say=print):
                           "lost_at_search": sum(t["found_on_looks"] < 3 for t in cell),
                           "lost_at_cadence": sum(t["found_on_looks"] == 3 and t["label"] != "candidate"
                                                  for t in cell)})
-    record = {"accels_hz_s2": ACCELS, "s_in": CURVE_S_IN, "runs": runs, "seed": seed,
+    record = {"accels_hz_s2": accels, "s_in": CURVE_S_IN, "runs": runs, "seed": seed,
               "cadences": [Path(g[0]).name for g in groups], "table": table, "rows": rows, "kind": "measured"}
-    _keep("curvature", record)
+    _keep(name, record)
     say("\nCandidates of those planted (S_in 60), by |acceleration|, all drifts:")
     for c in table:
         if c["drift_hz_s"] == [0.0, 4.0]:
@@ -868,7 +869,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("what", choices=("desmear", "pairs", "kurtosis", "false", "scale", "noise", "cadence",
                                      "vetting", "setigen", "voyager", "price", "response", "sefd", "dropped",
-                                     "curvature"))
+                                     "curvature", "curvature-fine"))
     ap.add_argument("files", nargs="*")
     ap.add_argument("--json", action="store_true", help="answer in JSON")
     args = ap.parse_args()
@@ -877,7 +878,8 @@ def main():
             "setigen": lambda _files: setigen_check(), "voyager": lambda _files: voyager(),
             "price": lambda _files: price(), "response": lambda _files: instrument.response(),
             "sefd": lambda _files: instrument.sefd(), "dropped": lambda files: instrument.dropped(*files),
-            "curvature": curvature}[args.what]
+            "curvature": curvature,
+            "curvature-fine": lambda files: curvature(files, accels=ACCELS_FINE, name="curvature-fine", seed=32)}[args.what]
     yoke.main("measure", lambda: work(args.files), args.json)
 
 

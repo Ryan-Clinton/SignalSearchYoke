@@ -121,6 +121,8 @@ def trial(cadence, tones, vet=None, keep_looks=False):
                         **({"ranking": verdicts[event]["ranking"]} if event in verdicts and
                            "ranking" in verdicts[event] else {})))
     if keep_looks:
+        for lk, sp in zip(looks, planted):
+            lk.planted = sp                  # the planted spectra, for running other pipelines on the same data
         return out, events, looks
     for lk in looks:
         lk.flat = None

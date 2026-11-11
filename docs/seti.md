@@ -1125,3 +1125,127 @@ the real candidates are one cadence's eleven, and the held-out ones are
 24 from one session's wrong cadences; across a survey a person looks at
 the first few of thousands, and that is measured at the survey's scale
 (docs/multiuser.md, "Ranking across a survey").
+
+### Curved tracks: does a changing drift defeat the search? (12 November 2026)
+
+comparable.md step 9's first test. A signal's drift changes when its
+transmitter or the telescope accelerates unevenly: frequency f(t) = f0 +
+d t + a t²/2, a in Hz/s². Every narrowband search here (this one,
+turboSETI, BLISS, hyperseti) fits straight lines.
+
+**Has it been done?** Linear drift is the standard model, with the maximum
+drift chosen from physics (Sheikh et al. 2019, ApJ 884, 14,
+arXiv:1910.01148: up to 200 nHz; Li et al. 2023, AJ 166, 182,
+arXiv:2311.01427: 99% of known exoplanets within ±53 nHz, ±0.44 nHz for a
+bias-reduced population). A 2026 FAST pipeline (arXiv:2605.23739) argues
+curvature is negligible within a single integration of tens of seconds. No
+search fitting curved tracks across a cadence was found in what was looked
+at (not an exhaustive review); `blc1` drifted along curves over hours and
+was interference, so a curve is no sign of where a signal comes from.
+
+**How much curvature is physical** (at 2.2 GHz, f/c = 7.3 s/m): the
+Earth's spin at Green Bank gives up to 1.4×10⁻⁵ Hz/s² (f ω³ R cos φ / c),
+in every sky signal. A transmitter on a planet in a circular orbit with
+line-of-sight speed K has drift amplitude D = f K ω / c and curvature up
+to D ω; where its drift passes through this search's ±4 Hz/s, the
+curvature is about D ω. So: an Earth-like spin, 1.4×10⁻⁵; any orbit whose
+whole drift stays within ±4 Hz/s, at most 4ω (2.9×10⁻⁵ for a 10-day
+orbit, 9.7×10⁻⁵ for 3 days, 2.9×10⁻⁴ for 1 day); a hot Jupiter (3 days,
+130 km/s), about 5.6×10⁻⁴; a 1-day orbit at 200 km/s, about 7.7×10⁻³; a
+transmitter on the equator of a Jupiter-sized planet spinning in 10 hours,
+about 2.8×10⁻³. Within one 292 s look a curve leaves its best straight line
+by a T²/12: 0.7 Hz at 10⁻⁴, 7 Hz at 10⁻³, 21 Hz at 3×10⁻³ (the channel is
+2.79 Hz). Across the cadence, 22 minutes from the first ON look to the
+last, it moves its drift by a × 1,320 s: 0.13 Hz/s at 10⁻⁴.
+
+**Measured** (`measure.py curvature`; signals planted at S_in 60, where
+straight tracks are kept at every drift, in the five saved cadences, 100
+at each |a|, both signs, drifts to 4 Hz/s; the acceleration held over the
+whole cadence):
+
+| a (Hz/s²) | kept as candidates | lost in the search (not found in every ON look) | lost at the cadence test |
+|---|---|---|---|
+| 0 | 100/100 | 2 | 0 |
+| 1×10⁻⁵ | 99/100 | 3 | 1 |
+| 1×10⁻⁴ | 41/100 | 4 | 59 |
+| 3×10⁻⁴ | 5/100 | 10 | 90 |
+| 1×10⁻³ | 0/100 | 42 | 58 |
+| 3×10⁻³ | 0/100 | 96 | 4 |
+| 1×10⁻² | 0/100 | 100 | 0 |
+
+**The cadence test fails first, from about 10⁻⁴, and the search itself
+from about 10⁻³.** The cadence test joins a signal's hits across looks only
+if their drifts agree within 2 drift steps and 5% (onoff.py `_tolerance`),
+about 0.02 Hz/s plus 5%: 11 minutes between ON looks at 10⁻⁴ changes the
+drift by 0.07 Hz/s. At 10⁻⁴ it keeps none of the signals under 0.5 Hz/s
+and all from 1 Hz/s (where 5% of the drift is wider than the change).
+(The fine grid between 10⁻⁵ and 10⁻⁴ is below.) "Lost in the search"
+means no hit matching the track's best straight line in each ON look:
+mostly the search's own loss (the curve smears over channels), possibly
+partly the matching rule.
+
+**turboSETI keeps some of what this search loses** (`curved.py turboseti`;
+S_in 400 and drifts under 0.5 Hz/s, where turboSETI keeps straight
+signals; its hit search and event stage as step 4 runs them; 40 at each
+|a|; its three-look rule checked from its own hit tables):
+
+| a (Hz/s²) | this search | turboSETI |
+|---|---|---|
+| 0 | 39/40 | 40/40 |
+| 1×10⁻⁵ | 40/40 | 39/40 |
+| 1×10⁻⁴ | 0/40 | 26/40 (22 of 22 from 0.15 Hz/s) |
+| 3×10⁻⁴ | 0/40 | 9/40 |
+| 1×10⁻³ and more | 0 | 0 |
+
+turboSETI's event stage follows a hit into the next ON look within ± the
+drift times twice the look's length and never asks the drifts to agree
+(`find_event.follow_event`), so a curve that stays near the line passes.
+**So this search's stricter cadence test, which keeps its false candidates
+down, also throws away curved signals that turboSETI keeps**, in a range
+(10⁻⁴ to 3×10⁻⁴) that a transmitter on a short-period planet reaches.
+Above 10⁻³ both lose everything, in the search.
+
+**A cadence test for curved tracks** (`curved.py study`, experimental and
+kept apart: nothing in the search or the store uses it). It joins a hit in
+the first ON look to one in the last under a constant acceleration up to
+a_max, needs the middle ON look on the curve (a hit or S/N 5), and measures
+the OFF looks along the curve. Run with a_max = 0 too, the same code as a
+straight-line test, so the comparison is with itself (it differs from
+onoff.py: it needs a hit in the first and last ON looks). Same plantings
+as above (S_in 60, 50 at each |a|), and its false candidates with the 19
+wrong choices of ON looks on ten blocks of the sweep read again (eight
+crowded ones with many wrong-choice candidates in step 4, two clean):
+
+| a (Hz/s²) | production | curved test, a_max 0 | a_max 10⁻⁴ | a_max 10⁻³ | a_max 10⁻² |
+|---|---|---|---|---|---|
+| 0 | 50/50 | 49 | 50 | 50 | 50 |
+| 1×10⁻⁵ | 49/50 | 43 | 47 | 47 | 47 |
+| 1×10⁻⁴ | 15/50 | 6 | 46 | 46 | 46 |
+| 3×10⁻⁴ | 0/50 | 0 | 0 | 45 | 45 |
+| 1×10⁻³ | 0/50 | 0 | 0 | 26 | 25 |
+| 3×10⁻³ and more | 0 | 0 | 0 | 0 | 0-1 |
+| **false candidates, 190 wrong cadences** | | **8** | **14** | **21** | **21** |
+
+It recovers the cadence test's loss up to the search's own limit (from
+10⁻³ the search no longer finds the hits: 29 of 50 found in every ON look
+at 10⁻³, none from 3×10⁻³), and it costs false candidates: 8 to 21 in
+these 190 wrong cadences (95% Poisson intervals 3.5-16 and 13-32), about
+2.6 times, from a_max 10⁻³. The ten blocks were chosen for their many
+wrong-choice candidates, so these are not survey rates.
+
+**What this shows and does not.** Physically plausible curvature does
+defeat this search: from about 10⁻⁴ Hz/s² (a transmitter on a planet in a
+few-day orbit, or near conjunction in a longer one) at the cadence test,
+from about 10⁻³ in the search. The Earth's own curvature (1.4×10⁻⁵) is
+below the loss. In the 10⁻⁴ to 3×10⁻⁴ range turboSETI keeps signals this
+search loses: a weakness of this search's design, not of searches in
+general. A curvature-aware cadence test recovers them at a measured cost
+in false candidates. Not shown: the planted signals are at one strength
+(S_in 60; 400 for the turboSETI comparison); the acceleration is held
+constant over 22 minutes (a real orbit's changes slowly over that); the
+false candidates come from ten chosen blocks; and nothing is claimed about
+signals of other searches beyond turboSETI. **The production cadence test
+is not changed on this.** What would justify a change: the curved test (or
+a drift tolerance widened for a bounded acceleration) run as a second pass
+on step 4's 121 blocks, its false-candidate rate per block measured with
+intervals against the straight test's, and the matched comparison redone.

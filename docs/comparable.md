@@ -430,6 +430,17 @@ trajectories tried paid for. Neither would show an artificial origin.
 **Done when:** the losses for the setigen paths are measured and on the
 result page; the `.0002` search has its own spec.
 
+**Curved tracks measured, 12 November 2026** (docs/seti.md, "Curved
+tracks"): the cadence test loses signals from an acceleration of about
+10⁻⁴ Hz/s² (41 of 100 kept at S_in 60; none under 0.5 Hz/s), the search
+from about 10⁻³; turboSETI keeps 26 of 40 at 10⁻⁴ where this search keeps
+none (its event stage does not compare drifts). An experimental curved
+cadence test (`curved.py`, apart from the search) recovers them up to the
+search's limit at about 2.6 times the false candidates on ten crowded
+blocks. Next for it: a second pass on step 4's 121 blocks, its false rate
+per block with intervals, before any change to `onoff.py`. The setigen
+paths (sine, random walk, partial looks) remain.
+
 ### Step 10: the matched comparison on another session, fixed beforehand
 
 Step 4's cuts were chosen on the blocks they were judged on, from one
