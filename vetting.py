@@ -41,7 +41,7 @@ import numpy as np
 import occupancy as occupancy_mod
 import onoff
 
-VERSION = ("4 (12 Nov 2026: checks 7 and 9 take their chances from the session's measured occupancy, by drift "
+VERSION = ("4 (11 Nov 2026: checks 7 and 9 take their chances from the session's measured occupancy, by drift "
            "(occupancy.py), when the store gives it)")
 C = 299792458.0
 GBT_LAT, GBT_LON = 38.4331, -79.8398            # degrees (north, east)

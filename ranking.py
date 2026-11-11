@@ -87,7 +87,7 @@ import store
 import vetting
 import yoke
 
-VERSION = ("2 (12 Nov 2026: crowding and look-alikes from the checks' measured chances (checks version 4); "
+VERSION = ("2 (11 Nov 2026: crowding and look-alikes from the checks' measured chances (checks version 4); "
            "version 1: crowding as the share of places, look-alikes from 0.1 Hz/s)")
 CAP = 4.0                               # a term's most: -log10 of a chance of 1e-4
 TERMS = ("off", "band", "zero_drift", "recurrence", "lookalikes", "relations", "crowding")

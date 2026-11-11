@@ -209,7 +209,7 @@ the default place.
   except in the bands near zero drift; the 24 held-out wrong-cadence
   candidates, checked with the store's evidence, are all marked
   interference, but the best of four marked only for crowding outranks
-  44% of the planted ones. Step 6 is done in part (12 November 2026, `occupancy.py`,
+  44% of the planted ones. Step 6 is done in part (11 November 2026, `occupancy.py`,
   checks version 4): crowding and look-alikes by measured occupancy and
   drift; the worst held-out case falls from ahead of 44% of the planted
   signals to 15%, three in block 14 unexplained again. Curved tracks

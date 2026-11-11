@@ -372,7 +372,7 @@ replaces the 0.5% from planted signals.
 **Done when:** checks 6 to 8 use the measured occupancy, and checks
 version 3 is run on the sweep's candidates.
 
-**Done in part, 12 November 2026** (`occupancy.py`, checks version 4;
+**Done in part, 11 November 2026** (`occupancy.py`, checks version 4;
 docs/seti.md, "The measured occupancy"): checks 7 and 9 take their chances
 from the session's occupancy by frequency and drift, shadow hits included,
 and version 4 is run on the sweep's candidates. The ranking against the
@@ -445,7 +445,7 @@ trajectories tried paid for. Neither would show an artificial origin.
 **Done when:** the losses for the setigen paths are measured and on the
 result page; the `.0002` search has its own spec.
 
-**Curved tracks measured, 12 November 2026** (docs/seti.md, "Curved
+**Curved tracks measured, 11 November 2026** (docs/seti.md, "Curved
 tracks"): the cadence test loses signals from an acceleration of about
 3×10⁻⁵ Hz/s² for drifts under 0.5 Hz/s (twice the Earth's own 1.4×10⁻⁵),
 and of the rest by 10⁻⁴ (41 of 100 kept at S_in 60), the search

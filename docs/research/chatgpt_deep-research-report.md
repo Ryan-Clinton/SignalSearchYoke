@@ -134,7 +134,7 @@ Finally, broad-band technosignatures are no longer an untouched frontier. By 202
 
 **Third: curvature-aware Doppler recovery.** The historical anchor is Horowitz & Sagan’s 1993 META analysis ([NASA record](https://ntrs.nasa.gov/citations/19930072472)), which explicitly recognised the changing Doppler signature caused by terrestrial motion. citeturn897160search20turn897160search1 The decisive experiment is a hierarchical quadratic-drift search on BL HSR data: ordinary linear de-Doppler first, then a curvature grid around weak candidates, followed by cross-scan fitting to a smooth physically allowed trajectory and aggressive RFI controls. The existing 2.79-Hz/18.25-s data are adequate for curvature that accumulates several channels over a scan or observing sequence. citeturn223321search0 This is computationally realistic on a 16-core CPU and GTX 1080 if implemented hierarchically rather than as a brute-force three-dimensional search. It may fail because five-minute scans are short enough that curvature rarely matters, because terrestrial oscillators and satellites generate equally convincing nonlinear drifts, because candidate gains over an optimal linear fit may be negligible, or because the most interesting curvature lies below the resolution already lost during filterbank formation. The technique would therefore be an **extension of established de-Doppler searches, not a new technosignature class**. citeturn160431search21turn878954search2
 
-## Sources, checked by the project (12 November 2026)
+## Sources, checked by the project (11 November 2026)
 
 Each looked up at its stable record; "checked" means the record exists
 with these details and, where said, supports the claim the report makes

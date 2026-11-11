@@ -1126,7 +1126,7 @@ the real candidates are one cadence's eleven, and the held-out ones are
 the first few of thousands, and that is measured at the survey's scale
 (docs/multiuser.md, "Ranking across a survey").
 
-### The measured occupancy, and the ranking again (checks version 4, 12 November 2026)
+### The measured occupancy, and the ranking again (checks version 4, 11 November 2026)
 
 comparable.md step 6. `occupancy.py` measures the session's interference
 from its own 645,399 hits (at the cut and shadow hits) and two checks take
@@ -1209,7 +1209,7 @@ Look-alikes, measured, now carry most of the separation (without them the
 worst held-out case is ahead of 47%), then crowding and recurrence. Still
 a heuristic: no term is a calibrated probability, and the sum is not one.
 
-### Curved tracks: does a changing drift defeat the search? (12 November 2026)
+### Curved tracks: does a changing drift defeat the search? (11 November 2026)
 
 comparable.md step 9's first test. A signal's drift changes when its
 transmitter or the telescope accelerates unevenly: frequency f(t) = f0 +
