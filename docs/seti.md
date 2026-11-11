@@ -1126,6 +1126,89 @@ the real candidates are one cadence's eleven, and the held-out ones are
 the first few of thousands, and that is measured at the survey's scale
 (docs/multiuser.md, "Ranking across a survey").
 
+### The measured occupancy, and the ranking again (checks version 4, 12 November 2026)
+
+comparable.md step 6. `occupancy.py` measures the session's interference
+from its own 645,399 hits (at the cut and shadow hits) and two checks take
+their chances from it instead of a uniform background:
+
+- **Crowding (check 9) by frequency and drift:** the hits within 0.5 MHz
+  whose drift is like the candidate's (within 2 drift steps or 10%), its
+  own 5 kHz left out, against the same count at every one of 90,244 places
+  of the band searched, for that drift. The chance is the share of places
+  as crowded; under 5% is "indicated" (before: 10 times the band's median
+  per MHz, whatever the drift). Shadow hits count: weak members of a
+  family are evidence too. A place in a block cut short at the hit limit
+  is marked, its count a lower bound.
+- **Look-alikes (check 7) by drift:** the share of the session's other 307
+  blocks whose OFF looks hold as many hits at the cut with the same drift
+  over frequency. Measured, it holds near zero drift too, where the old
+  chance (OFF hits' drifts taken as even over ±4 Hz/s) gave every real
+  candidate the cap and was not used.
+
+Recurrence (check 6) already took its chance from each file's hits near
+the candidate with the drift share measured, and harmonics (check 8) from
+random frequencies against the session's hits; neither changed. Every
+chance is at least one over the places or blocks compared, and the ranking
+caps each term at 4. The places are not independent (neighbouring places
+share hits), so a share near its floor is no finer than the band's
+structure allows.
+
+**The candidates, checked again** (`check.py --all`): all 11 keep their
+verdicts (2 shown, 9 likely interference); look-alikes are now indicated
+for every one but the two shown, as their blocks hold more OFF look-alikes
+at their drifts than nearly every other block, and crowding at their drift
+is unusual (0.2 to 2% of places). Their scores rise from 3.4 to 7.7 to 7.0
+to 9.7, the order changing a little.
+
+**Does it tell interference from signals better?** The same 1,400 birdies
+(the same seed, so the same plantings, searched again) and the held-out
+24, checked and scored under version 4 (ranking version 2), against
+version 1:
+
+| | version 1 (uniform) | version 2 (measured) |
+|---|---|---|
+| kept birdies ranked ahead of every real candidate | 1037 of 1057 | 1057 of 1057 |
+| kept birdies' scores (10%, median, 90%) | 0.17, 0.99, 1.94 | 0.41, 1.14, 2.30 |
+| kept birdies marked likely interference by the checks | 663 | 664 |
+| the best-scoring held-out candidate is ahead of | 44% of kept birdies | 15% |
+| held-out candidates ahead of every real candidate | 3 | 11 |
+| held-out candidates the checks leave unexplained | 0 | 3 |
+
+**It separates the held-out interference from the planted signals better**
+(the worst held-out case ahead of 15% of them instead of 44%), and the
+planted signals' scores and verdicts hardly change, so the gain is from
+marking the interference more, not from favouring the plantings. Nothing
+was set from the held-out set: the occupancy's definitions were written
+before it was scored, and nothing was changed after.
+
+**But two things go the other way, and both are kept as found.** Three
+held-out candidates in block 14 (1861.56 to 1861.58 MHz, drift −0.02 Hz/s)
+are unexplained again: by drift, their place is as crowded as 8% of the
+band's places, so crowding no longer marks them (it did under the old
+rule, 10 times the median); their scores still put them behind 85% or
+more of the kept birdies. And the real candidates now score higher than
+almost every held-out one (11 held-out ahead of every real candidate),
+because their own crowding and look-alikes are measured to be unusual: the
+11 real candidates are a weaker bar than ever.
+
+**How much it leans on each term** (each taken out in turn):
+
+| taken out | kept birdies ahead of every real | best held-out ahead of | held-out ahead of every real |
+|---|---|---|---|
+| nothing | 1057 | 15% | 11 |
+| OFF S/N | 1057 | 9% | 8 |
+| band | 1057 | 11% | 10 |
+| zero drift | 1057 | 13% | 4 |
+| recurrence | 1057 | 29% | 17 |
+| look-alikes | 1054 | 47% | 5 |
+| relations | 1057 | 15% | 11 |
+| crowding | 1055 | 37% | 5 |
+
+Look-alikes, measured, now carry most of the separation (without them the
+worst held-out case is ahead of 47%), then crowding and recurrence. Still
+a heuristic: no term is a calibrated probability, and the sum is not one.
+
 ### Curved tracks: does a changing drift defeat the search? (12 November 2026)
 
 comparable.md step 9's first test. A signal's drift changes when its

@@ -29,6 +29,7 @@ import json
 
 import numpy as np
 
+import occupancy
 import store
 import vetting
 import yoke
@@ -174,7 +175,8 @@ def vet_from_store(db, e, looks, session, target, own=(), on_positions=None, hit
         h.pop("file_id")
     background = recurrence_background(db, e, [fl["file_id"] for fl in recurrence_files(db, session, on_positions)])
     return vetting.vet(e, looks, target, others, hits if hits is not None else session_hits(db, session),
-                       report_dir=report_dir, lead=lead, background=background)
+                       report_dir=report_dir, lead=lead, background=background,
+                       occupancy=occupancy.load(db, session))
 
 
 def check_event(db, row, say=print, report_dir=REPORTS):

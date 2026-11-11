@@ -29,6 +29,8 @@ KIC 8462852.
 | `tools/turbo_events.py` | Price et al. 2020's pipeline (turboSETI hits, then its event pipeline at threshold 3) on a cadence's six slices, for `measure.py price` |
 | `store.py` | the hit store, `data/ssy.sqlite`: runs, files, blocks, hits, events, checks, injections |
 | `check.py` | the ten checks run on the store's candidates: records, reports in `docs/leads/`; then ranks them |
+| `occupancy.py` | the session's interference occupancy by frequency and drift, from its hits: checks 7 and 9's chances (step 6) |
+| `curved.py` | EXPERIMENTAL, apart from the search: a cadence test for curved tracks, and curved tracks through turboSETI (step 9) |
 | `ranking.py` | comparable.md step 5: the score (the checks' chances), the OFF null, birdies ranked against the real candidates, the held-out wrong-cadence candidates |
 | `report.py` | the result of a swept cadence (`seti.py report`): `docs/results/TARGET-SESSION.md`, from the store and the measurements |
 | `yoke.py` | the data folder, the `--json` envelope, writing a record whole |
@@ -207,8 +209,14 @@ the default place.
   except in the bands near zero drift; the 24 held-out wrong-cadence
   candidates, checked with the store's evidence, are all marked
   interference, but the best of four marked only for crowding outranks
-  44% of the planted ones. Next: step 10 (another session, cuts fixed), then step 6
-  (the measured occupancy, which the crowding term needs).
+  44% of the planted ones. Step 6 is done in part (12 November 2026, `occupancy.py`,
+  checks version 4): crowding and look-alikes by measured occupancy and
+  drift; the worst held-out case falls from ahead of 44% of the planted
+  signals to 15%, three in block 14 unexplained again. Curved tracks
+  (step 9) are measured: the cadence test loses signals from 2-3e-5
+  Hz/s^2 at slow drifts; `curved.py` is experimental, kept apart. Next:
+  step 10 (another session, cuts fixed), and a curved second pass on
+  step 4's blocks before any change to `onoff.py`.
 - **Real signals:** Voyager 1's carrier and sidebands found at turboSETI's
   published frequencies and drifts, the drift the Earth's; wide signals
   (its 322 Hz sidebands) are tiled with many hits, a known gap. HIP 91699's

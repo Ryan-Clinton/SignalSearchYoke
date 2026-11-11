@@ -87,7 +87,8 @@ import store
 import vetting
 import yoke
 
-VERSION = "1 (11 Nov 2026: the checks' chances summed, capped at 4; look-alikes from 0.1 Hz/s)"
+VERSION = ("2 (12 Nov 2026: crowding and look-alikes from the checks' measured chances (checks version 4); "
+           "version 1: crowding as the share of places, look-alikes from 0.1 Hz/s)")
 CAP = 4.0                               # a term's most: -log10 of a chance of 1e-4
 TERMS = ("off", "band", "zero_drift", "recurrence", "lookalikes", "relations", "crowding")
 LOOKALIKE_MIN_DRIFT = 0.1               # Hz/s: check 7's chance is used from here (vetting.py's own line)
@@ -188,13 +189,16 @@ def terms(result, ctx, f_mhz):
             p = min(p, e6.get("chance_close", 1.0))
         out["recurrence"] = _log(p)
     e7 = c[7]["evidence"]
-    if e7.get("in_off") and abs(c[4]["evidence"]["drift_hz_s"]) >= LOOKALIKE_MIN_DRIFT:
+    measured7 = e7.get("method") == "measured"
+    if e7.get("in_off") and (measured7 or abs(c[4]["evidence"]["drift_hz_s"]) >= LOOKALIKE_MIN_DRIFT):
         out["lookalikes"] = _log(e7.get("chance", 1.0))
     e8 = c[8]["evidence"]
     if e8.get("relations"):
         out["relations"] = _log(max(e8.get("chance", 1.0), 1 / (e8.get("trials", 200) + 1)))
     near = c[9]["evidence"].get("hits_near")
-    if near is not None and len(ctx["crowd_counts"]):
+    if c[9]["evidence"].get("method") == "measured":
+        out["crowding"] = _log(c[9]["evidence"]["chance"])
+    elif near is not None and len(ctx["crowd_counts"]):
         counts = ctx["crowd_counts"]
         over = len(counts) - np.searchsorted(counts, near, "left")
         out["crowding"] = _log(max(over, 1) / len(counts))

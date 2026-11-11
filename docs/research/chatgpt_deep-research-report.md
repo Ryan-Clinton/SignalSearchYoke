@@ -134,23 +134,51 @@ Finally, broad-band technosignatures are no longer an untouched frontier. By 202
 
 **Third: curvature-aware Doppler recovery.** The historical anchor is Horowitz & Sagan’s 1993 META analysis ([NASA record](https://ntrs.nasa.gov/citations/19930072472)), which explicitly recognised the changing Doppler signature caused by terrestrial motion. citeturn897160search20turn897160search1 The decisive experiment is a hierarchical quadratic-drift search on BL HSR data: ordinary linear de-Doppler first, then a curvature grid around weak candidates, followed by cross-scan fitting to a smooth physically allowed trajectory and aggressive RFI controls. The existing 2.79-Hz/18.25-s data are adequate for curvature that accumulates several channels over a scan or observing sequence. citeturn223321search0 This is computationally realistic on a 16-core CPU and GTX 1080 if implemented hierarchically rather than as a brute-force three-dimensional search. It may fail because five-minute scans are short enough that curvature rarely matters, because terrestrial oscillators and satellites generate equally convincing nonlinear drifts, because candidate gains over an optimal linear fit may be negligible, or because the most interesting curvature lies below the resolution already lost during filterbank formation. The technique would therefore be an **extension of established de-Doppler searches, not a new technosignature class**. citeturn160431search21turn878954search2
 
-## Sources named in the text with a stable identifier
+## Sources, checked by the project (12 November 2026)
 
-Listed as the report names them; not yet read by the project.
+Each looked up at its stable record; "checked" means the record exists
+with these details and, where said, supports the claim the report makes
+of it. The papers themselves have not all been read in full.
 
 - Cordes, J. M., Lazio, T. J. W. & Sagan, C. (1997), *Scintillation-Induced
-  Intermittency in SETI*, ApJ 487, 782: arXiv:astro-ph/9707039.
+  Intermittency in SETI*, ApJ 487, 782; arXiv:astro-ph/9707039. The source
+  of the report's scintillation argument.
+- Lazio, T. J. W., Tarter, J. & Backus, P. R. (2002), *Megachannel
+  Extraterrestrial Assay Candidates: No Transmissions from Intrinsically
+  Steady Sources*, AJ; arXiv:astro-ph/0203516. Re-observed nine of META's
+  eleven candidates and excluded scintillating steady sources at 97.8%
+  confidence or more: the "subsequent re-analysis" the report cites
+  without a name.
 - Cullers, D. K. (1986), *Sensitive detection of narrowband pulses*, Acta
-  Astronautica: DOI 10.1016/0094-5765(86)90005-6; NASA NTRS 20040090093.
-- Horowitz, P. & Sagan, C. (1993), *Five years of Project META*: NASA NTRS
-  19930072472.
-- NASA (1981), *Project OASIS*: NASA NTRS 19820016111.
+  Astronautica 13(1); DOI 10.1016/0094-5765(86)90005-6; NASA NTRS
+  20040090093. The NTRS record gives the "about 7 dB" gain and the
+  rotating-beacon remark the report quotes.
+- Horowitz, P. & Sagan, C. (1993), *Five years of Project META: an all-sky
+  narrow-band radio search for extraterrestrial signals*, ApJ 415, 218;
+  DOI 10.1086/173157; NASA NTRS 19930072472.
+- Lord, S., Dixon, R. & Healy, T. (1981), *Project OASIS: The Design of a
+  Signal Detector for the Search for Extraterrestrial Intelligence*,
+  NASA-TM-84738; NASA NTRS 19820016111. Holds the sentence "The MCSA puts
+  out a very large data base at very high rates", as the report quotes.
+- Brzycki, B. et al. (2023), *On Detecting Interstellar Scintillation in
+  Narrowband Radio SETI*, ApJ 952, 46; arXiv:2307.08793 (the `blscint`
+  library).
+- Suresh, A. et al. (2023), *A 4-8 GHz Galactic Center Search for Periodic
+  Technosignatures*, AJ 165, 255; DOI 10.3847/1538-3881/acccf0;
+  arXiv:2305.18527 (BLIPSS: periods 11 to 100 s, duty cycles 10 to 50%,
+  kHz-wide signals, no detection).
+- Sheikh, S. Z. et al. (2019), *Choosing a Maximum Drift Rate in a SETI
+  Search: Astrophysical Considerations*, ApJ 884, 14; arXiv:1910.01148;
+  and Li, M. G. et al. (2023), *Developing a Drift Rate Distribution for
+  Technosignature Searches of Exoplanets*, AJ 166, 182; arXiv:2311.01427
+  (99% of confirmed exoplanets within ±53 nHz; ±0.44 nHz for a bias-reduced
+  population). Not cited by the report; added for its curvature section.
 
-Named without an identifier (to be found): Project Cyclops (Oliver &
-Billingham 1971); Horowitz & Forster's Sentinel paper (1985); the later
-re-analysis constraining scintillating META sources; Brzycki et al. (2023)
-on scintillation as an interference discriminator; the 2024 Breakthrough
-Listen Galactic-centre scintillation search; Suresh et al. on `blipss`;
-the `blc1` analyses (Sheikh et al. 2021; Smith et al. 2021); Breakthrough
-Listen's data-product and public-archive descriptions; the COSMIC/VLA
-programme; the 2026 broadband-technosignature framework.
+Named in the text but not yet found again: Project Cyclops (Oliver &
+Billingham 1971, NASA CR-114445 by other accounts, unchecked); Horowitz &
+Forster's Sentinel paper (1985) and its "0.03 Hz" quotation; the 2024
+Breakthrough Listen Galactic-centre scintillation search; the `blc1`
+analyses (Sheikh et al. 2021; Smith et al. 2021); Breakthrough Listen's
+data-product descriptions (the product figures the report gives match
+this project's own files: 2.79 Hz by 18.25 s); the COSMIC/VLA programme;
+the 2026 broadband framework.

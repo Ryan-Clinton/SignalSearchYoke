@@ -372,6 +372,21 @@ replaces the 0.5% from planted signals.
 **Done when:** checks 6 to 8 use the measured occupancy, and checks
 version 3 is run on the sweep's candidates.
 
+**Done in part, 12 November 2026** (`occupancy.py`, checks version 4;
+docs/seti.md, "The measured occupancy"): checks 7 and 9 take their chances
+from the session's occupancy by frequency and drift, shadow hits included,
+and version 4 is run on the sweep's candidates. The ranking against the
+same planted signals: the worst held-out wrong-cadence candidate goes from
+ahead of 44% of them to 15%, the planted signals' own scores and verdicts
+hardly change; three held-out candidates in block 14 become unexplained
+again (by drift their place is not unusually crowded). **Still to do:**
+check 6's background is flat over its 3 MHz and check 8 draws random
+frequencies uniformly over the band (both measured in kind, not by
+occupancy); the OFF test's veto rate from random tracks does not yet
+replace the 0.5% from planted signals in the completeness; the occupancy
+is one session's, so a candidate is compared only with its own session's
+band.
+
 ### Step 7: false candidates from many cadences
 
 One distinct false candidate in five cadences (0.2 a block, 95% 0.005 to

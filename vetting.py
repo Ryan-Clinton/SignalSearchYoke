@@ -38,9 +38,11 @@ from pathlib import Path
 
 import numpy as np
 
+import occupancy as occupancy_mod
 import onoff
 
-VERSION = "3 (9 Nov 2026: check 6 takes its chance from each file's hits over the band searched near the candidate)"
+VERSION = ("4 (12 Nov 2026: checks 7 and 9 take their chances from the session's measured occupancy, by drift "
+           "(occupancy.py), when the store gives it)")
 C = 299792458.0
 GBT_LAT, GBT_LON = 38.4331, -79.8398            # degrees (north, east)
 EARTH_OMEGA, EARTH_R = 7.2921159e-5, 6.371e6    # rad/s, m
@@ -185,7 +187,8 @@ def _check(n, name, result, strength=None, **evidence):
     return {"n": n, "name": name, "result": result, "strength": strength, "evidence": evidence}
 
 
-def vet(event, looks, target=None, others=(), session_hits=(), report_dir=None, lead=None, background=None):
+def vet(event, looks, target=None, others=(), session_hits=(), report_dir=None, lead=None, background=None,
+        occupancy=None):
     """The checks on one candidate. `event` as onoff.judge gives it (with
     `matches` and `stamps`); `looks` its cadence (LookInfo or onoff.Look);
     `target` {ra_hours, dec_deg, name}; `others` hits at other targets
@@ -194,7 +197,10 @@ def vet(event, looks, target=None, others=(), session_hits=(), report_dir=None, 
     drift, snr, position) for harmonics, intermodulation and crowding;
     `background` the hits of each file `others` came from over the band
     searched near the candidate, for check 6's chance (see
-    `_recurrence_expected`; check.recurrence_background builds it)."""
+    `_recurrence_expected`; check.recurrence_background builds it);
+    `occupancy` the session's measured occupancy (occupancy.load), from
+    which checks 7 and 9 take their chances; without it they take the
+    uniform ones of checks version 3."""
     f, drift = event["frequency_mhz"], event["drift_hz_s"]
     l0 = looks[event.get("seed_position", 0)]
     step = l0.step
@@ -305,17 +311,28 @@ def vet(event, looks, target=None, others=(), session_hits=(), report_dir=None, 
                     alike_off.append(entry)
     span_nu = 2 * 4.0 / (f * 1e6)
     expected7 = off_count * (2 * tol * (2 if abs(drift) >= step else 1)) / span_nu
-    chance7 = at_least(len(alike_off), expected7)          # this many in OFF looks, by accident
-    if alike_off:
-        strength7 = "indicated" if chance7 < CHANCE_SMALL and abs(drift) >= 0.1 else "coincidence possible"
+    if occupancy is not None:
+        # Measured: the share of the session's other blocks whose OFF looks hold as many at this drift.
+        measured7 = occupancy_mod.lookalikes(occupancy, f, drift, step, len(alike_off),
+                                             occupancy_mod.block_of(occupancy, f))
+        chance7 = measured7["chance"]
+        strength7 = ("indicated" if chance7 < CHANCE_SMALL else "coincidence possible") if alike_off else None
+        how7 = {"method": "measured", "measured": measured7,
+                "note": "chance: the share of the session's other blocks whose OFF looks hold as many hits at the "
+                        "cut with this drift over frequency (occupancy.py)"}
     else:
-        strength7 = None
+        chance7 = at_least(len(alike_off), expected7)          # this many in OFF looks, by accident
+        if alike_off:
+            strength7 = "indicated" if chance7 < CHANCE_SMALL and abs(drift) >= 0.1 else "coincidence possible"
+        else:
+            strength7 = None
+        how7 = {"method": "uniform",
+                "note": "chance assumes OFF hits' drifts spread evenly over +-4 Hz/s; near zero drift, where "
+                        "interference crowds, it is called a possible coincidence"}
     checks.append(_check(7, "look-alikes in the cadence",
                          f"{len(alike)} look-alike(s), {len(alike_off)} in OFF looks", strength7,
                          normalised_drift=nu, tolerance=tol, lookalikes=alike[:30], in_off=len(alike_off),
-                         expected_by_chance=round(expected7, 4), chance=chance7, off_hits=off_count,
-                         note="chance assumes OFF hits' drifts spread evenly over +-4 Hz/s; near zero drift, where "
-                              "interference crowds, it is called a possible coincidence"))
+                         expected_by_chance=round(expected7, 4), chance=chance7, off_hits=off_count, **how7))
 
     # 8. harmonics and intermodulation, against the session's hits
     freqs = np.array([h["frequency_mhz"] for h in session_hits]) if session_hits else np.array([])
@@ -365,9 +382,18 @@ def vet(event, looks, target=None, others=(), session_hits=(), report_dir=None, 
         counts = np.histogram(freqs, bins=edges)[0] if len(edges) > 1 else np.array([near])
         median = float(np.median(counts)) if len(counts) else 0.0
         ratio = near / max(median, 1.0)
-        checks.append(_check(9, "crowding", f"{near} hits in the MHz around it, band median {median:g} a MHz",
-                             "indicated" if ratio >= CROWDED else None, hits_near=near, median_per_mhz=median,
-                             ratio=round(ratio, 2)))
+        if occupancy is not None:
+            # Measured: hits like it (drift) near it, against every place of the band at that drift.
+            m9 = occupancy_mod.crowding(occupancy, f, drift, step)
+            checks.append(_check(9, "crowding", f"{m9['near']} hits at its drift within 0.5 MHz; as many at "
+                                 f"{m9['chance']:.2%} of the band's places",
+                                 "indicated" if m9["chance"] < CHANCE_SMALL else None, hits_near=near,
+                                 median_per_mhz=median, ratio=round(ratio, 2), chance=m9["chance"],
+                                 method="measured", measured=m9))
+        else:
+            checks.append(_check(9, "crowding", f"{near} hits in the MHz around it, band median {median:g} a MHz",
+                                 "indicated" if ratio >= CROWDED else None, hits_near=near, median_per_mhz=median,
+                                 ratio=round(ratio, 2), method="uniform"))
     else:
         checks.append(_check(9, "crowding", "no session hits given", None))
 
