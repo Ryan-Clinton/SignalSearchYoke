@@ -25,22 +25,26 @@ owner's go.
 | vetting | ten checks after blc1, with chance rates | blc1 by hand; SETI@home and UCLA by filters and scores |
 | completeness | 3,257 planted, end to end, by drift | SETI@home: birdies through the back end; UCLA: 10,000 chirps in voltages; BL: none in Price 2020 |
 | **discovery completeness** (does a planted signal rank high enough to be looked at?) | **not measured** | SETI@home: top-100 rank, power at 80% uncovered |
-| **pipelines compared at matched sensitivity** | **no** (SNR scale only) | UCLA: equal injected power and tolerances |
+| pipelines compared at matched sensitivity | against turboSETI, one session (step 4: 4,520 against 442 of 13,310 at about matched wrong-cadence rates); step 10 tests another | UCLA: equal injected power and tolerances |
+| **against the pipelines made to improve on turboSETI** | **not run: BLISS, hyperseti** (step 11) | UCLA against turboSETI only (Margot 2023) |
 | **interference history across sessions** | **one cadence's OFF looks** | SETI@home: 14 years of frequency zones; Price: like events at other stars |
 | **chance rates** | **check 6: each file's hits near the candidate; checks 7, 8: uniform** | SETI@home: empirical score distributions |
-| **flux scale** | **assumed SEFD 10 Jy** | assumed too (Price, Lebofsky); 12.5 Jy from the Proposer's Guide |
+| flux scale | SEFD measured, 10.65 Jy (step 2, 3C295) | assumed (Price, Lebofsky); 12.5 Jy from the Proposer's Guide |
 | signal types | steady linear drift only | SETI@home: pulses, triplets, Gaussians, ±100 Hz/s; BLIPSS, Gajjar: periodic and pulsed |
 | scale | one cadence | Painter 2025: 9,684 cadences; Price 2020: 1,327 stars |
 
-The detector is no longer the weak link. The gaps (bold) are in what the
-results are measured against: ranking, other pipelines on the same data,
-interference seen elsewhere, the flux scale, and the kinds of signal the
-numbers hold for.
+The detector is no longer the weak link against turboSETI. The gaps (bold)
+are in what the results are measured against: ranking, the pipelines built
+to improve on turboSETI, interference seen elsewhere, and the kinds of
+signal the numbers hold for. The table was brought up to date on 11
+November 2026 (steps 2 and 4 done); turboSETI's weakness at drift was
+known before this project (Margot et al. 2023), so step 4 confirms it on
+this data rather than finding it.
 
 ## 2. The steps, in order of value
 
 Each has a **done when**. Steps 1 to 4 belong with the first result; 5 to
-10 widen it (10 tests step 4 on another session).
+11 widen it (10 tests step 4 on another session, 11 against BLISS).
 
 ### Step 1: say what was searched for
 
@@ -402,6 +406,36 @@ possible a different band or year). Fixed now, before any of it is read:
 
 **Done when:** the new session's page is in `docs/results/` and
 `docs/seti.md` says whether step 4's result held there.
+
+### Step 11: against BLISS, at matched rates
+
+Step 4 shows this search ahead of turboSETI, whose loss at drift was already
+published (Margot et al. 2023: 5.7% against UCLA's 94%). BLISS
+(github.com/UCBerkeleySETI/bliss) was written to improve on turboSETI: it
+desmears, searches drift steps to ±500, finds hits by connected components
+and has an ON/OFF stage of its own (docs/research/comparable-pipelines.md,
+section 2). Whether this search finds anything BLISS would miss, on the
+same data, is the open question.
+
+- **Run as its authors set it up:** BLISS built from a pinned commit, in
+  WSL's Ubuntu on this computer (CPU, and its CUDA backend on the GTX 1080
+  if it builds), with its documented defaults; any setting changed for the
+  comparison (the drift range to ±4 Hz/s, the SNR cut) said so.
+- **Step 4's method, unchanged:** its 121 blocks and 13,310 planted
+  signals (`matched.py` plants them again from the saved tones and checks
+  the planting is the same), BLISS added as a third pipeline: its false
+  events with the 19 wrong choices against its cut, its cut for 0.1 a
+  block, recovery in all three ON looks at ±6 Hz, ±0.05 Hz/s, at its own
+  reference time; the signals each finds that the other misses.
+- **Its ON/OFF stage and ours apart:** BLISS's hits through this search's
+  cadence test as well as through its own `event_search`, so a difference
+  can be laid to the detector or to the cadence logic.
+- **hyperseti** if it runs (it needs cupy, so the GPU); listed, not
+  promised: it has no ON/OFF stage.
+
+**Done when:** BLISS's false curve, matched cut and recovery by drift and
+strength are on step 4's page beside the other two, with the signals
+BLISS finds that this search misses listed and explained.
 
 ## 3. What this plan does not do
 
