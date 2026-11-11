@@ -1179,7 +1179,23 @@ if their drifts agree within 2 drift steps and 5% (onoff.py `_tolerance`),
 about 0.02 Hz/s plus 5%: 11 minutes between ON looks at 10⁻⁴ changes the
 drift by 0.07 Hz/s. At 10⁻⁴ it keeps none of the signals under 0.5 Hz/s
 and all from 1 Hz/s (where 5% of the drift is wider than the change).
-(The fine grid between 10⁻⁵ and 10⁻⁴ is below.) "Lost in the search"
+**Where the loss begins** (`measure.py curvature-fine`, the same planting,
+100 at each |a|):
+
+| a (Hz/s²) | kept | drift under 0.15 Hz/s | 0.15 to 0.5 | 0.5 to 1 | 1 to 4 |
+|---|---|---|---|---|---|
+| 1×10⁻⁵ | 100/100 | 12/12 | 20/20 | 23/23 | 45/45 |
+| 2×10⁻⁵ | 98/100 | 26/28 | 14/14 | 23/23 | 35/35 |
+| 3×10⁻⁵ | 86/100 | 13/21 | 13/18 | 25/25 | 35/36 |
+| 5×10⁻⁵ | 70/100 | 3/20 | 9/22 | 14/14 | 44/44 |
+| 7×10⁻⁵ | 54/100 | 0/19 | 4/26 | 11/15 | 39/40 |
+
+**For drifts under 0.5 Hz/s the loss begins at about 2 to 3×10⁻⁵, only
+twice the Earth's own curvature at Green Bank (1.4×10⁻⁵, which every sky
+signal carries, and which adds to the transmitter's own).** The margin is
+thin: a transmitter on a planet in a 10-day orbit (up to 2.9×10⁻⁵ while
+its drift stays within ±4 Hz/s), with the Earth's term of the same sign,
+is already where signals are lost. "Lost in the search"
 means no hit matching the track's best straight line in each ON look:
 mostly the search's own loss (the curve smears over channels), possibly
 partly the matching rule.
@@ -1234,10 +1250,10 @@ these 190 wrong cadences (95% Poisson intervals 3.5-16 and 13-32), about
 wrong-choice candidates, so these are not survey rates.
 
 **What this shows and does not.** Physically plausible curvature does
-defeat this search: from about 10⁻⁴ Hz/s² (a transmitter on a planet in a
-few-day orbit, or near conjunction in a longer one) at the cadence test,
-from about 10⁻³ in the search. The Earth's own curvature (1.4×10⁻⁵) is
-below the loss. In the 10⁻⁴ to 3×10⁻⁴ range turboSETI keeps signals this
+defeat this search: at the cadence test from about 3×10⁻⁵ Hz/s² for drifts
+under 0.5 Hz/s (14% lost; 46% by 7×10⁻⁵, 59% at 10⁻⁴), and from about
+10⁻⁴ for the rest; in the search from about 10⁻³. The Earth's own
+curvature (1.4×10⁻⁵) is just below the loss, with little margin. In the 10⁻⁴ to 3×10⁻⁴ range turboSETI keeps signals this
 search loses: a weakness of this search's design, not of searches in
 general. A curvature-aware cadence test recovers them at a measured cost
 in false candidates. Not shown: the planted signals are at one strength
