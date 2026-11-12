@@ -59,6 +59,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 
+import check
 import curved
 import injection
 import matched
@@ -449,6 +450,23 @@ def recheck(target, say=print, shard=(0, 1)):
 # the Earth's motion alone, is the control. Fixed before the run: the second
 # pass unchanged, the same blocks, the matched cut (30) and the published
 # (10), recovery by the three-look standard.
+#
+# What the cases are, physically (line-of-sight acceleration a_pk c / f; at
+# 2 GHz 10^-4 Hz/s^2 is 0.015 m/s^2, 10^-3 is 0.15 m/s^2, against the Earth's
+# turning at Green Bank, 0.025 m/s^2 at most): a 1-day orbit with a_pk
+# 10^-3 at 2 GHz is a line-of-sight speed of 2.1 km/s (a = v w), a 10-day
+# orbit 21 km/s, a 10-hour period 0.86 km/s, which is more a fast spin of a
+# body (a transmitter on a planet turning in 10 hours at 0.86 km/s, about
+# twice Jupiter's equatorial speed) than an orbit. They are a grid over the
+# range where the pass's bound matters, seen edge-on (inclination folds into
+# a_pk), not a sample of real planetary systems.
+#
+# Two controls on the matching: "tight", the same recovery with the
+# frequency tolerance 6 Hz only (not widened by the path's departure from
+# its best line in a look), and "mirror", each signal scored against the
+# path it would have with its phase turned half a cycle (the opposite
+# curvature and jerk): a recovery there is the matching being loose, not
+# the signal found.
 ORBIT_PEAKS = (1e-4, 3e-4, 1e-3)                 # Hz/s^2: peak line-of-sight acceleration
 PERIODS_H = (10.0, 24.0, 240.0)                  # a fast spin, a 1-day and a 10-day orbit
 ORBIT_CASES = ((0.0, None),) + tuple((a, p) for a in ORBIT_PEAKS for p in PERIODS_H)
@@ -519,11 +537,11 @@ def orbit_plant(cad, ts, earth):
     return out
 
 
-def orbit_expected(earth):
+def orbit_expected(earth, widen=True):
     """expected's form for orbital signals: the best straight line over look
     j fitted to the path (start MHz, slope Hz/s), the tolerance 6 Hz plus the
-    path's largest departure from that line (kept for each signal and look:
-    it is asked for every event)."""
+    path's largest departure from that line (with `widen`; 6 Hz alone
+    without). Kept for each signal and look: it is asked for every event."""
     memo = {}
 
     def exp(cad, t, j):
@@ -539,9 +557,14 @@ def orbit_expected(earth):
         tau = np.linspace(0.0, T, 65)
         f = orbit_offset(t, dt + tau, earth)
         slope, start = np.polyfit(tau, f, 1)
-        dev = float(np.max(np.abs(f - (start + slope * tau))))
+        dev = float(np.max(np.abs(f - (start + slope * tau)))) if widen else 0.0
         return s0["fch1"] + t["x0"] * s0["foff"] + start / 1e6, float(slope), matched.TOL_HZ + dev
     return exp
+
+
+def mirror(t):
+    """The same signal with its phase turned half a cycle."""
+    return dict(t, phase=t["phase"] + math.pi)
 
 
 def _orbit_block(k, slices, urls, coords):
@@ -560,19 +583,26 @@ def _orbit_block(k, slices, urls, coords):
     caches = [{} for _ in range(6)]
     planted = {matched.ck(cut): judge_all(cad_p, searched_p, TRUE, cut, caches) for cut in CUTS}
     times["block_s"] = round(time.monotonic() - t, 1)
-    exp = orbit_expected(earth)
+    exp, tight = orbit_expected(earth), orbit_expected(earth, widen=False)
+    mirrors = [mirror(t) for t in ts]
     span = (cad[-1]["s"]["tstart"] - cad[0]["s"]["tstart"]) * 86400 + cad[-1]["raw"].shape[0] * cad[-1]["s"]["tsamp"]
     grid = np.linspace(0.0, span, 200)
     rows = []
-    for tone in ts:
+    for tone, mir in zip(ts, mirrors):
         f = orbit_offset(tone, grid, earth)
         acc = np.gradient(np.gradient(f, grid), grid)[2:-2]
         r = {k2: tone[k2] for k2 in ("x0", "drift", "s_in", "bin", "a_pk", "period_h", "phase", "f_mhz")}
         r["accel_range"] = [round(float(acc.min()), 8), round(float(acc.max()), 8)]
         r["status"] = {c: {cfg: statuses(cad, tone, planted[c][cfg], plain[c][cfg], exp) for cfg in CONFIGS}
                        for c in planted}
+        r["status_tight"] = {c: {cfg: statuses(cad, tone, planted[c][cfg], plain[c][cfg], tight)["three_looks"]
+                                 for cfg in CONFIGS} for c in planted}
+        r["status_mirror"] = None if not tone["a_pk"] else {
+            c: {cfg: statuses(cad, mir, planted[c][cfg], plain[c][cfg], exp)["three_looks"] for cfg in CONFIGS}
+            for c in planted}
         rows.append(r)
-    return {"format": 1, "block": k, "tstarts": [c["s"]["tstart"] for c in cad], "coords": list(coords),
+    times["scored_s"] = round(time.monotonic() - t, 1)
+    return {"format": 2, "block": k, "tstarts": [c["s"]["tstart"] for c in cad], "coords": list(coords),
             "tones": rows, "times": times, "finished_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
 
 
@@ -605,8 +635,10 @@ def orbits(target, say=print, shard=(0, 1), count=None):
         for i, b in enumerate(todo):
             slices = coming.result()
             coming = ahead.submit(fetch, todo[i + 1]) if i + 1 < len(todo) else None
+            started = time.monotonic()
             rec = _orbit_block(b, slices, urls, coords)
             rec["class"] = chosen[b]
+            rec["times"]["wall_s"] = round(time.monotonic() - started, 1)
             del slices
             (base / f"block_{b:03d}.json").write_text(json.dumps(rec), encoding="utf-8")
             t30 = [t["status"]["30"] for t in rec["tones"]]
@@ -619,7 +651,12 @@ def orbit_tables(target, say=print):
     db = store.connect()
     session, _ = store.cadence_files(db, target)
     db.close()
+    db = store.connect()
+    chosen, _ = matched.choose_blocks(db, session)
+    db.close()
     recs = [json.loads(p.read_text(encoding="utf-8")) for p in sorted(orbit_folder(target, session).glob("block_*.json"))]
+    recs = [r for r in recs if r.get("format") == 2]
+    missing = sorted(set(chosen) - {r["block"] for r in recs})
     tones_all = [t for r in recs for t in r["tones"]]
     out = {}
     for cut in ("30", "10"):
@@ -641,20 +678,27 @@ def orbit_tables(target, say=print):
                         if way == "three_looks":
                             row[cfg]["by_hits"] = {h: sum(x[way] == "recovered" and x["hits"] == h for x in st)
                                                    for h in (1, 2, 3)}
+                            row[cfg]["tight"] = sum(t["status_tight"][cut][cfg] == "recovered" for t in cell)
+                            row[cfg]["mirror"] = (sum(t["status_mirror"][cut][cfg] == "recovered" for t in cell)
+                                                  if a_pk else None)
                     rows.append(row)
             out[f"cut_{cut}_{way}"] = rows
-    record = {"target": target, "session": session, "blocks": len(recs), "cases": ORBIT_CASES,
+    times = {k: round(sum(r["times"].get(k, 0) for r in recs) / 3600, 2) for k in ("block_s", "scored_s", "wall_s")}
+    record = {"target": target, "session": session, "blocks": len(recs), "missing_blocks": missing,
+              "hours": times, "cases": ORBIT_CASES,
               "strengths": ORBIT_STRENGTHS, "a_max": A_MAX, "seed": SEED_ORBIT, "recovery": out,
               "kind": "measured", "experimental": True}
     yoke.write(yoke.DATA / "measurements" / "curved-orbits.json", record, stamp=True)
-    say(f"{len(recs)} blocks, {len(tones_all)} orbital signals")
+    say(f"{len(recs)} blocks of {len(chosen)} (missing {missing}), {len(tones_all)} orbital signals; hours {times}")
     for name in ("cut_30_three_looks", "cut_10_three_looks", "cut_30_strict"):
         say("")
         say(f"{name}: a_pk, period h, S_in: " + "  ".join(CONFIGS) + "  (false associations: production/last)")
         for row in out[name]:
             say(f"  {row['a_pk']:<7g} {str(row['period_h']):>6} {row['s_in']:>4} " + "".join(
                 f"{row[cfg]['recovered']:>6}/{row[cfg]['counted']:<5}" for cfg in CONFIGS)
-                + f"  fa {row['production']['false_association']}/{row[CONFIGS[-1]]['false_association']}")
+                + f"  fa {row['production']['false_association']}/{row[CONFIGS[-1]]['false_association']}"
+                + (f"  tight {row['production']['tight']}/{row[CONFIGS[-1]]['tight']}"
+                   f"  mirror {row['production']['mirror']}/{row[CONFIGS[-1]]['mirror']}" if "tight" in row["production"] else ""))
     for cut in ("30", "10"):
         say("")
         say(f"cut {cut} three looks, totals and formal hits 1/2/3:")
@@ -667,18 +711,44 @@ def orbit_tables(target, say=print):
 
 # --- the checks on what the pass adds -------------------------------------------------
 
-# Step 4 ran the checks (vetting.vet) on production's wrong-choice candidates
-# at the published cut through measure.vet_hook: the cadence's own hits for
-# the session's, no recurrence from the store, the uniform chances. The same
-# here, on production's and the pass's candidates alike ("uniform"), and
-# again with the session's measured occupancy for checks 7 and 9, as checks
-# version 4 runs on a sweep's candidates ("measured"). At the published cut
+# Three ways, on production's and the pass's candidates alike:
+# - "uniform": as step 4 ran the checks on its wrong-choice candidates
+#   (measure.vet_hook): the cadence's own hits for the session's, no
+#   recurrence, the uniform chances. Partial checks, kept for comparison
+#   with step 4's held-out figures.
+# - "measured": the same with the session's measured occupancy for checks 7
+#   and 9. Partial checks too.
+# - "store": the full checks a sweep's candidate gets (check.vet_from_store):
+#   recurrence from the store's hits (every file outside the choice's ON
+#   looks; at present the store holds this one session, so these are the
+#   cadence's other looks over the whole band, at the sweep's cut and its
+#   shadow hits), check 6's background from them, the session's hits at the
+#   cut for checks 8 and 9, its measured occupancy, its own target.
+# At the published cut
 # (10) and the matched (30): every wrong-choice candidate, and, with the same
 # plantings as `run` (seed 61), the candidates that recover a planted signal
 # by three looks, so the checks' cost to real curved signals is measured
 # beside what they remove from the false ones. Nothing about the pass or its
-# labels changes; a candidate's checks see a curved candidate by its
-# strongest hit (frequency, drift), as a person reading it would.
+# labels changes.
+#
+# A curved candidate is kept whole (as_event's "curve": its reference look
+# and epoch, frequency, drift, acceleration, and each look's measured
+# values), but the checks themselves are written for a straight track and
+# read one frequency and one drift. Check by check: 1 (data sanity) has no
+# stamps for a pass candidate and rests on the looks being complete (marked
+# "stamps_retained": false); 2 (OFF looks) reads the S/N measured along the
+# curve and where the first hit was, each OFF look measured or marked
+# unmeasurable; 3 and 8 (bands, harmonics) read the frequency only; 5 (the
+# Earth's drift) only reports; 4, 7 and 9 (zero drift, look-alikes,
+# crowding) and 6 (recurrence, which carries the signal by its drift) read
+# the reference drift, so a curved candidate's verdict could depend on which
+# look is the reference. With "store", each pass candidate is also checked
+# with each of its member looks as the reference (by_reference), and the
+# tables say how often the verdict changes. Check 6 extrapolates in a
+# straight line: a curved signal's recurrence in the cadence's other looks
+# can be missed by it (a 10^-3 Hz/s^2 track is 700 Hz off the line 20
+# minutes on), which leaves more of the pass's candidates unexplained, not
+# fewer; those looks are the ones the pass already measured along the curve.
 VET_CUTS = (10, 30)
 RANK = ("unexplained, strong", "unexplained, weak", "likely interference", "interference")
 
@@ -688,47 +758,91 @@ def rank(verdict):
     return next((i for i, r in enumerate(RANK) if v.startswith(r)), len(RANK))
 
 
-def as_event(looks, e):
-    """A second-pass candidate in onoff.judge's form, for vetting.vet: its
-    strongest member hit for the frequency and drift, each ON look found
-    (a member hit) or measured on the curve, each OFF look's S/N along the
-    curve and where the first hit was. No stamps are cut (check 1 then
-    rests on the looks being complete)."""
+def as_event(looks, e, ref=None):
+    """A second-pass candidate in onoff.judge's form, for vetting.vet.
+
+    The reference (the frequency and drift the checks read) is its strongest
+    member hit, or the member in look `ref`. Each ON look is found (a member
+    hit) or measured on the curve; each OFF look's S/N along the curve and
+    where the first hit was, with off_evidence from those values
+    (onoff.OFF_MAX), and "measured": false where neither could be measured.
+    "curve" keeps the candidate whole: the reference look, its start (MJD),
+    the frequency there (MHz, the hit's start), the drift (Hz/s, mid-look),
+    the acceleration (Hz/s^2), and each look's measured values. No stamps
+    are cut ("stamps_retained": false): check 1 then rests on the looks
+    being complete."""
     mem = e["members"]
-    top_pos, top_i = max(mem.items(), key=lambda m: looks[m[0]].hits[m[1]]["snr"])
+    if ref is None:
+        top_pos, top_i = max(mem.items(), key=lambda m: looks[m[0]].hits[m[1]]["snr"])
+    else:
+        top_pos, top_i = ref, mem[ref]
     h = looks[top_pos].hits[top_i]
     matches = [None] * len(looks)
     for p, i in mem.items():
         matches[p] = i
     offs = {o[0]: o for o in e.get("offs", [])}
-    per = []
+    per, values = [], []
     for lk in looks:
         entry = {"position": lk.position, "on": lk.on}
         if lk.position in mem:
             hh = lk.hits[mem[lk.position]]
             entry.update(found=True, snr=hh["snr"], drift_hz_s=hh["drift_hz_s"])
+            values.append({"position": lk.position, "kind": "hit", "frequency_mhz": hh["frequency_mhz"],
+                           "drift_hz_s": hh["drift_hz_s"], "snr": hh["snr"]})
         elif lk.on:
             tr = e.get("track")
             entry.update(found=False, track_snr=None if tr is None else round(tr[3], 2))
+            values.append({"position": lk.position, "kind": "track",
+                           "channel": None if tr is None else tr[1], "drift_hz_s": None if tr is None else tr[2],
+                           "snr": None if tr is None else round(tr[3], 2)})
         else:
             o = offs.get(lk.position, (lk.position, None, None))
-            entry.update(found=False, track_snr=o[1], track_snr_fixed=o[2], off_evidence=False)
+            known = [x for x in o[1:3] if x is not None]
+            entry.update(found=False, track_snr=o[1], track_snr_fixed=o[2], measured=bool(known),
+                         off_evidence=bool(known) and max(known) >= onoff.OFF_MAX)
+            values.append({"position": lk.position, "kind": "off", "snr_on_curve": o[1], "snr_at_start": o[2],
+                           "measured": bool(known)})
         per.append(entry)
     off_max = max((x for o in offs.values() for x in o[1:3] if x is not None), default=None)
+    curve = {"ref_position": top_pos, "ref_epoch_mjd": looks[top_pos].tstart, "frequency_mhz": h["frequency_mhz"],
+             "drift_hz_s": h["drift_hz_s"], "accel_hz_s2": e["a"], "looks": values}
     return {"frequency_mhz": h["frequency_mhz"], "drift_hz_s": h["drift_hz_s"], "snr": h["snr"],
             "seed_position": top_pos, "matches": matches, "looks": per, "off_snr_max": off_max,
-            "label": "candidate", "stamps": None, "a": e["a"]}
+            "label": "candidate", "stamps": None, "stamps_retained": False, "a": e["a"], "curve": curve,
+            "members": dict(mem)}
 
 
-def _vetters(occ):
-    def uniform(event, looks):
+def _vetters(ctx):
+    """The three ways (see above). ctx: db, session, target, occupancy, the
+    session's hits. Each takes (event, looks, ons): ons the file positions
+    taken as ON."""
+    target, occ = ctx["target"], ctx["occupancy"]
+
+    def uniform(event, looks, ons):
         hits = [h for lk in looks for h in lk.hits if not h.get("shadow")]
-        return vetting.vet(event, looks, measure.KIC8462852, (), hits)
+        return vetting.vet(event, looks, target, (), hits)
 
-    def measured(event, looks):
+    def measured(event, looks, ons):
         hits = [h for lk in looks for h in lk.hits if not h.get("shadow")]
-        return vetting.vet(event, looks, measure.KIC8462852, (), hits, occupancy=occ)
-    return {"uniform": uniform, "measured": measured}
+        return vetting.vet(event, looks, target, (), hits, occupancy=occ)
+
+    def full(event, looks, ons):
+        return check.vet_from_store(ctx["db"], event, looks, ctx["session"], target, own=(),
+                                    on_positions=tuple(ons), hits=ctx["hits"])
+    return {"uniform": uniform, "measured": measured, "store": full}
+
+
+def _context(db, session):
+    return {"db": db, "session": session, "target": check.target_of(db, session),
+            "occupancy": occupancy.load(db, session), "hits": check.session_hits(db, session)}
+
+
+def _by_reference(ev, looks, ons, fn):
+    """A pass candidate checked with each member look as the reference:
+    {position: verdict}."""
+    return {str(p): fn(as_event(looks, {"members": ev["members"], "offs": ev.get("_offs", []),
+                                        "track": ev.get("_track"), "a": ev["a"]}, ref=p), looks, ons)["verdict"]
+            for p in sorted(ev["members"])}
 
 
 def _candidates(looks, events, order):
@@ -748,25 +862,30 @@ def _candidates(looks, events, order):
                 by_sig[sig] = [pe, []]
             by_sig[sig][1].append(key(a))
     for pe, cfgs in by_sig.values():
-        out.append((_kept_pass(looks, [pe], order)[0], as_event(looks, pe), cfgs, "pass"))
+        ev = as_event(looks, pe)
+        ev["_offs"], ev["_track"] = pe.get("offs", []), pe.get("track")
+        out.append((_kept_pass(looks, [pe], order)[0], ev, cfgs, "pass"))
     return out
 
 
-def _vet_all(cands, looks, vetters):
+def _vet_all(cands, looks, vetters, ons):
     rows = []
     for kept, ev, cfgs, by in cands:
         r = dict(kept, configs=cfgs, by=by)
         for name, fn in vetters.items():
-            v = fn(ev, looks)
+            v = fn(ev, looks, ons)
             r[name] = {"verdict": v["verdict"], "reasons": v["reasons"]}
+        if by == "pass":
+            r["curve"] = ev["curve"]
+            r["store"]["by_reference"] = _by_reference(ev, looks, ons, vetters["store"])
         rows.append(r)
     return rows
 
 
-def _vet_block(k, slices, urls, occ):
+def _vet_block(k, slices, urls, ctx):
     cad = matched._cadence(slices, urls)
     rng = np.random.default_rng([SEED, k])
-    vetters = _vetters(occ)
+    vetters = _vetters(ctx)
     times = {}
     t = time.monotonic()
     searched = matched.our_search(cad)
@@ -782,7 +901,7 @@ def _vet_block(k, slices, urls, occ):
                     plain[matched.ck(cut)][key(a)] = prod + _kept_pass(looks, second_pass(looks, events, a), order)
             else:
                 false.setdefault(matched.ck(cut), {})[str(ons)] = _vet_all(_candidates(looks, events, order),
-                                                                          looks, vetters)
+                                                                          looks, vetters, ons)
             for lk in looks:
                 lk.flat = None
     times["false_s"] = round(time.monotonic() - t, 1)
@@ -811,16 +930,26 @@ def _vet_block(k, slices, urls, occ):
                         best = None
                         for i in got:
                             if (i, name) not in verdicts:
-                                verdicts[(i, name)] = fn(cands[i][1], looks)["verdict"]
+                                verdicts[(i, name)] = fn(cands[i][1], looks, TRUE)["verdict"]
                             v = verdicts[(i, name)]
                             if best is None or rank(v) < rank(best):
                                 best = v
                         out[name] = best
+                    # the recovering candidates' own: production's, the pass's, and the pass's by reference
+                    out["by"] = sorted({cands[i][3] for i in got})
+                    refs = []
+                    for i in got:
+                        if cands[i][3] == "pass":
+                            if ("ref", i) not in verdicts:
+                                verdicts[("ref", i)] = _by_reference(cands[i][1], looks, TRUE, vetters["store"])
+                            refs.append(verdicts[("ref", i)])
+                    if refs:
+                        out["store_by_reference"] = refs
                 row["vet"][c][cfg] = out
         for lk in looks:
             lk.flat = None
     times["planted_s"] = round(time.monotonic() - t, 1)
-    return {"format": 1, "block": k, "tstarts": [x["s"]["tstart"] for x in cad], "false": false, "tones": rows,
+    return {"format": 2, "block": k, "tstarts": [x["s"]["tstart"] for x in cad], "false": false, "tones": rows,
             "times": times, "checks_version": vetting.VERSION,
             "finished_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
 
@@ -833,8 +962,7 @@ def vet_run(target, say=print, shard=(0, 1), count=None):
     db = store.connect()
     session, urls = store.cadence_files(db, target)
     chosen, _ = matched.choose_blocks(db, session)
-    occ = occupancy.load(db, session)
-    db.close()
+    ctx = _context(db, session)
     base = vet_folder(target, session)
     base.mkdir(parents=True, exist_ok=True)
     todo = [b for i, b in enumerate(chosen) if i % shard[1] == shard[0] and not (base / f"block_{b:03d}.json").exists()]
@@ -851,7 +979,7 @@ def vet_run(target, say=print, shard=(0, 1), count=None):
             slices = coming.result()
             coming = ahead.submit(fetch, todo[i + 1]) if i + 1 < len(todo) else None
             started = time.monotonic()
-            rec = _vet_block(b, slices, urls, occ)
+            rec = _vet_block(b, slices, urls, ctx)
             rec["class"] = chosen[b]
             rec["times"]["block_s"] = round(time.monotonic() - started, 1)
             del slices
@@ -859,18 +987,32 @@ def vet_run(target, say=print, shard=(0, 1), count=None):
             f10 = [r for rows in rec["false"]["10"].values() for r in rows]
             say(f"  block {b}: wrong-choice candidates at cut 10 production "
                 f"{sum(r['by'] == 'production' for r in f10)}, pass {sum(r['by'] == 'pass' for r in f10)} "
-                f"(pass unexplained, measured: {sum(r['by'] == 'pass' and rank(r['measured']['verdict']) < 2 for r in f10)})"
+                f"(pass unexplained, full checks: {sum(r['by'] == 'pass' and rank(r['store']['verdict']) < 2 for r in f10)})"
                 f"; {rec['times']['block_s']} s", flush=True)
+    db.close()
 
 
 def vet_tables(target, say=print):
     db = store.connect()
     session, _ = store.cadence_files(db, target)
     db.close()
+    db = store.connect()
+    chosen, _ = matched.choose_blocks(db, session)
+    db.close()
     recs = [json.loads(p.read_text(encoding="utf-8")) for p in sorted(vet_folder(target, session).glob("block_*.json"))]
-    out = {"blocks": len(recs)}
+    recs = [r for r in recs if r.get("format") == 2]
+    missing = sorted(set(chosen) - {r["block"] for r in recs})
+    hours = {k: round(sum(r["times"].get(k, 0) for r in recs) / 3600, 2) for k in ("false_s", "planted_s", "block_s")}
+    out = {"blocks": len(recs), "missing_blocks": missing, "hours": hours}
+    # how often a pass candidate's full-checks verdict depends on the reference look
+    refs = [x["store"]["by_reference"] for r in recs for c in r["false"].values() for rows in c.values()
+            for x in rows if x["by"] == "pass"]
+    refs += [v for r in recs for t in r["tones"] for c in t["vet"].values() for x in c.values()
+             for v in x.get("store_by_reference", [])]
+    out["reference_sensitivity"] = {"pass_candidates_checked": len(refs), "verdict_class_differs": sum(
+        len({rank(v) < 2 for v in d.values()}) > 1 for d in refs)}
     for c in map(matched.ck, VET_CUTS):
-        for way in ("uniform", "measured"):
+        for way in ("uniform", "measured", "store"):
             # wrong choices: distinct signals a block (by shared member hits) kept, and left unexplained
             f = {}
             for cfg in CONFIGS:
@@ -892,14 +1034,16 @@ def vet_tables(target, say=print):
                         rec_ = [x for x in cell if x["three_looks"] == "recovered"]
                         u = sum(rank(x[way]) < 2 for x in rec_)
                         rows.append({"accel": acc, "s_in": s_in, "planted": len(cell), "recovered": len(rec_),
-                                     "unexplained": u})
+                                     "unexplained": u, "interval": measure.wilson(u, len(rec_)) if rec_ else None,
+                                     "false_association": sum(x["three_looks"] == "false association" for x in cell)})
                 p[cfg] = rows
             out[f"cut_{c}_{way}"] = {"false": f, "planted": p}
     yoke.write(yoke.DATA / "measurements" / "curved-pass-vetting.json",
                {"target": target, "session": session, **out, "kind": "measured", "experimental": True}, stamp=True)
-    say(f"{len(recs)} blocks")
+    say(f"{len(recs)} blocks of {len(chosen)} (missing {missing}); hours {hours}; reference sensitivity "
+        f"{out['reference_sensitivity']}")
     for c in map(matched.ck, VET_CUTS):
-        for way in ("uniform", "measured"):
+        for way in ("uniform", "measured", "store"):
             x = out[f"cut_{c}_{way}"]
             say("")
             say(f"cut {c}, checks {way}: wrong-choice distinct kept / unexplained, and planted recovered / unexplained")
@@ -908,6 +1052,91 @@ def vet_tables(target, say=print):
                 say(f"  {cfg:>14}: false {x['false'][cfg]['distinct_kept']} / {x['false'][cfg]['distinct_unexplained']}"
                     f"   planted {sum(r['recovered'] for r in pr)} / {sum(r['unexplained'] for r in pr)}")
     return out
+
+
+# --- self-checks ---------------------------------------------------------------------
+
+def selftest(say=print):
+    """Independent checks of the orbital paths, the planting and the
+    candidate adapter (no archive reads; seconds). Raises on a failure."""
+    import types
+    # 1. The path against a separate calculation: the acceleration (the
+    #    orbit's a_pk cos(w t - phase) plus the Earth's, from expected_drift
+    #    differenced on its own 0.5 s grid) integrated twice from the planted
+    #    drift with the trapezoid rule, not orbit_offset's closed form.
+    ra, dec, mjd0 = 20.104288, 44.456838, 57898.26
+    cad = [{"s": {"tstart": mjd0 + j * 330 / 86400, "tsamp": 1.073741824}, "raw": np.zeros((279, 1))}
+           for j in range(6)]
+    earth = _earth(cad, ra, dec)
+    g = np.arange(0.0, 1950.0, 0.5)                 # within the cadence (the Earth path ends there)
+    d_earth = np.array([vetting.expected_drift(1.0, mjd0 + x / 86400, ra, dec)[0] for x in g])
+    worst = 0.0
+    for a_pk, period, phase, drift, f_mhz in ((1e-3, 10.0, 0.4, 0.3, 2100.0), (3e-4, 24.0, 2.9, -1.7, 1850.0),
+                                             (1e-4, 240.0, 5.1, 0.0, 2400.0), (0.0, None, 0.0, 0.05, 2000.0)):
+        t = {"a_pk": a_pk, "period_h": period, "phase": phase, "drift": drift, "f_mhz": f_mhz}
+        acc = f_mhz * np.gradient(d_earth, g)
+        if a_pk:
+            acc = acc + a_pk * np.cos(2 * math.pi / (period * 3600) * g - phase)
+        v = drift + np.concatenate([[0.0], np.cumsum((acc[1:] + acc[:-1]) / 2 * 0.5)])
+        f = np.concatenate([[0.0], np.cumsum((v[1:] + v[:-1]) / 2 * 0.5)])
+        err = float(np.max(np.abs(f - orbit_offset(t, g, earth))))
+        worst = max(worst, err)
+        assert err < 0.05, f"path off by {err:.3f} Hz (a_pk {a_pk}, period {period})"
+    say(f"1. orbital paths against a separate double integration: worst {worst:.4f} Hz over 1950 s")
+
+    # 2. The planting: one strong orbital signal in an empty look; the power's
+    #    centre in each spectrum against the path at mid-spectrum.
+    n_t, n_f, tsamp, foff = 279, 4000, 1.073741824, 2.7939677238464355e-06
+    t = {"a_pk": 1e-3, "period_h": 10.0, "phase": 1.0, "drift": 1.3, "f_mhz": 2000.0}
+
+    def path(tau):
+        return orbit_offset(t, tau, lambda x: 0.0 * np.asarray(x))
+    out = measure.plant(np.zeros((n_t, n_f)), [(1000.3, 0.0, 1.0, path)], tsamp, foff)
+    ch = np.arange(n_f)
+    centre = (out * ch).sum(axis=1) / out.sum(axis=1)
+    want = 1000.3 + path((np.arange(n_t) + 0.5) * tsamp) / (foff * 1e6)
+    err = float(np.max(np.abs(centre - want)))
+    assert err < 0.25, f"planted track off by {err:.3f} channels"
+    say(f"2. a planted orbital track against its path: worst {err:.3f} channels over {n_t} spectra")
+
+    # 3. The adapter: OFF looks measured below the threshold, unmeasurable, and
+    #    at it; the third ON look a measured track; the curve kept whole.
+    def look(pos, hits):
+        return types.SimpleNamespace(position=pos, on=pos % 2 == 0, hits=hits, tstart=mjd0 + pos * 330 / 86400)
+    hit = {"frequency_mhz": 2000.0, "drift_hz_s": 0.5, "snr": 40.0}
+    looks = [look(0, [hit]), look(1, []), look(2, [dict(hit, snr=60.0, drift_hz_s=0.6)]), look(3, []), look(4, []),
+             look(5, [])]
+    e = {"members": {0: 0, 2: 0}, "track": (4, 1234, 0.7, 6.5), "offs": [(1, 3.1, 2.0), (3, None, None), (5, 4.0, 7.2)],
+         "a": 3e-4}
+    ev = as_event(looks, e)
+    per = {x["position"]: x for x in ev["looks"]}
+    assert ev["seed_position"] == 2 and ev["drift_hz_s"] == 0.6, "reference is the strongest member hit"
+    assert per[1]["measured"] and not per[1]["off_evidence"], "OFF measured under the threshold"
+    assert not per[3]["measured"] and not per[3]["off_evidence"] and per[3]["track_snr"] is None, "OFF unmeasurable"
+    assert per[5]["off_evidence"], "OFF at the threshold is evidence"
+    assert per[4]["found"] is False and per[4]["track_snr"] == 6.5, "third ON look a measured track"
+    assert ev["off_snr_max"] == 7.2 and ev["stamps_retained"] is False
+    assert ev["curve"]["accel_hz_s2"] == 3e-4 and len(ev["curve"]["looks"]) == 6
+    ev0 = as_event(looks, e, ref=0)
+    assert ev0["seed_position"] == 0 and ev0["drift_hz_s"] == 0.5, "a chosen reference look"
+    say("3. the adapter: OFF looks measured, unmeasurable and at the threshold told apart; "
+        "the track, the reference and the curve kept")
+
+    # 4. The matching tolerance: straight (no orbit, no Earth) gives 6 Hz and
+    #    the planted drift; widened only by the path's departure from a line.
+    cad1 = [{"s": {"tstart": mjd0, "tsamp": tsamp, "fch1": 2000.0, "foff": foff}, "raw": np.zeros((279, 1))}]
+    zero = (lambda x: 0.0 * np.asarray(x))
+    straight = {"a_pk": 0.0, "period_h": None, "phase": 0.0, "drift": 0.8, "f_mhz": 2000.0, "x0": 10.0}
+    _, slope, tol = orbit_expected(zero)(cad1, straight, 0)
+    assert abs(slope - 0.8) < 1e-9 and abs(tol - matched.TOL_HZ) < 1e-9, "straight: 6 Hz, its own drift"
+    curved_t = dict(straight, a_pk=1e-3, period_h=24.0, phase=0.0)
+    _, _, tol_w = orbit_expected(zero)(cad1, curved_t, 0)
+    _, _, tol_t = orbit_expected(zero, widen=False)(cad1, curved_t, 0)
+    T = 279 * tsamp
+    # the orbit's acceleration changes a little over the look, so near, not equal, to a T^2/12
+    assert abs(tol_w - matched.TOL_HZ - 1e-3 * T * T / 12) < 0.2 and tol_t == matched.TOL_HZ
+    say(f"4. the tolerance: 6 Hz straight; at 1e-3 Hz/s^2 {tol_w:.2f} Hz (6 + a T^2/12), 6 Hz tight")
+    say("selftest passed")
 
 
 # --- tables -----------------------------------------------------------------------
@@ -1018,6 +1247,7 @@ def main(argv=None):
     v.add_argument("--blocks", type=int)
     vt = sub.add_parser("vet-tables")
     vt.add_argument("target")
+    sub.add_parser("selftest", help="the orbital paths, the planting and the candidate adapter checked")
     ot = sub.add_parser("orbit-tables")
     ot.add_argument("target")
     t = sub.add_parser("tables")
@@ -1031,6 +1261,8 @@ def main(argv=None):
         vet_run(a.target, shard=tuple(int(x) for x in a.shard.split("/")), count=a.blocks)
     elif a.cmd == "vet-tables":
         vet_tables(a.target)
+    elif a.cmd == "selftest":
+        selftest()
     elif a.cmd == "orbit-tables":
         orbit_tables(a.target)
     elif a.cmd == "recheck":

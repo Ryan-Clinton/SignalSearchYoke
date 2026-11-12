@@ -1491,3 +1491,95 @@ not, as in step 4. **The production cadence test is not changed on this.**
 What would justify a change: the same result on another session (step
 10's blocks), the checks run on the pass's candidates, and orbital
 (sinusoidal) tracks planted as well as constant accelerations.
+
+### Curved tracks: orbital paths, and the checks on what the pass adds (12 November 2026)
+
+Two measurements, both on step 4's 121 blocks with the second pass
+unchanged, their parameters fixed before they ran (`curved_pass.py orbits`,
+`vet`; `selftest` checks the pieces they rest on).
+
+**Orbital paths.** A constant acceleration over 22 minutes is the simplest
+curve. Here each planted signal has a line-of-sight acceleration a_pk
+cos(ωt − φ), so its acceleration and its jerk change over the cadence, with
+the Earth's own turning and orbit toward the target at Green Bank added
+(`vetting.expected_drift`, beyond the drift it has at the cadence's start).
+Peaks 10⁻⁴, 3×10⁻⁴ and 10⁻³ Hz/s²; periods 10 hours, 1 day and 10 days;
+the phase at random; S_in 60, 120 and 400 (S_in 30 is under the matched
+cut); five drift bins; and a control with no orbit, the Earth's motion
+alone. 150 signals a block, seed 62.
+
+What the cases are physically: the line-of-sight acceleration is a_pk c/f.
+At 2 GHz, 10⁻⁴ Hz/s² is 0.015 m/s² and 10⁻³ is 0.15 m/s², against the
+Earth's turning at Green Bank, up to 0.025 m/s². For a circular orbit
+seen edge-on, a = vω: at 10⁻³ a 1-day orbit is a line-of-sight speed of
+2.1 km/s and a 10-day orbit 21 km/s. A 10-hour period at 10⁻³ is 0.86 km/s,
+more a fast-turning body (a transmitter on a planet turning in 10 hours at
+twice Jupiter's equatorial speed) than an orbit. These cases are a grid
+over the range where the pass's bound matters. They are not a sample of
+real planetary systems: inclination folds into a_pk, and nothing here
+weights them by how common they are.
+
+Recovery is by three looks, against the best straight line fitted to the
+path in each look, the frequency tolerance 6 Hz plus the path's largest
+departure from that line (up to 7.4 Hz more at 10⁻³). Two controls on that
+matching: "tight", the same with 6 Hz only, and "mirror", each signal
+scored against the path it would have with its phase turned half a cycle
+(the opposite curvature and jerk). A recovery against the mirror path means
+the matching is too loose, not that the signal was found. False
+associations are counted in each cell.
+
+**The checks on what the pass adds.** In three ways, on production's
+candidates and the pass's alike:
+
+- "uniform", as step 4 ran the checks on its wrong-choice candidates
+  (`measure.vet_hook`: the cadence's own hits, no recurrence, the uniform
+  chances), kept to compare with step 4's held-out figures. These are
+  partial checks.
+- "measured": the same with the session's measured occupancy (checks 7 and
+  9). Also partial.
+- "store": the full checks a sweep's candidate gets
+  (`check.vet_from_store`). These are recurrence from the store's hits in
+  every file outside the choice's ON looks, check 6's background from
+  them, the session's 72,555 hits at the cut for checks 8 and 9, its
+  measured occupancy, and its own target. The store holds this one
+  session's six files and no other session, so "recurrence elsewhere" is,
+  for now, the cadence's other looks over the whole band (at the sweep's
+  cut and its shadow hits). Another session's sweep adds to it.
+
+At cuts 10 and 30 these run on every wrong-choice candidate, and on the
+candidates that recover a planted signal (the same plantings as above, seed
+61). That measures what the checks remove from the false candidates and
+what they cost real curved signals.
+
+A pass candidate is kept whole: its reference look and epoch, frequency,
+drift, acceleration, and each look's measured values (hit, track on the
+curve, or OFF S/N, each OFF look marked measured or not, and its OFF
+evidence taken from those values). The checks themselves are written for a
+straight track and read one frequency and one drift; check by check:
+
+| check | what it reads | for a curved candidate |
+|---|---|---|
+| 1 data sanity | stamps, completeness | no stamps cut for a pass candidate; rests on the looks being complete (marked) |
+| 2 OFF looks | each OFF look's S/N | measured along the curve and where the first hit was |
+| 3 bands, 8 harmonics | frequency | unaffected |
+| 5 the Earth's drift | drift | reports only |
+| 4 zero drift, 7 look-alikes, 9 crowding | the reference drift | could depend on the reference look |
+| 6 recurrence | frequency, drift extrapolated in a line | a curved signal's recurrence in the other looks can be missed (10⁻³ Hz/s² is 700 Hz off the line 20 minutes on); that leaves more of the pass's candidates unexplained, not fewer, and those looks are the ones the pass measured along the curve |
+
+So each pass candidate is also checked with each of its member looks as
+the reference, and the tables say how often the verdict changes.
+
+`selftest`:
+- the orbital paths agree with a separate double integration of the
+  acceleration (the orbit's plus the Earth's, from expected_drift on its
+  own grid) to under 10⁻⁴ Hz over the cadence;
+- a planted orbital track's centre is within 0.1 channel of its path in
+  every spectrum;
+- the adapter tells apart an OFF look measured under the threshold, one
+  that could not be measured, and one at it;
+- the tolerance is 6 Hz for a straight signal, and 6 Hz plus about
+  aT²/12 for a curved one.
+
+The results follow when the runs end. The first orbital run (17 blocks,
+before the controls were added) is kept apart, as is a one-block test of
+the partial checks.
