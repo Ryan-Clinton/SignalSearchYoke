@@ -32,6 +32,7 @@ KIC 8462852.
 | `occupancy.py` | the session's interference occupancy by frequency and drift, from its hits: checks 7 and 9's chances (step 6) |
 | `curved.py` | EXPERIMENTAL, apart from the search: a cadence test for curved tracks, and curved tracks through turboSETI (step 9) |
 | `curved_pass.py` | EXPERIMENTAL, apart from the search: a curved second pass after the production cadence test, over step 4's blocks at matched rates (step 9) |
+| `independent.py` | Step 10: step 4's comparison and the curved pass on another session, every choice frozen in `config/step10.json` (with a fingerprint of the code) before its data are read |
 | `ranking.py` | comparable.md step 5: the score (the checks' chances), the OFF null, birdies ranked against the real candidates, the held-out wrong-cadence candidates |
 | `report.py` | the result of a swept cadence (`seti.py report`): `docs/results/TARGET-SESSION.md`, from the store and the measurements |
 | `yoke.py` | the data folder, the `--json` envelope, writing a record whole |
@@ -228,8 +229,8 @@ the default place.
   S_in 400). Orbital paths (12 Nov, 18,150 signals): production 3,607 to
   the pass's 9,118 of 16,335 at cut 30, controls holding. Next: the checks
   on the pass's candidates (`curved_pass.py vet`, running), step 10
-  (another session, cuts fixed, the second pass with it), before any
-  change to `onoff.py`.
+  (frozen in `config/step10.json`: HIP17147 AGBT16A_999_192, L band, 2016;
+  `independent.py`), before any change to `onoff.py`.
 - **Real signals:** Voyager 1's carrier and sidebands found at turboSETI's
   published frequencies and drifts, the drift the Earth's; wide signals
   (its 322 Hz sidebands) are tiled with many hits, a known gap. HIP 91699's

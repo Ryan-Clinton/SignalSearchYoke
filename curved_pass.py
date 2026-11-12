@@ -338,10 +338,10 @@ def run(target, count=None, say=print, shard=(0, 1)):
     records do not depend on the order or the split)."""
     db = store.connect()
     session, urls = store.cadence_files(db, target)
-    chosen, totals = matched.choose_blocks(db, session)
     db.close()
+    # matched.py's blocks for the session, as its run chose them (step 4's rule, or step 10's).
     step4 = json.loads((matched.folder(target, session) / "blocks.json").read_text(encoding="utf-8"))
-    assert {int(b): c for b, c in step4["chosen"].items()} == chosen, "not step 4's blocks"
+    chosen, totals = {int(b): c for b, c in step4["chosen"].items()}, step4["of"]
     block_list = seti.blocks(seti.reading.prepare(urls[:1])[0])
     base = folder(target, session)
     base.mkdir(parents=True, exist_ok=True)
@@ -1290,7 +1290,7 @@ def selftest(say=print):
 
 # --- tables -----------------------------------------------------------------------
 
-def tables(target, say=print):
+def tables(target, say=print, name="curved-pass.json"):
     db = store.connect()
     session, _ = store.cadence_files(db, target)
     db.close()
@@ -1348,7 +1348,7 @@ def tables(target, say=print):
               "weights": weights, "rate_matched": matched_tables.RATE, "a_max": A_MAX, "accels": ACCELS,
               "strengths": STRENGTHS, "false_curves": curves, "matched_cuts": cuts, "recovery": at,
               "kind": "measured", "experimental": True}
-    yoke.write(yoke.DATA / "measurements" / "curved-pass.json", record, stamp=True)
+    yoke.write(yoke.DATA / "measurements" / name, record, stamp=True)
     say(f"{len(recs)} blocks of {len(meta['chosen'])}. False candidates a block (95% interval), by cut:")
     say("  cut   " + "".join(f"{cfg:>24}" for cfg in CONFIGS))
     for c in CUTS:

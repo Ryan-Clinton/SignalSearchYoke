@@ -484,20 +484,37 @@ def block(k, cls, slices, urls, work, source, vet, rng):
             "finished_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
 
 
-def run(target, count=None, say=print):
+def run(target, count=None, say=print, choice=None, shard=(0, 1)):
+    """choice: the blocks chosen elsewhere ({"chosen": {block: class},
+    "of": {class: blocks swept}, and how they were chosen}), written as the
+    run's blocks.json; a run already begun with another choice is refused.
+    Without it, choose_blocks (step 4's rule). shard (i, n): every n-th
+    chosen block from the i-th (each block has its own seed, so the records
+    do not depend on the split)."""
     db = store.connect()
     kept = store.cadence_files(db, target)
     if not kept:
         raise yoke.Refusal("NOT_FOUND", f"No swept cadence of {target} in the store.")
     session, urls = kept
-    chosen, totals = choose_blocks(db, session)
+    if choice is None:
+        chosen, totals = choose_blocks(db, session)
+        meta = {"chosen": chosen, "of": totals, "crowded_hits": CROWDED_HITS, "n_clean": N_CLEAN, "seed": SEED}
+    else:
+        chosen = {int(b): c for b, c in choice["chosen"].items()}
+        meta = dict(choice, chosen=chosen, seed=SEED)
     db.close()
     block_list = seti.blocks(seti.reading.prepare(urls[:1])[0])
-    base, work_root = folder(target, session), ROOT / "work"
+    base, work_root = folder(target, session), ROOT / f"work_{shard[0]}"
     base.mkdir(parents=True, exist_ok=True)
-    (base / "blocks.json").write_text(json.dumps({"chosen": chosen, "of": totals, "crowded_hits": CROWDED_HITS,
-                                                  "n_clean": N_CLEAN, "seed": SEED}, indent=1), encoding="utf-8")
-    todo_all = [b for b in chosen if not (base / f"block_{b:03d}.json").exists()]
+    meta_path = base / "blocks.json"
+    if meta_path.exists():
+        before = json.loads(meta_path.read_text(encoding="utf-8"))
+        if {int(b): c for b, c in before["chosen"].items()} != chosen and list(base.glob("block_*.json")):
+            raise yoke.Refusal("INVALID_REQUEST", f"{base} was begun with another choice of blocks.")
+    if not meta_path.exists() or json.loads(meta_path.read_text(encoding="utf-8")) != json.loads(json.dumps(meta)):
+        meta_path.write_text(json.dumps(meta, indent=1), encoding="utf-8")
+    todo_all = [b for i, b in enumerate(chosen) if i % shard[1] == shard[0]
+                and not (base / f"block_{b:03d}.json").exists()]
     todo = todo_all if count is None else todo_all[:count]
     say(f"{target} {session}: {len(chosen)} blocks chosen ({sum(v == 'crowded' for v in chosen.values())} crowded), "
         f"{len(chosen) - len(todo_all)} done before, {len(todo)} to run")
@@ -639,6 +656,7 @@ def main(argv=None):
     r = sub.add_parser("run")
     r.add_argument("target")
     r.add_argument("--blocks", type=int)
+    r.add_argument("--shard", default="0/1", help="i/n: every n-th chosen block from the i-th")
     t = sub.add_parser("tables")
     t.add_argument("target")
     t = sub.add_parser("tracks", help="add the measured ON tracks to blocks recorded without them")
@@ -646,7 +664,7 @@ def main(argv=None):
     a = p.parse_args(argv)
     try:
         if a.command == "run":
-            run(a.target, a.blocks)
+            run(a.target, a.blocks, shard=tuple(int(x) for x in a.shard.split("/")))
         elif a.command == "tracks":
             add_tracks(a.target)
         else:

@@ -216,7 +216,8 @@ def _offsets(tones, p, cut):
             "within_drift_only": int(((df > matched.TOL_HZ) & (dd <= matched.TOL_DRIFT)).sum())}
 
 
-def write(target, say=print):
+def write(target, say=print, name="matched.json"):
+    """name: the record's file in data/measurements (step 4's is matched.json)."""
     session, meta, recs = load(target)
     if not recs:
         raise yoke.Refusal("NOT_FOUND", f"No block of matched.py's run (record format {matched.FORMAT}) is done.")
@@ -265,9 +266,9 @@ def write(target, say=print):
                         "matched": s_in_at(tones, p, at_matched[p]) if p in at_matched else None}
                     for p in ("ours", "turboseti")},
         "offsets": {p: _offsets(tones, p, published[p]) for p in ("ours", "turboseti")},
-        "incomplete_looks": sum(not x for r in recs for x in r["complete"]),
+        "incomplete_looks": sum(not x for r in recs for x in r["complete"]), "record": name,
         "kind": "measured", "written_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
-    yoke.write(yoke.DATA / "measurements" / "matched.json", rec, stamp=True)
+    yoke.write(yoke.DATA / "measurements" / name, rec, stamp=True)
     page = yoke.ROOT / "docs" / "results" / f"{target}-{session}-matched.md"
     page.write_text(markdown(rec), encoding="utf-8")
     say(f"{page}: {len(recs)} blocks, {len(tones)} planted signals")
@@ -298,7 +299,7 @@ def _rec_table(tab, ps):
 def markdown(r):
     out = [f"# {r['target']} {r['session']}: the pipelines at matched sensitivity", "",
            f"Written by `matched.py tables {r['target']}` from `matched.py run` (comparable.md steps 4 and 7); "
-           "the record is data/measurements/matched.json.", "",
+           f"the record is data/measurements/{r.get('record', 'matched.json')}.", "",
            f"{r['blocks']} blocks: {r['classes']['crowded']} crowded (more than {r['crowded_hits']} hits at this "
            f"search's cut in the six looks; there are {r['of']['crowded']}) and {r['classes']['clean']} clean "
            f"(of {r['of']['clean']}, drawn at random). Rates over all blocks weight the two by their share of the "

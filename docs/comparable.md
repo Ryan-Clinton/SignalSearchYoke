@@ -495,8 +495,12 @@ possible a different band or year). Fixed now, before any of it is read:
 
 - **The cuts:** SNR 30 for both pipelines; no other cut is chosen on the
   new session (the curves are measured and shown, not used to choose).
-- **The blocks:** at least 40 (every crowded one up to 20, and clean ones
-  at random to make up the rest), by the same rule for crowded, read once.
+- **The blocks:** step 4's sample size, 121: up to 61 crowded blocks at
+  random and clean ones at random to make the rest, by the same rule for
+  crowded, read once. (First fixed here as at least 40, the crowded up to
+  20; changed on 12 November, before any of the session's spectra were
+  read, because every false candidate in step 4 was in a crowded block and
+  its rate's interval at 61 already reached 0.13.)
 - **The same measurement:** the 19 wrong choices; 110 signals a block from
   the same S_in and drift grid; recovery in all three ON looks at ±6 Hz,
   ±0.05 Hz/s; turboSETI checked from its own hit tables.
@@ -504,6 +508,24 @@ possible a different band or year). Fixed now, before any of it is read:
   (with their intervals), and this search's recovery in all three ON looks
   above turboSETI's with the two intervals apart. If a rate comes out above
   0.1, that is reported as the result, not fixed by a new cut.
+
+- **The curved second pass with it:** `curved_pass.block` unchanged on the
+  same blocks; at a_max 10⁻³ its false rate at SNR 30 by the same rule, its
+  three-look recovery of the signals at |a| ≥ 10⁻⁴ above production's with
+  the intervals apart, and none of production's recoveries lost.
+
+**Frozen, 12 November 2026:** `config/step10.json` holds all of this,
+the session (HIP17147, AGBT16A_999_192: L band, 2016, the same telescope;
+chosen from the archive's listing alone, its reasons in the file) and a
+fingerprint of the code that makes the measurement. `independent.py` runs
+it in stages (sweep the whole session, choose the blocks, measure, the
+curved pass, the verdict) and refuses any stage while the config has
+uncommitted changes or the code differs from its fingerprint, unless told
+why, which is logged and printed on the result page. Run on step 4's own
+session as a dry run, its verdict gives step 4's numbers (4,520 against
+442 of 13,310; rates 0.068 and 0.049, their intervals reaching 0.13).
+Sweeping the session also puts a second session in the store, so from then
+on check 6 sees another session's looks.
 
 **Done when:** the new session's page is in `docs/results/` and
 `docs/seti.md` says whether step 4's result held there.
