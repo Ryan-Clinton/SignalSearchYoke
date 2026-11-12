@@ -1446,7 +1446,11 @@ interval):
 
 In all, 4,078 of the 14,520 with production (strict: 5,567), 5,723 with the
 pass at a_max 3×10⁻⁴, 6,557 at 10⁻³ (strict: 7,119): **+61% by three
-looks, against +28% strict.** At the published cut, 10: 6,749 to 11,002.
+looks, against +28% strict** (28.1% to 45.2% of this planted set, half
+of it curved by 10⁻⁴ or more: a gain in recovering these signals, not in
+the telescope's sensitivity). No planted signal was a false association
+(matched by what the unplanted block already held) in any configuration,
+at either cut, by either test: every denominator is the 14,520. At the published cut, 10: 6,749 to 11,002.
 How many of the three ON looks the recovering event holds by a formal hit
 (1 / 2 / 3), at the matched cut: production 447 / 966 / 2,665; with the
 pass at 10⁻³ 304 / 2,532 / 3,721. At 3×10⁻⁴ and 10⁻³ every signal the pass

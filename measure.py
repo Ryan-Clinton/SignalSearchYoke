@@ -61,7 +61,9 @@ def plant(raw, tones, tsamp, foff, substeps=SUBSTEPS):
     h) or (x0, drift, h, accel Hz/s^2), x0 the fractional channel at the
     look's start, h the power added to each spectrum, spread over the
     channels crossed with sinc^2 leakage. With accel the track curves:
-    frequency f0 + drift t + accel t^2 / 2 from the look's start."""
+    frequency f0 + drift t + accel t^2 / 2 from the look's start; accel may
+    instead be a function of t (s, an array) giving the offset in Hz from
+    f0, for any path."""
     out = raw.copy()
     n_t, n_f = out.shape
     per_channel = foff * 1e6                          # Hz a channel, negative when the band runs downward
@@ -71,7 +73,10 @@ def plant(raw, tones, tsamp, foff, substeps=SUBSTEPS):
         accel = tone[3] if len(tone) > 3 else 0.0
         for t in range(n_t):
             tau = (t + (np.arange(substeps) + 0.5) / substeps) * tsamp
-            x = x0 + (drift * tau + 0.5 * accel * tau ** 2) / per_channel
+            if callable(accel):          # any path: its offset in Hz from the look's start (drift unused)
+                x = x0 + accel(tau) / per_channel
+            else:
+                x = x0 + (drift * tau + 0.5 * accel * tau ** 2) / per_channel
             base = np.floor(x).astype(int)
             cells = base[:, None] + offsets[None, :]
             weight = np.sinc(cells - x[:, None]) ** 2 * (h / substeps)
