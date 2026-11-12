@@ -222,10 +222,14 @@ the default place.
   0.068 to 0.071 a block. By step 4's three-look standard (`recheck`,
   12 Nov; the strict per-hit test overstated production's curved
   recovery): 4,078 to 6,557 of 14,520 (+61%); at 1e-4 29-44% to 65-78%,
-  at 3e-4 0-2% to 70-82%, at 1e-3 0% to 55-81% (S_in 120, 400). The
-  turboSETI comparison at 1e-4 is open on that standard. Next: step 10 (another session, cuts fixed, the second pass
-  with it), the checks on the pass's candidates, and orbital tracks,
-  before any change to `onoff.py`.
+  at 3e-4 0-2% to 70-82%, at 1e-3 0% to 55-81% (S_in 120, 400). On the
+  same signals and standard turboSETI recovers 613 at cut 30 (level with
+  production at 1e-4 only at S_in 400 and cut 10; ahead of it at 3e-4,
+  S_in 400). Orbital paths (12 Nov, 18,150 signals): production 3,607 to
+  the pass's 9,118 of 16,335 at cut 30, controls holding. Next: the checks
+  on the pass's candidates (`curved_pass.py vet`, running), step 10
+  (another session, cuts fixed, the second pass with it), before any
+  change to `onoff.py`.
 - **Real signals:** Voyager 1's carrier and sidebands found at turboSETI's
   published frequencies and drifts, the drift the Earth's; wide signals
   (its 322 Hz sidebands) are tiled with many hits, a known gap. HIP 91699's

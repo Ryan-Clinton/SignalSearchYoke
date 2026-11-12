@@ -453,8 +453,12 @@ event of a signal split into several, and overstated the loss). At S_in
 from about 10⁻³. By step 4's three-look standard (every ON look on the
 signal's own track, 12 November, below) far fewer are verified at 10⁻⁴,
 and the comparison with turboSETI there (26 of 40 against our 40 raised)
-is not like for like and is left open; at 3×10⁻⁴ turboSETI keeps a few
-more (9 against 4).
+was not like for like. Run again on the same 14,520 signals by the same
+standard (12 November): at 10⁻⁴ turboSETI does not keep what production
+loses (level at S_in 400 and cut 10, 268 and 269 of 605; fewer below that
+and at the matched cut); at 3×10⁻⁴ and S_in 400 it keeps more than
+production (181 against 11 at cut 10), and the second pass 498. In all at
+cut 30: turboSETI 613, production 4,078, the pass 6,557.
 
 **A curved second pass at matched rates, 11 November 2026**
 (`curved_pass.py`, experimental, apart from the search; docs/seti.md,
@@ -470,10 +474,15 @@ or its measured track; 12 November, the same plantings judged again):
 4,078 to 6,557 (+61%); at 10⁻⁴ 29-44% to 65-78% (S_in 120, 400), at
 3×10⁻⁴ 0-2% to 70-82%, at 10⁻³ 0% to 55-81%; the pass's recoveries there
 all held by two or three formal hits. Production's own recovery of curved
-signals was overstated by the strict test. **Before any change to
-`onoff.py`:** the same on step 10's session, the checks on the pass's
-candidates, and orbital (sine) tracks planted. The setigen paths (sine,
-random walk, partial looks) remain.
+signals was overstated by the strict test. **Orbital paths** (12
+November; a_pk cos(ωt − φ) with the Earth's motion, periods 10 hours to
+10 days, 18,150 signals): at cut 30 production 3,607 of 16,335 orbital
+signals, the pass at 10⁻³ 9,118; at 3×10⁻⁴ and S_in 120, 15% to 68%; at
+10⁻³, 4% to 60%; no false associations, and the controls hold (6 Hz only:
+53% at 10⁻³, S_in 120; the mirror path recovers 0.7%, the same signals
+under every configuration). **Before any change to `onoff.py`:** the same
+on step 10's session and the checks on the pass's candidates (running).
+The setigen paths (random walk, partial looks) remain.
 
 ### Step 10: the matched comparison on another session, fixed beforehand
 

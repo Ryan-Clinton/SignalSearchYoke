@@ -1313,8 +1313,9 @@ rule checked from its own hit tables):
 turboSETI's event stage follows a hit into the next ON look within ± the
 drift times twice the look's length and never asks the drifts to agree
 (`find_event.follow_event`). At 10⁻⁴ this search raises more candidates
-(but turboSETI's count asks a hit in each ON look and ours does not, so on
-the three-look standard this is open: see the second pass below); at 3×10⁻⁴
+(but turboSETI's count asks a hit in each ON look and ours does not; on
+the three-look standard, on the same signals, the two are level at S_in
+400 and production keeps more below it: see the orbital section below); at 3×10⁻⁴
 turboSETI keeps a few more (9 to 4 of 40); above 10⁻³ both lose
 everything, in the search.
 
@@ -1471,7 +1472,9 @@ signal's hits (a candidate is raised at the signal; whether its three ON
 looks lie on the signal is not asked there): their 97/100 at 10⁻⁴ is
 candidates raised, not cadences verified along the track, and the
 comparison with turboSETI at 10⁻⁴ (whose count asked its hits in each ON
-look) is not like for like on this standard and is left open. The loss
+look) is not like for like on this standard (settled below, "orbital
+paths": on the same signals turboSETI does not keep what production loses
+at 10⁻⁴). The loss
 does not start at 2-3×10⁻⁵ either way (three looks: 81-84% at 0 to 3×10⁻⁵,
 S_in 60, cut 10).
 
@@ -1580,15 +1583,62 @@ the reference, and the tables say how often the verdict changes.
 - the tolerance is 6 Hz for a straight signal, and 6 Hz plus about
   aT²/12 for a curved one.
 
-The results follow when the runs end. The first orbital run (17 blocks,
-before the controls were added) is kept apart, as is a one-block test of
-the partial checks.
+**Orbital paths, measured** (all 121 blocks, 18,150 signals, 14.5 hours;
+`data/measurements/curved-orbits.json`). Recovered by three looks, each
+cell 1,815 signals (the three periods together; 605 for no orbit); no false
+association in any cell, at either cut, for any configuration:
+
+| a_pk (Hz/s²) | S_in | cut 30: production | + pass 10⁻⁴ | 3×10⁻⁴ | 10⁻³ | cut 10: production | + pass 10⁻³ |
+|---|---|---|---|---|---|---|---|
+| none (the Earth's alone) | 60 / 120 / 400 | 36% / 75% / 90% | the same | the same | the same | 85% / 89% / 90% | the same |
+| 10⁻⁴ | 60 | 19% | 30% | 31% | 31% | 62% | 79% |
+| 10⁻⁴ | 120 | 54% | 70% | 70% | 70% | 69% | 84% |
+| 10⁻⁴ | 400 | 70% | 84% | 84% | 84% | 70% | 84% |
+| 3×10⁻⁴ | 60 | 6% | 8% | 27% | 27% | 21% | 80% |
+| 3×10⁻⁴ | 120 | 15% | 20% | 68% | 68% | 22% | 82% |
+| 3×10⁻⁴ | 400 | 23% | 27% | 81% | 81% | 23% | 81% |
+| 10⁻³ | 60 | 2% | 2% | 5% | 6% | 6% | 72% |
+| 10⁻³ | 120 | 4% | 5% | 13% | 60% | 5% | 77% |
+| 10⁻³ | 400 | 5% | 6% | 14% | 77% | 5% | 77% |
+
+Of the 16,335 orbital signals, at cut 30: production 3,607, the pass 4,571,
+7,108 and 9,118 (a_max 10⁻⁴, 3×10⁻⁴, 10⁻³); at cut 10, 5,145 and 12,978
+at 10⁻³. What this says:
+
+- **The constant-acceleration result carries over to orbits.** An orbit's
+  acceleration over the cadence is a_pk cos φ, up to the peak, so
+  production keeps more of these than of signals held at the peak (15%
+  against 0% at 3×10⁻⁴, S_in 120), and the pass recovers about what it
+  did at a constant acceleration (68% against 69-70%).
+- **The period matters only at 10⁻³ and 10 hours**, where the acceleration
+  changes most within the cadence: the pass recovers 51% at S_in 120
+  against 63-65% for 1 and 10 days. Elsewhere the three periods are within
+  a few points of each other.
+- **The tolerance is not what recovers them.** With 6 Hz only ("tight"),
+  the pass at 10⁻³ keeps 53% at S_in 120 and 69% at 400 (against 60% and
+  77%), and at 10⁻⁴ and 3×10⁻⁴ it loses one or two points. The widened
+  tolerance adds the signals whose path bends by more than 6 Hz from its
+  best straight line in some look, which is what it is for.
+- **The matching is not loose.** Against the mirror path, 114 of the
+  16,335 recover at cut 30 (0.7%), the same 114 under every configuration,
+  most at 10⁻⁴ and none above 2 in a cell at 10⁻³. These are signals whose
+  phase leaves them nearly straight over the cadence, so that their mirror
+  path is nearly the same path.
+- **No orbit:** the Earth's motion alone curves a track here by about
+  5×10⁻⁶ Hz/s², and production and the pass recover the same signals.
+
+The pass's orbital recoveries, by formal hits at cut 30: 466 by one,
+4,978 by two and 3,674 by three; production's 1,120 / 1,340 / 1,147.
+
+The checks' results (`vet`, 6 workers, about 9 hours) follow when that run
+ends. The first orbital run (17 blocks, before the controls were added) is
+kept apart, as is a one-block test of the partial checks.
 
 **turboSETI on the same curved signals, by the same standard.** The first
 comparison (`curved.py turboseti`, 40 signals at each acceleration) counted
 this search's signal kept when any event holding its hits was a candidate,
 and turboSETI's when it had an event and a hit in each ON look. Those are
-two different standards, so its 10⁻⁴ result is left open (above).
+two different standards, so its 10⁻⁴ result was left open (above).
 `curved_pass.py turboseti` runs turboSETI on step 4's 121 blocks with the
 second pass's plantings (seed 61, the same 14,520 signals). Its hit search
 and event stage run as step 4 runs them (`tools/turbo_curves.py`, the true
@@ -1601,3 +1651,36 @@ scores it, against the curved track:
 An event the unplanted block already had is a false association. This
 search's side is the three-look status already recorded for the same
 signals.
+
+**Measured** (all 121 blocks, 14,520 signals, 3.1 hours of turboSETI;
+`data/measurements/curved-turboseti-blocks.json`). No false association for
+turboSETI either, at either cut. Recovered by three looks, of 605 in each
+cell:
+
+| \|a\| (Hz/s²) | S_in | cut 10: turboSETI | production | + pass 10⁻³ | cut 30: turboSETI | production | + pass 10⁻³ |
+|---|---|---|---|---|---|---|---|
+| 0 | 120 | 161 | 534 | 534 | 0 | 454 | 454 |
+| 0 | 400 | 352 | 544 | 544 | 187 | 542 | 542 |
+| 10⁻⁴ | 120 | 73 | 260 | 478 | 0 | 177 | 393 |
+| 10⁻⁴ | 400 | 268 | 269 | 474 | 82 | 267 | 472 |
+| 3×10⁻⁴ | 120 | 12 | 17 | 526 | 0 | 0 | 422 |
+| 3×10⁻⁴ | 400 | 181 | 11 | 498 | 13 | 11 | 498 |
+| 10⁻³ | 120 | 0 | 0 | 465 | 0 | 0 | 331 |
+| 10⁻³ | 400 | 10 | 0 | 490 | 0 | 0 | 489 |
+
+In all: at cut 30, where step 4 matched the two false rates, turboSETI
+613 of 14,520, production 4,078, the pass 6,557; at cut 10 (turboSETI's
+published cut, about 44 on this search's scale, so not a matched
+comparison) 2,054, 6,749 and 11,002. Under S_in 120 turboSETI recovers
+almost nothing at either cut; its S/N is about 0.23 of this search's, as
+step 4 measured.
+
+That settles the comparison left open above. At 10⁻⁴, by the same
+standard on the same signals, turboSETI does not keep what this search
+loses: at S_in 400 and cut 10 the two are level (268 and 269), and below
+that, or at the matched cut, production keeps more. At 3×10⁻⁴ and S_in 400,
+turboSETI keeps more than production (181 against 11 at cut 10), as the
+first comparison found (9 against 4). It searches each look on its own,
+and its event stage follows a hit into the next ON look without asking the
+drifts to agree, so a strong curved signal can still pass where
+production's single track across the looks cannot. The second pass recovers 498 of the same 605, at both cuts.
