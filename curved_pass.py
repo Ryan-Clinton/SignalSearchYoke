@@ -7,6 +7,7 @@ rates (comparable.md step 9).
     python curved_pass.py recheck KIC8462852 [--shard i/n]  add the three-look recovery test to recorded blocks
     python curved_pass.py orbits KIC8462852 [--shard i/n]   orbital signals with the Earth's motion (orbit-tables)
     python curved_pass.py vet KIC8462852 [--shard i/n]      the checks on what the pass adds (vet-tables)
+    python curved_pass.py turboseti KIC8462852 [--shard i/n] turboSETI on the same signals (turboseti-tables)
     python curved_pass.py tables KIC8462852              the rates, the matched cuts and the recovery tables
 
 The production test (onoff.judge) runs first, unchanged. The second pass
@@ -67,6 +68,7 @@ import matched_tables
 import measure
 import occupancy
 import onoff
+import pipelines
 import seti
 import store
 import vetting
@@ -1054,6 +1056,153 @@ def vet_tables(target, say=print):
     return out
 
 
+# --- turboSETI on the same curved signals, by the same three-look standard -----------
+
+# The first comparison (curved.py turboseti, 40 signals an acceleration in
+# the saved cadences) counted this search's signal kept when any event
+# holding its hits was a candidate, and turboSETI's when it had an event and
+# a hit in each ON look: not one standard. Here turboSETI runs on step 4's
+# 121 blocks with the plantings of `run` (seed 61, the same signals), its hit
+# search and event stage as step 4 runs them (tools/turbo_curves.py, the true
+# choice, unplanted and planted), and is scored as step 4 scores it, against
+# the curved track: an event whose every listed ON row lies on the signal's
+# track and its own hit tables holding a hit on the track in each of the
+# three ON looks (step 4's three looks for turboSETI). Its frequency is
+# taken half a spectrum into the look, as step 4 does. This search's side is
+# the three-look status already recorded (status_v2). An event the unplanted
+# block already had is a false association, as for this search.
+TURBO_CUTS = (10, 30)
+
+
+def _turbo_expected(cad, t, j):
+    fe, de, tol = expected(cad, t, j)
+    return fe + de * cad[j]["s"]["tsamp"] / 2 / 1e6, de, tol
+
+
+def _turbo_status(cad, t, planted, plain, cut):
+    """turboSETI's three looks for one signal at one cut."""
+    def on_track(j, f, d):
+        fe, de, tol = _turbo_expected(cad, t, j)
+        return abs((f - fe) * 1e6) <= tol and abs(d - de) <= matched.TOL_DRIFT
+
+    def got(rec):
+        rows = next(e["rows"] for e in rec["events"] if tuple(e["as_on"]) == TRUE and float(e["cut"]) == float(cut))
+        events = matched._turbo_kept(rows)
+        return any(len(ev["members"]) >= 1 and all(on_track(m[0], m[2], m[3]) for m in ev["members"]) for ev in events)
+    hits = sum(any(on_track(j, h["freq_mhz"], h["drift_hz_s"]) for h in planted["look_hits"][j] if h["snr"] > cut)
+               for j in TRUE)
+    if not got(planted):
+        return {"three_looks": "missed", "on_hits": hits}
+    if got(plain):
+        return {"three_looks": "false association", "on_hits": hits}
+    return {"three_looks": "recovered" if hits == len(TRUE) else "missed", "on_hits": hits, "event": True}
+
+
+def _turbo_block(k, rec, slices, urls, work):
+    cad = matched._cadence(slices, urls)
+    assert [c["s"]["tstart"] for c in cad] == rec["tstarts"], "not the recorded block"
+    rng = np.random.default_rng([SEED, k])
+    ts = tones(cad, rng)
+    assert len(ts) == len(rec["tones"]) and all(abs(t["x0"] - r["x0"]) < 1e-9 and t["accel"] == r["accel"]
+                                                for t, r in zip(ts, rec["tones"])), "not the recorded signals"
+    started = time.monotonic()
+    cuts = ",".join(str(c) for c in TURBO_CUTS)
+    plain_paths = [seti.save(c["s"], work / "plain" / f"{j}.h5") for j, c in enumerate(cad)]
+    pipelines._tool("turbo_curves.py", work / "turbo_plain.json", cuts, "true", *plain_paths)
+    planted_raw = plant(cad, ts)
+    planted_paths = [seti.save(dict(c["s"], spectra=p), work / "planted" / f"{j}.h5")
+                     for j, (c, p) in enumerate(zip(cad, planted_raw))]
+    pipelines._tool("turbo_curves.py", work / "turbo_planted.json", cuts, "true", *planted_paths)
+    plain = json.loads((work / "turbo_plain.json").read_text(encoding="utf-8"))
+    planted = json.loads((work / "turbo_planted.json").read_text(encoding="utf-8"))
+    rows = []
+    for t, r in zip(ts, rec["tones"]):
+        row = {k2: r[k2] for k2 in ("x0", "drift", "accel", "s_in", "bin")}
+        row["turboseti"] = {matched.ck(c): _turbo_status(cad, t, planted, plain, c) for c in TURBO_CUTS}
+        row["ours"] = {matched.ck(c): {cfg: r["status_v2"][matched.ck(c)][cfg]["three_looks"] for cfg in CONFIGS}
+                       for c in TURBO_CUTS}
+        rows.append(row)
+    return {"format": 1, "block": k, "tstarts": rec["tstarts"], "tones": rows,
+            "times": {"turbo_s": round(time.monotonic() - started, 1), "turbo_search_s": planted.get("search_s")},
+            "finished_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+
+
+def turbo_folder(target, session):
+    return ROOT / f"turbo-{target}-{session}"
+
+
+def turbo_run(target, say=print, shard=(0, 1), count=None):
+    db = store.connect()
+    session, urls = store.cadence_files(db, target)
+    db.close()
+    src = folder(target, session)
+    base = turbo_folder(target, session)
+    base.mkdir(parents=True, exist_ok=True)
+    paths = sorted(src.glob("block_*.json"))
+    todo = [p for i, p in enumerate(paths) if i % shard[1] == shard[0] and not (base / p.name).exists()]
+    todo = todo if count is None else todo[:count]
+    say(f"{target} {session}: {len(todo)} blocks of this share to run", flush=True)
+    block_list = seti.blocks(seti.reading.prepare(urls[:1])[0])
+    work = ROOT / f"work_turbo_{shard[0]}"
+
+    def fetch(p):
+        rec = json.loads(p.read_text(encoding="utf-8"))
+        return rec, seti.read_looks(urls, *block_list[rec["block"]])
+
+    with ThreadPoolExecutor(max_workers=1) as ahead:
+        coming = ahead.submit(fetch, todo[0]) if todo else None
+        for i, p in enumerate(todo):
+            rec, slices = coming.result()
+            coming = ahead.submit(fetch, todo[i + 1]) if i + 1 < len(todo) else None
+            out = _turbo_block(rec["block"], rec, slices, urls, work)
+            del slices
+            (base / p.name).write_text(json.dumps(out), encoding="utf-8")
+            t30 = out["tones"]
+            say(f"  block {out['block']}: three looks at cut 30, turboSETI "
+                f"{sum(t['turboseti']['30']['three_looks'] == 'recovered' for t in t30)}, production "
+                f"{sum(t['ours']['30']['production'] == 'recovered' for t in t30)}, pass 1e-3 "
+                f"{sum(t['ours']['30']['pass_0.001'] == 'recovered' for t in t30)} of {len(t30)}; "
+                f"{out['times']['turbo_s']} s", flush=True)
+    shutil.rmtree(work, ignore_errors=True)
+
+
+def turbo_tables(target, say=print):
+    db = store.connect()
+    session, _ = store.cadence_files(db, target)
+    db.close()
+    recs = [json.loads(p.read_text(encoding="utf-8")) for p in sorted(turbo_folder(target, session).glob("block_*.json"))]
+    tones_all = [t for r in recs for t in r["tones"]]
+    out = {}
+    for c in map(matched.ck, TURBO_CUTS):
+        rows = []
+        for acc in ACCELS:
+            for s_in in STRENGTHS:
+                cell = [t for t in tones_all if abs(abs(t["accel"]) - acc) < 1e-12 and t["s_in"] == s_in]
+                row = {"accel": acc, "s_in": s_in, "planted": len(cell)}
+                for name, get in [("turboseti", lambda t: t["turboseti"][c]["three_looks"])] + [
+                        (cfg, lambda t, cfg=cfg: t["ours"][c][cfg]) for cfg in CONFIGS]:
+                    st = [get(t) for t in cell]
+                    n = sum(x != "false association" for x in st)
+                    k = sum(x == "recovered" for x in st)
+                    row[name] = {"recovered": k, "counted": n, "share": round(k / n, 3) if n else None,
+                                 "interval": measure.wilson(k, n) if n else None}
+                row["turboseti_event_any"] = sum(bool(t["turboseti"][c].get("event")) for t in cell)
+                rows.append(row)
+        out[f"cut_{c}"] = rows
+    hours = round(sum(r["times"]["turbo_s"] for r in recs) / 3600, 2)
+    yoke.write(yoke.DATA / "measurements" / "curved-turboseti-blocks.json",
+               {"target": target, "session": session, "blocks": len(recs), "hours": hours, "recovery": out,
+                "kind": "measured", "experimental": True}, stamp=True)
+    say(f"{len(recs)} blocks, {len(tones_all)} signals, {hours} h of turboSETI")
+    for c in map(matched.ck, TURBO_CUTS):
+        say("")
+        say(f"cut {c}, three looks: |a|, S_in: turboSETI / production / pass 1e-3 (of counted)")
+        for row in out[f"cut_{c}"]:
+            say(f"  {row['accel']:<7g} {row['s_in']:>4}  {row['turboseti']['recovered']:>4} / "
+                f"{row['production']['recovered']:>4} / {row['pass_0.001']['recovered']:>4}  of {row['production']['counted']}")
+    return out
+
+
 # --- self-checks ---------------------------------------------------------------------
 
 def selftest(say=print):
@@ -1247,6 +1396,12 @@ def main(argv=None):
     v.add_argument("--blocks", type=int)
     vt = sub.add_parser("vet-tables")
     vt.add_argument("target")
+    tb = sub.add_parser("turboseti", help="turboSETI on the same blocks and signals, by three looks")
+    tb.add_argument("target")
+    tb.add_argument("--shard", default="0/1")
+    tb.add_argument("--blocks", type=int)
+    tt = sub.add_parser("turboseti-tables")
+    tt.add_argument("target")
     sub.add_parser("selftest", help="the orbital paths, the planting and the candidate adapter checked")
     ot = sub.add_parser("orbit-tables")
     ot.add_argument("target")
@@ -1261,6 +1416,10 @@ def main(argv=None):
         vet_run(a.target, shard=tuple(int(x) for x in a.shard.split("/")), count=a.blocks)
     elif a.cmd == "vet-tables":
         vet_tables(a.target)
+    elif a.cmd == "turboseti":
+        turbo_run(a.target, shard=tuple(int(x) for x in a.shard.split("/")), count=a.blocks)
+    elif a.cmd == "turboseti-tables":
+        turbo_tables(a.target)
     elif a.cmd == "selftest":
         selftest()
     elif a.cmd == "orbit-tables":

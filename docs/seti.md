@@ -1583,3 +1583,21 @@ the reference, and the tables say how often the verdict changes.
 The results follow when the runs end. The first orbital run (17 blocks,
 before the controls were added) is kept apart, as is a one-block test of
 the partial checks.
+
+**turboSETI on the same curved signals, by the same standard.** The first
+comparison (`curved.py turboseti`, 40 signals at each acceleration) counted
+this search's signal kept when any event holding its hits was a candidate,
+and turboSETI's when it had an event and a hit in each ON look. Those are
+two different standards, so its 10⁻⁴ result is left open (above).
+`curved_pass.py turboseti` runs turboSETI on step 4's 121 blocks with the
+second pass's plantings (seed 61, the same 14,520 signals). Its hit search
+and event stage run as step 4 runs them (`tools/turbo_curves.py`, the true
+choice, unplanted and planted, cuts 10 and 30), and it is scored as step 4
+scores it, against the curved track:
+- an event whose every listed ON row lies on the track;
+- its own hit tables holding a hit on the track in each of the three ON
+  looks, its frequency taken half a spectrum in.
+
+An event the unplanted block already had is a false association. This
+search's side is the three-look status already recorded for the same
+signals.
