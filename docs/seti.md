@@ -1630,9 +1630,50 @@ at 10⁻³. What this says:
 The pass's orbital recoveries, by formal hits at cut 30: 466 by one,
 4,978 by two and 3,674 by three; production's 1,120 / 1,340 / 1,147.
 
-The checks' results (`vet`, 6 workers, about 9 hours) follow when that run
-ends. The first orbital run (17 blocks, before the controls were added) is
-kept apart, as is a one-block test of the partial checks.
+**The checks on what the pass adds, measured** (all 121 blocks, 61.8 hours
+of worker time, 6 workers; `data/measurements/curved-pass-vetting.json`).
+Wrong-choice candidates are distinct signals by shared member hits;
+"left" is what the checks leave unexplained. Planted signals are those
+recovered by three looks, and "left" is how many of them survive the checks
+(a real signal should):
+
+| cut, checks | wrong choices kept / left: production | pass 10⁻³ | planted recovered / left: production | pass 10⁻⁴ | 3×10⁻⁴ | 10⁻³ |
+|---|---|---|---|---|---|---|
+| 30, uniform | 21 / 3 | 22 / 3 | 4,078 / 1,779 | 4,662 / 2,005 | 5,723 / 2,435 | 6,555 / 2,792 |
+| 30, measured | 21 / 0 | 22 / 0 | 4,078 / 1,758 | 4,662 / 1,978 | 5,723 / 2,395 | 6,555 / 2,754 |
+| 30, store | 21 / 0 | 22 / 0 | 4,078 / 1,737 | 4,662 / 1,967 | 5,723 / 2,381 | 6,555 / 2,745 |
+| 10, uniform | 991 / 24 | 994 / 24 | 6,749 / 2,997 | 7,646 / 3,367 | 9,469 / 4,135 | 10,998 / 4,825 |
+| 10, measured | 991 / 6 | 994 / 6 | 6,749 / 2,930 | 7,646 / 3,282 | 9,469 / 4,024 | 10,998 / 4,702 |
+| 10, store | 991 / 3 | 994 / 3 | 6,749 / 2,841 | 7,646 / 3,190 | 9,469 / 3,914 | 10,998 / 4,573 |
+
+(The pass at 10⁻⁴ and 3×10⁻⁴ keeps 992 wrong choices at cut 10 and 21 at
+cut 30, with the same number left.) What this says:
+
+- **The pass adds no unexplained false candidate.** Across the 121 blocks
+  it keeps 3 more wrong-choice signals than production at cut 10 and 1
+  more at cut 30, and every one is explained by the checks, partial or
+  full: the number left is production's in every row.
+- **The checks cost the pass's curved signals what they cost straight
+  ones.** With the full checks at cut 30, 42.6% of production's recovered
+  signals survive and 41.9% of the pass's at 10⁻³. Cell by cell: no
+  curvature, S_in 400, 236 of 542 (44%); 10⁻³, S_in 400, 211 of 489 (43%)
+  and S_in 120, 143 of 331 (43%); 3×10⁻⁴, S_in 120, 173 of 422 (41%).
+  Check 6 extrapolating a curved signal in a line (above) does not show
+  as a loss.
+- **That share is the checks' own cost, not the pass's.** More than half
+  of the planted signals that a search recovers are explained away by the
+  checks, straight or curved, the same share for every configuration. It
+  belongs in the sensitivity of the whole search (search and checks
+  together). Which checks remove them is not yet broken down; that, and
+  whether the share differs on a quieter session, is left open.
+- **The reference look matters for 7.7%.** Of 14,732 pass candidates
+  checked with each member look as the reference, 1,131 change between
+  explained and unexplained. The tables use the strongest member, as for
+  production's.
+
+The first orbital run (17 blocks, before the controls were added) is kept
+apart, as is a one-block test of the partial checks and the first checks
+run's format-1 records.
 
 **turboSETI on the same curved signals, by the same standard.** The first
 comparison (`curved.py turboseti`, 40 signals at each acceleration) counted

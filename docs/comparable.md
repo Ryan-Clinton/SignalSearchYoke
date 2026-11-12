@@ -481,7 +481,10 @@ signals, the pass at 10⁻³ 9,118; at 3×10⁻⁴ and S_in 120, 15% to 68%; at
 10⁻³, 4% to 60%; no false associations, and the controls hold (6 Hz only:
 53% at 10⁻³, S_in 120; the mirror path recovers 0.7%, the same signals
 under every configuration). **Before any change to `onoff.py`:** the same
-on step 10's session and the checks on the pass's candidates (running).
+on step 10's session (sweeping). The checks on the pass's candidates are
+measured: no unexplained false candidate added, and the checks keep the
+same share of its curved recoveries as of production's (42% against 43%,
+full checks, cut 30; docs/seti.md).
 The setigen paths (random walk, partial looks) remain.
 
 ### Step 10: the matched comparison on another session, fixed beforehand

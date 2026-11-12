@@ -227,8 +227,10 @@ the default place.
   same signals and standard turboSETI recovers 613 at cut 30 (level with
   production at 1e-4 only at S_in 400 and cut 10; ahead of it at 3e-4,
   S_in 400). Orbital paths (12 Nov, 18,150 signals): production 3,607 to
-  the pass's 9,118 of 16,335 at cut 30, controls holding. Next: the checks
-  on the pass's candidates (`curved_pass.py vet`, running), step 10
+  the pass's 9,118 of 16,335 at cut 30, controls holding. The checks on
+  the pass's candidates (12 Nov, 121 blocks): it adds no unexplained false
+  candidate, and the checks keep 42% of its recovered signals against 43%
+  of production's. Next: step 10 (sweeping)
   (frozen in `config/step10.json`: HIP17147 AGBT16A_999_192, L band, 2016;
   `independent.py`), before any change to `onoff.py`.
 - **Real signals:** Voyager 1's carrier and sidebands found at turboSETI's
