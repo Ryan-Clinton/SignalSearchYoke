@@ -21,7 +21,9 @@ Stages, each resumable:
     python independent.py choose                the block rule, on the swept blocks' hit counts
     python independent.py measure [--shard i/n] matched.py's measurement on the chosen blocks
     python independent.py curved [--shard i/n]  the curved second pass on the same blocks
-    python independent.py verdict               the criteria, the page and the record
+    python independent.py verdict [--progress]  the criteria, the page and the record: refused unless
+                                                every chosen block's records are whole (--progress: how
+                                                far the runs are, and no verdict)
 
     python independent.py freeze                write the code fingerprints into the config (before the
                                                 first stage only; then commit it)
@@ -51,10 +53,16 @@ import yoke
 CONFIG = yoke.ROOT / "config" / "step10.json"
 ROOT = yoke.DATA / "step10"
 
-# The code the measurement rests on. Whole files where all of the file is the
-# measurement; the functions used where the file also holds other work.
-FILES = ("searching.py", "onoff.py", "reading.py", "store.py", "injection.py", "measure.py", "matched.py",
-         "matched_tables.py", "pipelines.py", "instrument.py", "tools/turbo_curves.py", "tools/pickles_choices.py")
+# The code the measurement and the verdict rest on. Whole files: this one,
+# and every project module the measurement imports (the import closure of
+# matched, curved_pass, seti and this file), and the tools it runs. seti.py
+# and curved_pass.py also hold other work, so from them the functions below
+# and everything they reach in their own module (functions, classes and
+# constants, followed through every name their code uses) are fingerprinted.
+FILES = ("independent.py", "searching.py", "onoff.py", "reading.py", "store.py", "injection.py", "measure.py",
+         "matched.py", "matched_tables.py", "pipelines.py", "instrument.py", "vetting.py", "occupancy.py",
+         "check.py", "ranking.py", "report.py", "curved.py", "yoke.py",
+         "tools/turbo_curves.py", "tools/pickles_choices.py")
 FUNCTIONS = {
     "seti": ("find", "folder", "_session", "_scan", "query", "_bare", "channels", "blank_dc", "read_looks",
              "read_slice", "search", "at_cut", "describe", "look", "cadence", "blocks", "search_params",
@@ -62,13 +70,8 @@ FUNCTIONS = {
     "curved_pass": ("key", "second_pass", "_kept_pass", "judge_all", "tones", "plant", "expected", "_matches",
                     "status", "statuses", "block", "run", "tables"),
 }
-CONSTANTS = {
-    "seti": ("SNR_MIN", "MAX_DRIFT", "BLOCK", "WINDOW_CHANNELS", "EDGE_FRACTION", "CADENCE_DAYS", "SEARCH_VERSION"),
-    "curved_pass": ("A_MAX", "ACCELS", "STRENGTHS", "CUTS", "SEED", "FORMAT", "WAYS"),
-    "matched": ("CUTS_OURS", "CUTS_TURBO", "STRENGTHS", "TONES", "TOL_HZ", "TOL_DRIFT", "CROWDED_HITS", "SEED",
-                "FORMAT"),
-}
-MODULES = {"seti": seti, "curved_pass": curved_pass, "matched": matched}
+MODULES = {"seti": seti, "curved_pass": curved_pass}
+PLAIN = (str, int, float, bool, type(None), tuple, list, dict, frozenset, set)
 
 
 def _sha(text):
@@ -84,18 +87,57 @@ def _stable(v):
     return repr(v)
 
 
+def _names(code):
+    """Every name a code object and the code nested in it use."""
+    out = set(code.co_names)
+    for c in code.co_consts:
+        if inspect.iscode(c):
+            out |= _names(c)
+    return out
+
+
+def _codes(obj):
+    if inspect.isfunction(obj):
+        return [obj.__code__]
+    if inspect.isclass(obj):
+        return [v.__code__ for v in vars(obj).values() if inspect.isfunction(v)]
+    return []
+
+
+def reachable(module, entries):
+    """{name: text}: the entry functions and every function, class and plain
+    constant of the same module their code reaches, followed through."""
+    out, todo = {}, list(entries)
+    while todo:
+        n = todo.pop()
+        if n in out or n.startswith("__") or not hasattr(module, n):
+            continue
+        v = getattr(module, n)
+        if inspect.ismodule(v):
+            continue
+        if inspect.isfunction(v) or inspect.isclass(v):
+            if v.__module__ != module.__name__:
+                continue    # from another module: those are fingerprinted whole
+            out[n] = inspect.getsource(v).replace("\r\n", "\n")
+            for c in _codes(v):
+                todo += sorted(_names(c))
+        elif isinstance(v, PLAIN):
+            out[n] = _stable(v)
+            for x in (v if isinstance(v, (tuple, list)) else ()):
+                if inspect.isfunction(x):     # a table of functions (curved_pass.WAYS)
+                    todo += sorted(_names(x.__code__))
+    return out
+
+
 def fingerprint():
-    """{item: sha256} of the code the measurement rests on."""
+    """{item: sha256} of the code the measurement and the verdict rest on."""
     out = {}
     for f in FILES:
         # line endings normalised, so a checkout on another system gives the same print
         out[f] = _sha((yoke.ROOT / f).read_bytes().replace(b"\r\n", b"\n"))
     for mod, names in FUNCTIONS.items():
-        for n in names:
-            out[f"{mod}.{n}"] = _sha(inspect.getsource(getattr(MODULES[mod], n)).replace("\r\n", "\n"))
-    for mod, names in CONSTANTS.items():
-        for n in names:
-            out[f"{mod}.{n}"] = _sha(_stable(getattr(MODULES[mod], n)))
+        for n, text in reachable(MODULES[mod], names).items():
+            out[f"{mod}.{n}"] = _sha(text)
     return out
 
 
@@ -251,74 +293,193 @@ def _share(k, n):
             "interval": measure.wilson(k, n) if n else None}
 
 
-def verdict(cfg, deviation=None, say=print):
+def _session_tstarts(db, session):
+    return [r[0] for r in db.execute("SELECT tstart_mjd FROM files WHERE session=? AND cadence_position IS NOT NULL"
+                                     " ORDER BY cadence_position", (session,))]
+
+
+def _records(base):
+    """Every block record in a folder, by block, unreadable ones as None."""
+    out = {}
+    for p in sorted(base.glob("block_*.json")):
+        try:
+            r = json.loads(p.read_text(encoding="utf-8"))
+            out[int(r["block"])] = r
+        except (ValueError, KeyError):
+            out[p.stem] = None
+    return out
+
+
+def completeness(cfg, choice, recs, crecs, tstarts):
+    """What stops a verdict: each chosen block needs a whole record of each
+    run, of this session's looks, with the frozen number of signals and every
+    field the criteria read; no other block may be there."""
+    exp = cfg["expected"]
+    cut = matched.ck(cfg["criteria"]["cut"])
+    pass_key = curved_pass.key(cfg["criteria"]["curved_pass"]["a_max"])
+    chosen = {int(b): c for b, c in choice["chosen"].items()}
+    problems = []
+    if len(chosen) != exp["blocks"]:
+        problems.append(f"{len(chosen)} blocks chosen, {exp['blocks']} expected")
+
+    def same_looks(r):
+        return len(r.get("tstarts", [])) == 6 and all(abs(a - b) < 1e-6 for a, b in zip(r["tstarts"], tstarts))
+
+    for name, got, fmt, n_tones in (("measure", recs, matched.FORMAT, exp["tones_per_block"]),
+                                    ("curved", crecs, curved_pass.FORMAT, exp["curved_tones_per_block"])):
+        bad = []
+        for b in sorted(set(chosen) - set(got)):
+            bad.append(f"block {b} missing")
+        for b in sorted(set(got) - set(chosen), key=str):
+            bad.append(f"block {b} not chosen")
+        for b in sorted(set(got) & set(chosen)):
+            r = got[b]
+            why = None
+            if r is None:
+                why = "unreadable"
+            elif r.get("format") != fmt:
+                why = f"format {r.get('format')}"
+            elif r.get("class") != chosen[b]:
+                why = f"class {r.get('class')}"
+            elif not same_looks(r):
+                why = "not this session's looks"
+            elif len(r.get("tones", [])) != n_tones:
+                why = f"{len(r.get('tones', []))} signals"
+            elif name == "measure":
+                if not matched_tables._has_tracks(r):
+                    why = "no measured ON tracks"
+                elif any(cut not in r[p]["false"] for p in ("ours", "turboseti")):
+                    why = "no false candidates at the cut"
+                elif any("three_looks" not in t[p].get(cut, {}) for t in r["tones"] for p in ("ours", "turboseti")) \
+                        or any(cut not in t.get("turboseti_on_hits", {}) for t in r["tones"]):
+                    why = "recovery fields missing"
+            else:
+                if any(k not in r["false"].get(cut, {}) for k in ("production", pass_key)):
+                    why = "no false candidates at the cut"
+                elif any("three_looks" not in t.get("status_v2", {}).get(cut, {}).get(k, {})
+                         for t in r["tones"] for k in ("production", pass_key)):
+                    why = "recovery fields missing"
+            if why:
+                bad.append(f"block {b} {why}")
+        problems += [f"{name}: {x}" for x in bad]
+    return problems
+
+
+def _paired(by_block, seed=2, boot=4000):
+    """Paired recovery of the same signals by a and b: {(got_a, got_b)} per
+    block. The difference in share, with a bootstrap over blocks (signals in
+    one block share its noise and interference)."""
+    blocks = [np.array(v, dtype=bool).reshape(-1, 2) for v in by_block if len(v)]
+    allv = np.concatenate(blocks) if blocks else np.zeros((0, 2), bool)
+    a, b = allv[:, 0], allv[:, 1]
+    d = np.array([x[:, 0].sum() - x[:, 1].sum() for x in blocks], float)
+    n = np.array([len(x) for x in blocks], float)
+    rng = np.random.default_rng(seed)
+    idx = [rng.integers(0, len(blocks), len(blocks)) for _ in range(boot)]
+    diffs = [d[i].sum() / n[i].sum() for i in idx]
+    lo, hi = np.percentile(diffs, [2.5, 97.5])
+    return {"signals": int(len(allv)), "both": int((a & b).sum()), "first_only": int((a & ~b).sum()),
+            "second_only": int((~a & b).sum()), "neither": int((~a & ~b).sum()),
+            "difference": round(float(d.sum() / n.sum()), 4), "interval": (round(float(lo), 4), round(float(hi), 4)),
+            "how": f"block bootstrap, {boot} draws, seed {seed}"}
+
+
+def verdict(cfg, deviation=None, progress=False, say=print):
+    """The frozen criteria, only when every chosen block is whole (fail
+    closed). With progress: how far the runs are, and no verdict."""
     info = frozen(cfg, deviation, "verdict")
     crit = cfg["criteria"]
     cut, limit = crit["cut"], crit["rate"]
     target = cfg["target"]
     db = store.connect()
-    session = _files(cfg, db)[0]
+    kept = _files(cfg, db)
+    if not kept:
+        db.close()
+        raise yoke.Refusal("NOT_FOUND", "The session is not swept yet.")
+    session = kept[0]
+    tstarts = _session_tstarts(db, session)
     sessions = [r[0] for r in db.execute("SELECT DISTINCT session FROM files ORDER BY session")]
     db.close()
     choice = _choice()
-    _, meta, recs = matched_tables.load(target)
-    if {int(b) for b in meta["chosen"]} != {int(b) for b in choice["chosen"]}:
+    meta = json.loads((matched.folder(target, session) / "blocks.json").read_text(encoding="utf-8"))
+    if {int(b): c for b, c in meta["chosen"].items()} != {int(b): c for b, c in choice["chosen"].items()} \
+            or meta["of"] != choice["of"]:
         raise yoke.Refusal("INVALID_REQUEST", "matched.py's blocks are not the chosen ones.")
-    missing = sorted(set(map(int, choice["chosen"])) - {r["block"] for r in recs})
+    got = _records(matched.folder(target, session))
+    cgot = _records(curved_pass.folder(target, session))
+    problems = completeness(cfg, choice, got, cgot, tstarts)
+    if progress or problems:
+        state = {"utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "verdict": None,
+                 "chosen": len(choice["chosen"]), "problems": problems,
+                 "measure_done": sum(1 for b in choice["chosen"] if got.get(int(b))),
+                 "curved_done": sum(1 for b in choice["chosen"] if cgot.get(int(b)))}
+        ROOT.mkdir(parents=True, exist_ok=True)
+        (ROOT / "progress.json").write_text(json.dumps(state, indent=1), encoding="utf-8")
+        say(f"incomplete: no verdict. measure {state['measure_done']} and curved {state['curved_done']} of "
+            f"{state['chosen']} blocks; {len(problems)} problem(s)")
+        for p in problems[:20]:
+            say(f"  {p}")
+        if problems and not progress:
+            raise yoke.Refusal("INVALID_REQUEST", "Step 10 is not complete: no verdict (see data/step10/progress.json).")
+        return state
+    recs = [got[b] for b in sorted(got)]
+    crecs = [cgot[b] for b in sorted(cgot)]
     rng = np.random.default_rng(1)
     total = meta["of"]["clean"] + meta["of"]["crowded"]
     weights = {c: meta["of"][c] / total for c in ("clean", "crowded")}
     c = matched.ck(cut)
-    rates = {p: matched_tables._rate(recs, lambda r, p=p: matched_tables.distinct(r, r[p]["false"].get(c, {}),
-                                                                                    "shared hits"), weights, rng)
+    rates = {p: matched_tables._rate(recs, lambda r, p=p: matched_tables.distinct(r, r[p]["false"][c], "shared hits"),
+                                     weights, rng)
              for p in ("ours", "turboseti")}
-    tones = [t for r in recs if matched_tables._has_tracks(r) for t in r["tones"]]
+    tones = [t for r in recs for t in r["tones"]]
     rec_ = {p: _share(sum(matched_tables._got(t, p, cut, "three_looks") for t in tones), len(tones))
             for p in ("ours", "turboseti")}
+    fa = {p: sum(matched_tables._false_assoc(t, p, cut, "three_looks") for t in tones) for p in ("ours", "turboseti")}
+    paired = _paired([[(matched_tables._got(t, "ours", cut, "three_looks"),
+                        matched_tables._got(t, "turboseti", cut, "three_looks")) for t in r["tones"]] for r in recs])
     out = {"target": target, "session": session, "config_sha256": load()[1], "config_commit": info["config_commit"],
-           "deviations": info["problems"], "store_sessions": sessions, "blocks": len(recs),
-           "missing_blocks": missing, "classes": {k: sum(r["class"] == k for r in recs) for k in ("clean", "crowded")},
+           "git_commit": _git("rev-parse", "HEAD"), "code_fingerprints": len(cfg["code"]),
+           "deviations": info["problems"], "store_sessions": sessions, "blocks": len(recs), "complete": True,
+           "classes": {k: sum(r["class"] == k for r in recs) for k in ("clean", "crowded")},
            "of": meta["of"], "weights": weights, "cut": cut, "rate_limit": limit,
-           "false_rate": rates, "recovery_three_looks": rec_,
+           "false_rate": rates, "recovery_three_looks": rec_, "false_associations": fa,
            "criteria": {
                "this search's false rate": _rate_verdict(rates["ours"], limit),
                "turboSETI's false rate": _rate_verdict(rates["turboseti"], limit),
-               "this search's recovery above turboSETI's": _apart(rec_["ours"], rec_["turboseti"])}}
-    # Step 4, for the page: the same numbers there.
+               "this search's recovery above turboSETI's": _apart(rec_["ours"], rec_["turboseti"])},
+           "supplementary": {"paired_ours_turboseti": paired}}
     out["step4"] = cfg.get("step4")
-    # The curved second pass on the same blocks, if its run is done.
-    cbase = curved_pass.folder(target, session)
-    crecs = [json.loads(p.read_text(encoding="utf-8")) for p in sorted(cbase.glob("block_*.json"))]
-    crecs = [r for r in crecs if r.get("format") == curved_pass.FORMAT]
-    if crecs:
-        cp = crit["curved_pass"]
-        cfg_key = curved_pass.key(cp["a_max"])
-        cmissing = sorted(set(map(int, choice["chosen"])) - {r["block"] for r in crecs})
-        crates = {k: matched_tables._rate(crecs, lambda r, k=k: len(matched.shared_hits(r["false"][c][k])), weights,
-                                          rng) for k in ("production", cfg_key)}
-        ct = [t for r in crecs for t in r["tones"]]
-        curved_ = [t for t in ct if abs(t["accel"]) >= cp["curved_from"] - 1e-12]
+    cp = crit["curved_pass"]
+    cfg_key = curved_pass.key(cp["a_max"])
+    crates = {k: matched_tables._rate(crecs, lambda r, k=k: len(matched.shared_hits(r["false"][c][k])), weights, rng)
+              for k in ("production", cfg_key)}
+    ct = [t for r in crecs for t in r["tones"]]
 
-        def got(t, k):
-            return t["status_v2"][c][k]["three_looks"] == "recovered"
-        crec = {k: _share(sum(got(t, k) for t in curved_), len(curved_)) for k in ("production", cfg_key)}
-        lost = sum(got(t, "production") and not got(t, cfg_key) for t in ct)
-        out["curved_pass"] = {
-            "a_max": cp["a_max"], "blocks": len(crecs), "missing_blocks": cmissing, "false_rate": crates,
-            "recovery_three_looks_curved": crec, "curved_from": cp["curved_from"],
-            "production_recoveries_lost": lost, "signals": len(ct),
-            "false_associations": {k: sum(t["status_v2"][c][k]["three_looks"] == "false association" for t in ct)
-                                   for k in ("production", cfg_key)}}
-        out["criteria"].update({
-            "the pass's false rate": _rate_verdict(crates[cfg_key], limit),
-            "the pass's curved recovery above production's": _apart(crec[cfg_key], crec["production"]),
-            "the pass loses none of production's recoveries": "holds" if lost == 0 else f"fails ({lost})"})
+    def is_curved(t):
+        return abs(t["accel"]) >= cp["curved_from"] - 1e-12
+
+    def cgot_(t, k):
+        return t["status_v2"][c][k]["three_looks"] == "recovered"
+    curved_ = [t for t in ct if is_curved(t)]
+    crec = {k: _share(sum(cgot_(t, k) for t in curved_), len(curved_)) for k in ("production", cfg_key)}
+    lost = sum(cgot_(t, "production") and not cgot_(t, cfg_key) for t in ct)
+    out["curved_pass"] = {
+        "a_max": cp["a_max"], "blocks": len(crecs), "false_rate": crates,
+        "recovery_three_looks_curved": crec, "curved_from": cp["curved_from"],
+        "production_recoveries_lost": lost, "signals": len(ct),
+        "false_associations": {k: sum(t["status_v2"][c][k]["three_looks"] == "false association" for t in ct)
+                               for k in ("production", cfg_key)}}
+    out["supplementary"]["paired_pass_production_curved"] = _paired(
+        [[(cgot_(t, cfg_key), cgot_(t, "production")) for t in r["tones"] if is_curved(t)] for r in crecs])
+    out["criteria"].update({
+        "the pass's false rate": _rate_verdict(crates[cfg_key], limit),
+        "the pass's curved recovery above production's": _apart(crec[cfg_key], crec["production"]),
+        "the pass loses none of production's recoveries": "holds" if lost == 0 else f"fails ({lost})"})
     out["kind"] = "measured"
     yoke.write(yoke.DATA / "measurements" / "step10.json", out, stamp=True)
     # The full tables of the new session, under their own names (step 4's records are left as they are).
     matched_tables.write(target, say=lambda *_: None, name=f"matched-{target}.json")
-    if crecs:
-        curved_pass.tables(target, say=lambda *_: None, name=f"curved-pass-{target}.json")
+    curved_pass.tables(target, say=lambda *_: None, name=f"curved-pass-{target}.json")
     page = yoke.ROOT / "docs" / "results" / f"{target}-{session}-step10.md"
     page.write_text(markdown(out, cfg), encoding="utf-8")
     say(f"{page}")
@@ -341,8 +502,9 @@ def markdown(r, cfg):
         lines += ["**Deviations from the frozen config:** " + "; ".join(r["deviations"])
                   + " (data/step10/deviations.json).", ""]
     lines += [f"{r['blocks']} blocks ({r['classes']['crowded']} crowded of {r['of']['crowded']}, "
-              f"{r['classes']['clean']} clean of {r['of']['clean']}), weighted by each class's share of the "
-              f"session's blocks" + (f"; not done: {r['missing_blocks']}" if r["missing_blocks"] else "") + ".", "",
+              f"{r['classes']['clean']} clean of {r['of']['clean']}), every one whole (the verdict is refused "
+              "otherwise), weighted by each class's share of the session's blocks. Code at "
+              f"{r['git_commit'][:12]}, its {r['code_fingerprints']} fingerprints as frozen.", "",
               "| criterion (fixed beforehand) | result |", "|---|---|"]
     lines += [f"| {k} | {v} |" for k, v in r["criteria"].items()]
     fr, rc = r["false_rate"], r["recovery_three_looks"]
@@ -352,7 +514,20 @@ def markdown(r, cfg):
               f"| this search | {fr['ours']['per_block']:.3f} ({_iv(fr['ours']['interval'])}) | "
               f"{rc['ours']['recovered']} of {rc['ours']['of']} ({_iv(rc['ours']['interval'])}) |",
               f"| turboSETI | {fr['turboseti']['per_block']:.3f} ({_iv(fr['turboseti']['interval'])}) | "
-              f"{rc['turboseti']['recovered']} of {rc['turboseti']['of']} ({_iv(rc['turboseti']['interval'])}) |"]
+              f"{rc['turboseti']['recovered']} of {rc['turboseti']['of']} ({_iv(rc['turboseti']['interval'])}) |",
+              "", f"Every planted signal is in the denominator; false associations (the unplanted block already "
+              f"held the match) are counted as not recovered: this search {r['false_associations']['ours']}, "
+              f"turboSETI {r['false_associations']['turboseti']}."]
+    sp = r["supplementary"]
+    lines += ["", "**Supplementary, not a criterion:** the same signals, paired (a block bootstrap of the "
+              "difference in share; signals in a block share its noise and interference):", "",
+              "| | both | first only | second only | neither | difference (95%) |", "|---|---|---|---|---|---|"]
+    for label, k in (("this search, turboSETI", "paired_ours_turboseti"),
+                     ("the pass, production (curved signals)", "paired_pass_production_curved")):
+        x = sp.get(k)
+        if x:
+            lines.append(f"| {label} | {x['both']} | {x['first_only']} | {x['second_only']} | {x['neither']} | "
+                         f"{x['difference']:+.3f} ({_iv(x['interval'])}) |")
     if r.get("step4"):
         s4 = r["step4"]
         lines += ["", f"Step 4 (AGBT17A_999_68): {s4['ours_recovered']} against {s4['turboseti_recovered']} of "
@@ -360,8 +535,7 @@ def markdown(r, cfg):
     cp = r.get("curved_pass")
     if cp:
         k = curved_pass.key(cp["a_max"])
-        lines += ["", f"The curved second pass (a_max {cp['a_max']:g} Hz/s², {cp['blocks']} blocks"
-                  + (f"; not done: {cp['missing_blocks']}" if cp["missing_blocks"] else "") + "):", "",
+        lines += ["", f"The curved second pass (a_max {cp['a_max']:g} Hz/s², {cp['blocks']} blocks):", "",
                   "| | false a block | curved signals recovered (\\|a\\| ≥ "
                   f"{cp['curved_from']:g}) |", "|---|---|---|"]
         for name, key_ in (("production", "production"), ("the pass", k)):
@@ -401,6 +575,8 @@ def main(argv=None):
             p.add_argument("--blocks", type=int)
         if name in ("measure", "curved"):
             p.add_argument("--shard", default="0/1")
+        if name == "verdict":
+            p.add_argument("--progress", action="store_true", help="how far the runs are; never a verdict")
     a = ap.parse_args(argv)
     try:
         if a.cmd == "freeze":
@@ -419,7 +595,7 @@ def main(argv=None):
         elif a.cmd == "curved":
             curved(cfg, shard, a.blocks, a.deviation)
         else:
-            verdict(cfg, a.deviation)
+            verdict(cfg, a.deviation, progress=a.progress)
     except yoke.Refusal as e:
         print(e, file=sys.stderr)
         return 1

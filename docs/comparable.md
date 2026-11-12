@@ -521,9 +521,25 @@ fingerprint of the code that makes the measurement. `independent.py` runs
 it in stages (sweep the whole session, choose the blocks, measure, the
 curved pass, the verdict) and refuses any stage while the config has
 uncommitted changes or the code differs from its fingerprint, unless told
-why, which is logged and printed on the result page. Run on step 4's own
-session as a dry run, its verdict gives step 4's numbers (4,520 against
-442 of 13,310; rates 0.068 and 0.049, their intervals reaching 0.13).
+why, which is logged and printed on the result page. The fingerprint
+covers `independent.py` itself and every project module the measurement
+imports, whole, and from `seti.py` and `curved_pass.py` the functions used
+and everything they reach in their own module; the verdict records the git
+commit and the config's hash. The verdict fails closed: it is refused
+unless each of the 121 chosen blocks has a whole record of each run (its
+class, this session's six looks, 110 and 120 signals, every field the
+criteria read) and no other block is there, so 13,310 and 14,520 signals,
+every one in the denominator; `verdict --progress` reports how far the
+runs are and never gives a verdict. Beside the criteria, not one of them:
+the same signals paired (both, either alone, neither), with the difference
+in share and a bootstrap over blocks, and the false associations. Run on
+step 4's own session as a dry run, its verdict gives step 4's numbers
+(4,520 against 442 of 13,310; rates 0.068 and 0.049, their intervals
+reaching 0.13; paired, 4,085 by this search alone and 7 by turboSETI
+alone, a difference of +0.306, 0.301-0.311), and a block missing, one
+extra or a record one signal short is refused. (The freeze was written
+again on 12 November with these guards, before any of the session's
+spectra were read.)
 Sweeping the session also puts a second session in the store, so from then
 on check 6 sees another session's looks.
 
