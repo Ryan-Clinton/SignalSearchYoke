@@ -1292,7 +1292,10 @@ is still a candidate while its straight track in the other ON looks stays
 within the track's tolerance and S/N 5. At 3×10⁻⁴ the track has moved 65
 Hz (23 channels) off the line in the next ON look, and only fast drifts
 (where 5% of the drift is wide enough) keep it. The Earth's own curvature
-(up to 1.4×10⁻⁵, in every sky signal) is well below the loss.
+(up to 1.4×10⁻⁵, in every sky signal) is well below the loss. "Kept" here
+is a candidate raised at the signal; by step 4's three-look standard (every
+ON look on the signal's own track) far fewer are kept at 10⁻⁴: see the
+second pass below (12 November).
 
 **turboSETI on the same curved tracks** (`curved.py turboseti`; S_in 400
 and drifts under 0.5 Hz/s, where turboSETI keeps straight signals; its hit
@@ -1309,7 +1312,9 @@ rule checked from its own hit tables):
 
 turboSETI's event stage follows a hit into the next ON look within ± the
 drift times twice the look's length and never asks the drifts to agree
-(`find_event.follow_event`). At 10⁻⁴ this search keeps more; at 3×10⁻⁴
+(`find_event.follow_event`). At 10⁻⁴ this search raises more candidates
+(but turboSETI's count asks a hit in each ON look and ours does not, so on
+the three-look standard this is open: see the second pass below); at 3×10⁻⁴
 turboSETI keeps a few more (9 to 4 of 40); above 10⁻³ both lose
 everything, in the search.
 
@@ -1368,7 +1373,9 @@ again from the archive), each searched once:
   candidate whose every ON member hit is on the signal's track in its look
   (frequency within 6 Hz + |a| T²/12 of the best line's start, drift within
   0.05 Hz/s of its slope at mid-look); none matched what the unplanted
-  block already held.
+  block already held. That is the strict test; step 4's three-look
+  standard, which also checks the ON looks without a member hit, follows
+  the first table and is the one to quote.
 
 **False candidates a block** (95% interval):
 
@@ -1407,12 +1414,70 @@ the same either way. S_in 30 is not recovered at cut 30 by any (its S/N is
 under the cut); at the published cut, 10, the pass gives the same kind of
 gain (at 10⁻³: 0-8% to 23-86% by strength).
 
+**The same signals by step 4's three-look standard (12 November 2026).**
+The test above (strict) asks only that an event's *formal* member hits lie
+on the signal's track. An event with one member hit passes it, though its
+other ON looks (where the cadence test measured a track, not a hit) are
+never compared with the signal; and the pass's candidates did not record
+the track it measured in the third ON look. Step 4's main standard
+(`matched.RECOVERY`, three looks) needs every one of the three ON looks on
+the signal: its member hit, or, where it has none at the cut, the track
+measured there. The pass now records that track, and `curved_pass.py
+recheck` judged the true choice of all 121 blocks again with the same seeds
+(the same plantings; every strict status came out as recorded, so nothing
+else moved; the false-candidate counts do not depend on how recovery is
+tested and stand). The first table is kept as above and
+data/measurements/curved-pass-v1.json.
+
+**Recovered at the matched cut (30), three looks**, of 605 each (95%
+interval):
+
+| \|a\| (Hz/s²) | S_in | production | + pass, a_max 3×10⁻⁴ | + pass, a_max 10⁻³ |
+|---|---|---|---|---|
+| 0 to 3×10⁻⁵ | 120 / 400 | 71-76% / 88-91% | 72-76% / 89-91% | the same |
+| 10⁻⁴ | 60 | 3% (2-5) | 29% (25-33) | 29% |
+| 10⁻⁴ | 120 | 29% (26-33) | 65% (61-69) | 65% |
+| 10⁻⁴ | 400 | 44% (40-48) | 78% (75-81) | 78% |
+| 3×10⁻⁴ | 60 | 0% | 25% (22-29) | 26% (23-30) |
+| 3×10⁻⁴ | 120 | 0% | 69% (65-73) | 70% (66-73) |
+| 3×10⁻⁴ | 400 | 2% (1-3) | 82% (79-85) | 82% (79-85) |
+| 10⁻³ | 120 | 0% | 0% | 55% (51-59) |
+| 10⁻³ | 400 | 0% | 0% | 81% (78-84) |
+
+In all, 4,078 of the 14,520 with production (strict: 5,567), 5,723 with the
+pass at a_max 3×10⁻⁴, 6,557 at 10⁻³ (strict: 7,119): **+61% by three
+looks, against +28% strict.** At the published cut, 10: 6,749 to 11,002.
+How many of the three ON looks the recovering event holds by a formal hit
+(1 / 2 / 3), at the matched cut: production 447 / 966 / 2,665; with the
+pass at 10⁻³ 304 / 2,532 / 3,721. At 3×10⁻⁴ and 10⁻³ every signal the pass
+recovers is held by two or three formal hits (two at the least is how the
+pass joins), the third ON look a hit or its track measured on the curve.
+
+**So the second pass's gain survives step 4's standard, and production's
+own recovery of curved signals was overstated by the strict test**: at
+10⁻⁴, production's candidate at a curved signal is often one look's hit
+with straight tracks measured in the other ON looks, at S/N 5 but off the
+signal's own track (at 10⁻⁴ its drift has moved about 0.07 Hz/s between
+ON looks, past the 0.05 Hz/s tolerance), so the cadence is not verified
+along the signal. By three looks production keeps 29-44% at 10⁻⁴ (S_in 120
+and 400; 39-44% at cut 10 for S_in 60 to 400), the pass 65-78%; straight and nearly straight
+(to 3×10⁻⁵) signals are within a point of each other. This bears on the
+curvature measurements above, which count any candidate event holding a
+signal's hits (a candidate is raised at the signal; whether its three ON
+looks lie on the signal is not asked there): their 97/100 at 10⁻⁴ is
+candidates raised, not cadences verified along the track, and the
+comparison with turboSETI at 10⁻⁴ (whose count asked its hits in each ON
+look) is not like for like on this standard and is left open. The loss
+does not start at 2-3×10⁻⁵ either way (three looks: 81-84% at 0 to 3×10⁻⁵,
+S_in 60, cut 10).
+
 **What this shows and does not.** At step 4's matched false-candidate rate,
-on its 121 blocks, the second pass recovers signals accelerating at 3×10⁻⁴
-to 10⁻³ Hz/s² that the production test loses (up to the search's own
-limit for weak ones), at no measurable cost in false candidates (0.068 to
-0.071 a block, the intervals overlapping almost wholly). Below 10⁻⁴ it
-changes nothing, because production already keeps those. Not shown: the
+on its 121 blocks and by its three-look standard, the second pass recovers
+signals accelerating at 10⁻⁴ to 10⁻³ Hz/s² that the production test loses
+(up to the search's own limit for weak ones). Its cost in false candidates
+on these blocks is one in 121 (0.068 to 0.071 a block, the intervals
+overlapping almost wholly): too few to measure here, not shown to be
+negligible in other sessions. Below 10⁻⁴ it changes nothing. Not shown: the
 acceleration is held constant over 22 minutes (for a circular orbit it
 changes at the orbital rate, by at most 10% over the cadence for a 1-day
 orbit and 1% for 10 days, but 23% for a 10-hour spin); one session and one

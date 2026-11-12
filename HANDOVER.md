@@ -216,11 +216,14 @@ the default place.
   signals to 15%, three in block 14 unexplained again. Curved tracks
   (step 9) are measured (corrected the same evening: the first count
   took only a split signal's first event): at S_in 60 the cadence test
-  keeps 97% at 1e-4 Hz/s^2, 49% at 3e-4, 1% at 1e-3. `curved_pass.py`
-  (experimental, apart) is a second pass over step 4's 121 blocks at
-  matched rates: the same matched cut (30), false rate 0.068 to 0.071 a
-  block, recovery at 3e-4 to 1e-3 up from 0-54% to 59-97% for S_in 120
-  and 400. Next: step 10 (another session, cuts fixed, the second pass
+  raises a candidate at 97% at 1e-4 Hz/s^2, 49% at 3e-4, 1% at 1e-3.
+  `curved_pass.py` (experimental, apart) is a second pass over step 4's
+  121 blocks at matched rates: the same matched cut (30), false rate
+  0.068 to 0.071 a block. By step 4's three-look standard (`recheck`,
+  12 Nov; the strict per-hit test overstated production's curved
+  recovery): 4,078 to 6,557 of 14,520 (+61%); at 1e-4 29-44% to 65-78%,
+  at 3e-4 0-2% to 70-82%, at 1e-3 0% to 55-81% (S_in 120, 400). The
+  turboSETI comparison at 1e-4 is open on that standard. Next: step 10 (another session, cuts fixed, the second pass
   with it), the checks on the pass's candidates, and orbital tracks,
   before any change to `onoff.py`.
 - **Real signals:** Voyager 1's carrier and sidebands found at turboSETI's

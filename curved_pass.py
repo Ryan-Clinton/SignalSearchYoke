@@ -4,6 +4,7 @@ production cadence test, over step 4's blocks at matched false-candidate
 rates (comparable.md step 9).
 
     python curved_pass.py run KIC8462852 [--blocks N]   each block of step 4: false candidates and planted signals
+    python curved_pass.py recheck KIC8462852 [--shard i/n]  add the three-look recovery test to recorded blocks
     python curved_pass.py tables KIC8462852              the rates, the matched cuts and the recovery tables
 
 The production test (onoff.judge) runs first, unchanged. The second pass
@@ -32,7 +33,13 @@ the same archive reads), searched once:
   ON member hit is on its track in that look (the best straight line over
   the look: frequency within 6 Hz + |a| T^2 / 12 of its start, drift within
   0.05 Hz/s of its slope at mid-look); a match the unplanted block's true
-  choice already had is a false association, counted apart.
+  choice already had is a false association, counted apart. That is the
+  strict test (the first measurements); the three-look test, step 4's
+  standard, needs every one of the three ON looks on the track, by its
+  member hit or, where it has none at the cut, by the track measured there
+  (status_v2, with how many of the three are formal hits). `recheck` adds
+  it to blocks recorded before it (the true choice judged again, the same
+  seeds).
 
 Then each configuration's cut is matched at 0.1 false candidates a block
 (matched_tables' rule) and the recovery compared there.
@@ -114,13 +121,15 @@ def second_pass(looks, events, a_max):
                     continue
                 fr, dr = curved._track(ha["frequency_mhz"], ha["drift_hz_s"], a_use, lr, la)
                 members = {la.position: ia, lb.position: ib}
+                track = None
                 mid = [i for i in curved._hits_near(lr, fr, dr) if (lr.position, i) not in taken]
                 if mid:
                     members[lr.position] = max(mid, key=lambda i: lr.hits[i]["snr"])
                 else:
-                    snr, _, _ = lr.best_track(lr.channel(fr), dr, curved.F_TOL_CHANNELS, curved.D_TOL_STEPS)
+                    snr, at, d_fit = lr.best_track(lr.channel(fr), dr, curved.F_TOL_CHANNELS, curved.D_TOL_STEPS)
                     if snr is None or snr < onoff.ON_MIN:
                         continue
+                    track = (lr.position, at, d_fit, snr)      # the third ON look, measured on the curve
                 sig = frozenset(members.items())
                 if sig in seen:
                     continue
@@ -134,7 +143,7 @@ def second_pass(looks, events, a_max):
                             off_max = max(off_max, snr)
                         off_hit = off_hit or bool(curved._hits_near(lk, f_try, do, any_strength=True))
                 label = "interference" if (off_hit or off_max >= onoff.OFF_MAX) else "candidate"
-                out.append({"members": members, "label": label, "a": round(a, 7)})
+                out.append({"members": members, "track": track, "label": label, "a": round(a, 7)})
     return out
 
 
@@ -149,8 +158,12 @@ def _kept_pass(looks, found, order):
                    for p, i in mem]
         top = max(mem, key=lambda m: looks[m[0]].hits[m[1]]["snr"])
         h = looks[top[0]].hits[top[1]]
+        tracks = []
+        if e.get("track"):
+            p, at, d_fit, snr = e["track"]
+            tracks = [[order[p], looks[p].fch1 + at * looks[p].foff, d_fit, round(snr, 2)]]
         out.append({"f_mhz": round(h["frequency_mhz"], 6), "drift": round(h["drift_hz_s"], 4),
-                    "snr": round(h["snr"], 2), "look": order[top[0]], "members": members, "tracks": [],
+                    "snr": round(h["snr"], 2), "look": order[top[0]], "members": members, "tracks": tracks,
                     "a": e["a"]})
     return out
 
@@ -215,22 +228,51 @@ def expected(cad, t, j):
     return s["fch1"] + x * s["foff"], t["drift"] + a * (dt + T / 2), matched.TOL_HZ + abs(a) * T * T / 12
 
 
-def _matches(cad, t, ev):
+def _matches(cad, t, ev, tracks=False):
+    """How many of an event's ON member hits (with `tracks`, also the tracks
+    measured in its ON looks without a hit) lie on a planted signal's track
+    in their look, of how many."""
+    rows = [(m[0], m[2], m[3]) for m in ev["members"]] + ([tuple(x[:3]) for x in ev.get("tracks", [])]
+                                                         if tracks else [])
     ok = 0
-    for j, f, d in ((m[0], m[2], m[3]) for m in ev["members"]):
+    for j, f, d in rows:
+        if f is None or d is None:
+            continue
         fe, de, tol = expected(cad, t, j)
         ok += abs((f - fe) * 1e6) <= tol and abs(d - de) <= matched.TOL_DRIFT
-    return ok, len(ev["members"])
+    return ok, len(rows)
+
+
+# Recovery, as step 4's (matched.RECOVERY) but on the curved track. Strict:
+# every ON member hit on the track (the first measurements here). Three looks:
+# each of the three ON looks on the track, by its member hit or, where it has
+# none at the cut, by the track measured there.
+WAYS = (("strict", False, lambda ok, n: n >= 1 and ok == n),
+        ("three_looks", True, lambda ok, n: ok == n == len(TRUE)))
 
 
 def status(cad, t, planted, plain):
     """recovered / false association / missed, strict (every ON member hit
-    on the track)."""
-    def got(evs):
-        return any(n >= 1 and ok == n for ok, n in (_matches(cad, t, ev) for ev in evs))
-    if got(planted):
-        return "false association" if got(plain) else "recovered"
-    return "missed"
+    on the track). Format 1's test, kept for its records."""
+    return statuses(cad, t, planted, plain)["strict"]
+
+
+def statuses(cad, t, planted, plain):
+    """Each way of WAYS: recovered / false association / missed; and, for
+    three looks, how many of the three ON looks the recovering event holds by
+    a formal hit (the most of any such event)."""
+    out = {}
+    for name, tracks, test in WAYS:
+        hit = [ev for ev in planted if test(*_matches(cad, t, ev, tracks))]
+        if not hit:
+            out[name] = "missed"
+        elif any(test(*_matches(cad, t, ev, tracks)) for ev in plain):
+            out[name] = "false association"
+        else:
+            out[name] = "recovered"
+        if tracks:
+            out["hits"] = max(len(ev["members"]) for ev in hit) if hit else None
+    return out
 
 
 # --- a block ---------------------------------------------------------------------
@@ -264,8 +306,10 @@ def block(k, cls, slices, urls, rng):
     rows = []
     for tone in ts:
         r = {k2: tone[k2] for k2 in ("x0", "drift", "accel", "s_in", "bin")}
-        r["status"] = {c: {cfg: status(cad, tone, true_planted[c][cfg], true_plain[c][cfg]) for cfg in CONFIGS}
-                       for c in true_planted}
+        both = {c: {cfg: statuses(cad, tone, true_planted[c][cfg], true_plain[c][cfg]) for cfg in CONFIGS}
+                for c in true_planted}
+        r["status"] = {c: {cfg: v["strict"] for cfg, v in x.items()} for c, x in both.items()}
+        r["status_v2"] = both
         rows.append(r)
     return {"format": FORMAT, "block": k, "class": cls, "tstarts": [c["s"]["tstart"] for c in cad],
             "false": false, "tones": rows, "times": times,
@@ -322,6 +366,69 @@ def run(target, count=None, say=print, shard=(0, 1)):
     return len(list(base.glob("block_*.json")))
 
 
+def _recheck_block(k, rec, slices, urls):
+    """A block recorded before the three-look test (status_v2): the true
+    choice searched and judged again, unplanted and planted with the same
+    seed, so the same signals; nothing else of the record changes. Returns
+    how many strict statuses differ from the record (0 if reproduced)."""
+    cad = matched._cadence(slices, urls)
+    assert [c["s"]["tstart"] for c in cad] == rec["tstarts"], "not the recorded block"
+    rng = np.random.default_rng([SEED, k])
+    searched = matched.our_search(cad)
+    caches = [{} for _ in range(6)]
+    plain = {matched.ck(cut): judge_all(cad, searched, TRUE, cut, caches) for cut in CUTS}
+    del searched, caches
+    ts = tones(cad, rng)
+    assert all(abs(t["x0"] - r["x0"]) < 1e-9 and t["accel"] == r["accel"] and t["s_in"] == r["s_in"]
+               for t, r in zip(ts, rec["tones"])) and len(ts) == len(rec["tones"]), "not the recorded signals"
+    cad_p = [dict(c, spectra=p) for c, p in zip(cad, plant(cad, ts))]
+    searched_p = matched.our_search(cad_p)
+    caches = [{} for _ in range(6)]
+    planted = {matched.ck(cut): judge_all(cad_p, searched_p, TRUE, cut, caches) for cut in CUTS}
+    differ = 0
+    for tone, row in zip(ts, rec["tones"]):
+        row["status_v2"] = {c: {cfg: statuses(cad, tone, planted[c][cfg], plain[c][cfg]) for cfg in CONFIGS}
+                            for c in planted}
+        differ += sum(row["status_v2"][c][cfg]["strict"] != row["status"][c][cfg] for c in planted for cfg in CONFIGS)
+    return differ
+
+
+def recheck(target, say=print, shard=(0, 1)):
+    """Add the three-look recovery test (status_v2) to blocks recorded
+    without it: only the true choice is judged again (the false candidates
+    are recorded already and do not depend on how recovery is tested)."""
+    db = store.connect()
+    session, urls = store.cadence_files(db, target)
+    db.close()
+    base = folder(target, session)
+    paths = sorted(base.glob("block_*.json"))
+    todo = [p for i, p in enumerate(paths) if i % shard[1] == shard[0]
+            and "status_v2" not in json.loads(p.read_text(encoding="utf-8"))["tones"][0]]
+    say(f"{target} {session}: {len(paths)} blocks recorded, {len(todo)} of this share to check again", flush=True)
+    block_list = seti.blocks(seti.reading.prepare(urls[:1])[0])
+
+    def fetch(p):
+        rec = json.loads(p.read_text(encoding="utf-8"))
+        return rec, seti.read_looks(urls, *block_list[rec["block"]])
+
+    with ThreadPoolExecutor(max_workers=1) as ahead:
+        coming = ahead.submit(fetch, todo[0]) if todo else None
+        for i, p in enumerate(todo):
+            rec, slices = coming.result()
+            coming = ahead.submit(fetch, todo[i + 1]) if i + 1 < len(todo) else None
+            started = time.monotonic()
+            differ = _recheck_block(rec["block"], rec, slices, urls)
+            del slices
+            rec["recheck"] = {"strict_differ": differ, "s": round(time.monotonic() - started, 1),
+                              "utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+            p.write_text(json.dumps(rec), encoding="utf-8")
+            t30 = [t["status_v2"]["30"] for t in rec["tones"]]
+            say(f"  block {rec['block']}: strict statuses differing from the record {differ}; at cut 30 "
+                + ", ".join(f"{cfg} strict {sum(x[cfg]['strict'] == 'recovered' for x in t30)} three looks "
+                            f"{sum(x[cfg]['three_looks'] == 'recovered' for x in t30)}" for cfg in CONFIGS)
+                + f"; {rec['recheck']['s']} s", flush=True)
+
+
 # --- tables -----------------------------------------------------------------------
 
 def tables(target, say=print):
@@ -341,24 +448,43 @@ def tables(target, say=print):
     cuts = {cfg: matched_tables._matched_cut(curves[cfg]) for cfg in CONFIGS}
     tones_all = [t for r in recs for t in r["tones"]]
 
-    def recovery(cfg, cut):
+    three = all("status_v2" in t for t in tones_all)
+    ways = ("strict", "three_looks") if three else ("strict",)
+
+    def st(t, cut, cfg, way):
+        return t["status"][cut][cfg] if way == "strict" and not three else t["status_v2"][cut][cfg][way]
+
+    def recovery(cfg, cut, way="strict"):
         out = []
         for acc in ACCELS:
             for s_in in STRENGTHS:
                 cell = [t for t in tones_all if abs(abs(t["accel"]) - acc) < 1e-12 and t["s_in"] == s_in]
-                n = sum(t["status"][cut][cfg] != "false association" for t in cell)
-                k = sum(t["status"][cut][cfg] == "recovered" for t in cell)
-                out.append({"accel": acc, "s_in": s_in, "planted": len(cell), "counted": n, "recovered": k,
-                            "share": round(k / n, 3) if n else None, "interval": measure.wilson(k, n) if n else None})
+                n = sum(st(t, cut, cfg, way) != "false association" for t in cell)
+                k = sum(st(t, cut, cfg, way) == "recovered" for t in cell)
+                row = {"accel": acc, "s_in": s_in, "planted": len(cell), "counted": n, "recovered": k,
+                       "share": round(k / n, 3) if n else None, "interval": measure.wilson(k, n) if n else None}
+                if way == "three_looks":
+                    # of those recovered, by how many of the three ON looks hold a formal hit
+                    row["by_hits"] = {h: sum(st(t, cut, cfg, way) == "recovered"
+                                             and t["status_v2"][cut][cfg]["hits"] == h for t in cell)
+                                      for h in (1, 2, 3)}
+                out.append(row)
         return out
+
+    def totals(rows):
+        return {"recovered": sum(r["recovered"] for r in rows), "counted": sum(r["counted"] for r in rows)}
     at = {}
     prod_cut = cuts["production"]["cut"]
     for cfg in CONFIGS:
         c = cuts[cfg]["cut"]
-        at[cfg] = {"matched_cut": c,
-                   "at_matched": recovery(cfg, c) if c is not None else None,
-                   "at_production_matched_cut": recovery(cfg, prod_cut) if prod_cut is not None else None,
-                   "at_published_cut": recovery(cfg, "10")}
+        at[cfg] = {"matched_cut": c}
+        for way in ways:
+            sfx = "" if way == "strict" else "_three_looks"
+            at[cfg]["at_matched" + sfx] = recovery(cfg, c, way) if c is not None else None
+            at[cfg]["at_production_matched_cut" + sfx] = recovery(cfg, prod_cut, way) if prod_cut is not None else None
+            at[cfg]["at_published_cut" + sfx] = recovery(cfg, "10", way)
+            if c is not None:
+                at[cfg]["totals_at_matched" + sfx] = totals(at[cfg]["at_matched" + sfx])
     record = {"target": target, "session": session, "blocks": len(recs), "of_chosen": len(meta["chosen"]),
               "weights": weights, "rate_matched": matched_tables.RATE, "a_max": A_MAX, "accels": ACCELS,
               "strengths": STRENGTHS, "false_curves": curves, "matched_cuts": cuts, "recovery": at,
@@ -371,12 +497,23 @@ def tables(target, say=print):
                                     f"({curves[cfg][matched.ck(c)]['interval'][0]:.3f}-"
                                     f"{curves[cfg][matched.ck(c)]['interval'][1]:.3f})" for cfg in CONFIGS))
     say("Matched cuts (0.1 a block): " + ", ".join(f"{cfg} {cuts[cfg]['cut']}" for cfg in CONFIGS))
-    for label in ("at_matched", "at_production_matched_cut", "at_published_cut"):
+    labels = ("at_matched", "at_production_matched_cut", "at_published_cut")
+    if three:
+        labels += tuple(x + "_three_looks" for x in labels)
+    for label in labels:
         say(f"\nRecovered ({label}), by |a| and S_in:")
         say("  |a|      S_in " + "".join(f"{cfg:>14}" for cfg in CONFIGS))
         for i, row in enumerate(at["production"][label] or []):
             say(f"  {row['accel']:<8g} {row['s_in']:>4} " + "".join(
                 f"{(at[cfg][label][i]['share'] if at[cfg][label] else float('nan')) or 0:>14.0%}" for cfg in CONFIGS))
+    if three:
+        say("\nAt the matched cut: totals, strict and three looks; three-look recoveries by formal hits (1/2/3):")
+        for cfg in CONFIGS:
+            a, b = at[cfg].get("totals_at_matched"), at[cfg].get("totals_at_matched_three_looks")
+            if a and b:
+                h = {n: sum(r["by_hits"][n] for r in at[cfg]["at_matched_three_looks"]) for n in (1, 2, 3)}
+                say(f"  {cfg:>14}: strict {a['recovered']}/{a['counted']}, three looks {b['recovered']}/{b['counted']}"
+                    f"  ({h[1]}/{h[2]}/{h[3]})")
     return record
 
 
@@ -387,11 +524,16 @@ def main(argv=None):
     r.add_argument("target")
     r.add_argument("--blocks", type=int)
     r.add_argument("--shard", default="0/1", help="i/n: this process's share of the blocks")
+    c = sub.add_parser("recheck", help="add the three-look recovery test to blocks recorded without it")
+    c.add_argument("target")
+    c.add_argument("--shard", default="0/1")
     t = sub.add_parser("tables")
     t.add_argument("target")
     a = ap.parse_args(argv)
     if a.cmd == "run":
         run(a.target, a.blocks, shard=tuple(int(x) for x in a.shard.split("/")))
+    elif a.cmd == "recheck":
+        recheck(a.target, shard=tuple(int(x) for x in a.shard.split("/")))
     else:
         tables(a.target)
 

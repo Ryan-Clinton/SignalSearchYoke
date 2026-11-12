@@ -448,10 +448,13 @@ result page; the `.0002` search has its own spec.
 **Curved tracks measured, 11 November 2026** (docs/seti.md, "Curved
 tracks", corrected the same evening: the first count took only the first
 event of a signal split into several, and overstated the loss). At S_in
-60 the cadence test keeps 97 of 100 at an acceleration of 10⁻⁴ Hz/s², 49
-at 3×10⁻⁴, 1 at 10⁻³; the search itself loses the hits from about 10⁻³.
-turboSETI keeps fewer at 10⁻⁴ (26 of 40 against 40 at S_in 400, slow
-drifts), a few more at 3×10⁻⁴ (9 against 4).
+60 the cadence test raises a candidate at 97 of 100 at an acceleration of
+10⁻⁴ Hz/s², 49 at 3×10⁻⁴, 1 at 10⁻³; the search itself loses the hits
+from about 10⁻³. By step 4's three-look standard (every ON look on the
+signal's own track, 12 November, below) far fewer are verified at 10⁻⁴,
+and the comparison with turboSETI there (26 of 40 against our 40 raised)
+is not like for like and is left open; at 3×10⁻⁴ turboSETI keeps a few
+more (9 against 4).
 
 **A curved second pass at matched rates, 11 November 2026**
 (`curved_pass.py`, experimental, apart from the search; docs/seti.md,
@@ -461,7 +464,13 @@ through it. Every configuration is matched at 0.1 false candidates a block
 at the same cut (30); the false rate there goes from 0.068 to 0.071 at
 a_max 10⁻³. Recovered at that cut: at 3×10⁻⁴, 54% to 97% (S_in 400) and
 32% to 78% (120); at 10⁻³, 8% to 86% and 0% to 59%; 5,567 to 7,119 of
-14,520 planted in all, nothing changed below 10⁻⁴. **Before any change to
+14,520 planted in all (strict: every formal member hit on the track). By
+step 4's three-look standard (each ON look on the signal by its member hit
+or its measured track; 12 November, the same plantings judged again):
+4,078 to 6,557 (+61%); at 10⁻⁴ 29-44% to 65-78% (S_in 120, 400), at
+3×10⁻⁴ 0-2% to 70-82%, at 10⁻³ 0% to 55-81%; the pass's recoveries there
+all held by two or three formal hits. Production's own recovery of curved
+signals was overstated by the strict test. **Before any change to
 `onoff.py`:** the same on step 10's session, the checks on the pass's
 candidates, and orbital (sine) tracks planted. The setigen paths (sine,
 random walk, partial looks) remain.
