@@ -1664,8 +1664,18 @@ cut 30, with the same number left.) What this says:
   of the planted signals that a search recovers are explained away by the
   checks, straight or curved, the same share for every configuration. It
   belongs in the sensitivity of the whole search (search and checks
-  together). Which checks remove them is not yet broken down; that, and
-  whether the share differs on a quieter session, is left open.
+  together). Broken down (full checks, cut 30; straight signals recovered
+  by production, 3,603, and curved ones, 10⁻⁴ and up, by the pass at
+  10⁻³, 2,935): unexplained 42.7% and 40.9%; check 3's known interference
+  bands alone 40.7% and 41.8%, and with other indications 12.3% and 11.4%
+  more; the other checks alone (zero drift, recurrence, crowding,
+  look-alikes) 3.8% and 4.8%. Every one is "likely interference
+  (indicated)", none "shown". So the cost is nearly all check 3: it marks
+  any signal at a frequency on the interference list, real or not, and
+  about half of this S-band session's band is on it. Zero drift costs the
+  curved signals slightly more (2.2% against 1.3% alone), as expected for a
+  path that passes through zero drift. Whether the share is lower on a
+  session with less of its band listed (Step 10's L band) is left open.
 - **The reference look matters for 7.7%.** Of 14,732 pass candidates
   checked with each member look as the reference, 1,131 change between
   explained and unexplained. The tables use the strongest member, as for
