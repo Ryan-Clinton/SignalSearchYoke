@@ -481,7 +481,7 @@ signals, the pass at 10⁻³ 9,118; at 3×10⁻⁴ and S_in 120, 15% to 68%; at
 10⁻³, 4% to 60%; no false associations, and the controls hold (6 Hz only:
 53% at 10⁻³, S_in 120; the mirror path recovers 0.7%, the same signals
 under every configuration). **Before any change to `onoff.py`:** the same
-on step 10's session (sweeping). The checks on the pass's candidates are
+on step 10's session (measuring). The checks on the pass's candidates are
 measured: no unexplained false candidate added, and the checks keep the
 same share of its curved recoveries as of production's (42% against 43%,
 full checks, cut 30; docs/seti.md).
@@ -545,6 +545,18 @@ again on 12 November with these guards, before any of the session's
 spectra were read.)
 Sweeping the session also puts a second session in the store, so from then
 on check 6 sees another session's looks.
+
+**Run, 12-13 November:** the sweep searched all 304 blocks at the frozen
+search version (184 crowded, 120 clean), and the rule chose 61 crowded and
+60 clean. **One deviation, logged:** the choosing stage stopped on its
+first real run, reading each block's search version from the blocks table,
+where the store keeps none (it is the run's). The query was changed to read
+it through `store.done_blocks`, as the rest of the code does (commit
+3289fe3), which changes `independent.py`'s fingerprint; every stage from
+the choice on runs with `--deviation` (data/step10/deviations.json) and the
+verdict prints it. The rule, its seed and the measuring code are unchanged,
+and the choice follows from the hit counts and seed 10 alone. Measure and
+the curved pass run with 3 workers each.
 
 **Done when:** the new session's page is in `docs/results/` and
 `docs/seti.md` says whether step 4's result held there.

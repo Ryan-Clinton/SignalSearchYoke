@@ -230,7 +230,7 @@ the default place.
   the pass's 9,118 of 16,335 at cut 30, controls holding. The checks on
   the pass's candidates (12 Nov, 121 blocks): it adds no unexplained false
   candidate, and the checks keep 42% of its recovered signals against 43%
-  of production's. Next: step 10 (sweeping)
+  of production's. Next: step 10 (swept and chosen 13 Nov; measuring, one logged plumbing deviation)
   (frozen in `config/step10.json`: HIP17147 AGBT16A_999_192, L band, 2016;
   `independent.py`), before any change to `onoff.py`.
 - **Real signals:** Voyager 1's carrier and sidebands found at turboSETI's
