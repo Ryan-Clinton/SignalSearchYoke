@@ -222,8 +222,7 @@ def choose(cfg, deviation=None, say=print):
     session, urls = _files(cfg, db) or (None, None)
     if session is None:
         raise yoke.Refusal("NOT_FOUND", "The session is not swept yet (independent.py sweep).")
-    rows = db.execute("SELECT block_idx, hits, search_version FROM blocks WHERE session=? AND status='done'"
-                      " ORDER BY block_idx", (session,)).fetchall()
+    rows = list(store.done_blocks(db, session).values())  # search_version is the run's, not the block's
     db.close()
     block_list = seti.blocks(seti.reading.prepare(urls[:1])[0])
     if len(rows) != len(block_list) or rule["of_session"] != len(block_list):
