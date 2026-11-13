@@ -1675,12 +1675,49 @@ cut 30, with the same number left.) What this says:
   about half of the planted signals fall on it (the chosen blocks weight
   the crowded ones, which are mostly listed bands). Zero drift costs the
   curved signals slightly more (2.2% against 1.3% alone), as expected for a
-  path that passes through zero drift. Whether the share is lower on a
-  session with less of its band listed (Step 10's L band) is left open.
+  path that passes through zero drift.
+- **Detection and vetting, inside and outside the known bands**
+  (`tools/vet_breakdown.py`, from the same records;
+  `data/measurements/curved-pass-vetting-breakdown.json`). A band is a
+  label on a frequency, not evidence that a signal is terrestrial, so the
+  two are reported apart. At cut 30, of the signals planted inside a
+  listed band and outside one, recovered by three looks, then left
+  unexplained by the full checks:
+
+  | | inside: planted | recovered | left | outside: planted | recovered | left |
+  |---|---|---|---|---|---|---|
+  | straight, production | 3,880 | 1,914 (49%) | 0 | 3,380 | 1,689 (50%) | 1,538 (91%) |
+  | curved, production | 3,877 | 261 (7%) | 0 | 3,383 | 214 (6%) | 199 (93%) |
+  | curved, the pass at 10⁻³ | 3,877 | 1,592 (41%) | 0 | 3,383 | 1,343 (40%) | 1,200 (89%) |
+
+  The search recovers signals as well inside the listed bands as outside
+  them. Inside them the checks leave none unexplained, by design (check 3
+  marks every one "indicated", which ranks below unexplained). Outside them
+  they keep about 90%, straight or curved. So the vetting sensitivity of
+  this search is the band list's coverage first and the other checks'
+  cost (about 10%) second; a signal in a listed band is left for a person,
+  marked, not discarded. At cut 10 the same: outside the bands 91%
+  (straight) and 89% (curved, the pass) are left. Whether Step 10's L band
+  shows the same split is left open.
 - **The reference look matters for 7.7%.** Of 14,732 pass candidates
   checked with each member look as the reference, 1,131 change between
   explained and unexplained. The tables use the strongest member, as for
-  production's.
+  production's. That choice is not neutral, so the range it hides is
+  measured (`tools/vet_breakdown.py`):
+  - of the 2,477 planted signals only the pass recovers (cut 30), 1,007
+    are left unexplained with the strongest member as the reference,
+    1,113 with some member, and 943 with every member: 38% to 45%, the
+    table's figure (41%) inside. At cut 10, 1,603 to 1,910 of 4,249.
+  - of the pass's own wrong-choice candidates (1 distinct signal at cut
+    30, 4 at cut 10), none is left unexplained under any reference look.
+    The false-candidate result does not depend on the choice.
+
+  The checks read one frequency and one drift, which describes a straight
+  track at any look but a curved one only at its reference epoch. The fix
+  is to check a curved candidate along its path (check 4 against its
+  drift at each look, check 6 and 7 along the curve), which changes
+  `vetting.py`, the production checks: left until after Step 10, with
+  both results kept until then.
 
 The first orbital run (17 blocks, before the controls were added) is kept
 apart, as is a one-block test of the partial checks and the first checks

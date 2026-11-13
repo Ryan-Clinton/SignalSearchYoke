@@ -1,6 +1,9 @@
 # Using the whole machine: a spec for parallel runs
 
-Status: proposed, not built. Written 12 November 2026, while the checks on the
+Status: proposed, not built. Decided 13 November: Step 10 runs as
+planned (3 workers a stage, the runner unchanged); reproducibility of the
+frozen comparison comes before finishing sooner. Part A is dropped for
+Step 10, and Part B (with Part A's record test) is for after its verdict. Written 12 November 2026, while the checks on the
 curved second pass's candidates run (6 workers) and Step 10 waits behind them
 (docs/comparable.md). Nothing here changes what any measurement computes: the
 aim is the same records, sooner.
