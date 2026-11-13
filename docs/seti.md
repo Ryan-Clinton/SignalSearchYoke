@@ -1672,7 +1672,8 @@ cut 30, with the same number left.) What this says:
   look-alikes) 3.8% and 4.8%. Every one is "likely interference
   (indicated)", none "shown". So the cost is nearly all check 3: it marks
   any signal at a frequency on the interference list, real or not, and
-  about half of this S-band session's band is on it. Zero drift costs the
+  about half of the planted signals fall on it (the chosen blocks weight
+  the crowded ones, which are mostly listed bands). Zero drift costs the
   curved signals slightly more (2.2% against 1.3% alone), as expected for a
   path that passes through zero drift. Whether the share is lower on a
   session with less of its band listed (Step 10's L band) is left open.
