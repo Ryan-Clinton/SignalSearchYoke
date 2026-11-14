@@ -1024,20 +1024,47 @@ docs/results/HIP17147-AGBT16A_999_192-step10.md. At SNR 30:
   blocks. SNR 30 does not hold this search at 0.1 a block on this session,
   so the matched comparison of step 4 (both at 0.1) is not reproduced here.
 - **Where the false candidates are** (described after the verdict, not a
-  criterion; counts are distinct candidates at SNR 30 by shared hits, as
-  the rate counts them, before the full checks): 3,890 of 3,938 are in
-  blocks overlapping check 3's known bands, satellite navigation (GPS L1
-  and L5, Galileo, BeiDou) and mobile satellites (Inmarsat), and 7 blocks
-  hold 3,654 (1,602 MHz 783, 1,198 MHz 733, 1,531 MHz 713, 1,180 MHz 513,
-  1,201 MHz 473, 1,183 MHz 356, 1,186 MHz 83). Outside the listed bands
-  the 27 crowded blocks have 46 (1.7 a block, 27 of them in one block at
-  1,376-1,379 MHz) and the 50 clean ones 2. So the cadence test alone does
-  not reject these satellites' signals at L band, as it did the interference
-  of step 4's S-band session; and even outside the listed bands the
-  crowded blocks are above 0.1.
-- **Not measured yet:** how many of them the full checks leave unexplained
-  (check 3 marks every one in a listed band "indicated", for a person).
-  The frozen measurement is the cadence test's output, as step 4's was.
+  criterion; distinct candidates at SNR 30 by shared hits, as the rate
+  counts them, before the full checks; `tools/false_frequencies.py`, by
+  each candidate's own frequency): 3,888 of 3,938 lie inside one of check
+  3's listed bands: Galileo E5b / BeiDou B2 1,249, GPS L5 / Galileo E5a
+  952, GPS L1 and the other navigation systems' L1 830, Inmarsat and other
+  mobile satellites 789, weather satellites 45, Iridium and Globalstar 20,
+  GPS L2 2, aircraft at 1,090 MHz 1. Seven blocks hold 3,654. Of the other
+  50, 2 are in blocks overlapping a band but outside it and 48 in blocks
+  overlapping none: 46 in crowded blocks (27 crowded blocks: 1.7 a block,
+  above 0.1 on their own), 2 in clean ones.
+  - **Inside a listed band is not an identification.** It says a
+    candidate is where navigation and mobile satellites transmit, not that
+    it is one of them; none is identified here by its own behaviour yet.
+  - **The block at 1,376-1,379 MHz** (block 119, 27 of the 48): 26 of its
+    candidates lie between 1,378.42 and 1,378.63 MHz, each seeded from a
+    single look's hit (look 0 or look 4, the other looks measured along the
+    track), drifting -0.07 to -0.36 Hz/s; many hits a few kHz apart in one
+    look at a time, a source that comes and goes between looks. It is near
+    GPS L3 (1,381.05 MHz), outside the band list; unidentified.
+  - So the cadence test alone does not reject what lies in these bands at
+    L band, as it did the interference of step 4's S-band session; and the
+    crowded blocks outside them are above 0.1 too.
+- **Measured next, after the verdict and apart from it:** the full checks
+  on step 10's own 121 blocks (`curved_pass.py vet --choice
+  data/step10/choice.json`), with the store opened read-only and its
+  content compared before and after: how many distinct false candidates
+  they leave unexplained, how many planted signals survive them, and how
+  much of the rejection rests on the band list rather than on evidence
+  from the looks. Then the same checks on step 4's blocks again, with the
+  same code and the store as it now is (two sessions), so the two
+  sessions compare like for like. Whatever they show, step 10 failed its
+  criterion: the frozen rate is the cadence test's output, and a later
+  checks result is a separate, post-hoc measurement, never a substitute
+  for it.
+- **Not done: masking the bands.** Leaving the listed bands out would
+  lower the rate by making a blind spot where the interference is worst,
+  and a transmitter of interest could sit there too. Any change that
+  rejects more must say what it rejects and which planted signals it
+  loses, and the cadence test is not changed until it is known which
+  evidence (shared drift families, recurrence, time structure, the track
+  across looks) separates these signals from planted ones.
 - **What it means for the claims:** "recovers about ten times as many
   planted signals as turboSETI at SNR 30" held on a second session. "At a
   matched false rate of 0.1 a block" did not: at L band, at SNR 30,
