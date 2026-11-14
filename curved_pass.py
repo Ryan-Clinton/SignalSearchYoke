@@ -57,6 +57,7 @@ import math
 import shutil
 import time
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
 import numpy as np
 
@@ -956,16 +957,39 @@ def _vet_block(k, slices, urls, ctx):
             "finished_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
 
 
-def vet_folder(target, session):
-    return ROOT / f"vet-{target}-{session}"
+def vet_folder(target, session, name=None):
+    return ROOT / (f"vet-{target}-{session}" + (f"-{name}" if name else ""))
 
 
-def vet_run(target, say=print, shard=(0, 1), count=None):
-    db = store.connect()
+def vet_choice(db, session, choice=None):
+    """The blocks the checks run on: with `choice` (a file holding "chosen"
+    {block: class} and "of" {class: count}, as data/step10/choice.json and
+    matched's blocks.json do), exactly those, refused unless every block is
+    one of the session's swept blocks; without it, matched.choose_blocks
+    (every crowded block and 60 clean), as the first run on step 4 used."""
+    if choice is None:
+        return matched.choose_blocks(db, session)
+    c = json.loads(Path(choice).read_text(encoding="utf-8"))
+    chosen = {int(b): k for b, k in c["chosen"].items()}
+    swept = {r["block_idx"]: r["hits"] for r in db.execute(
+        "SELECT block_idx, hits FROM blocks WHERE session=? AND status='done'", (session,))}
+    wrong = [b for b, k in chosen.items() if b not in swept
+             or k != ("crowded" if swept[b] > matched.CROWDED_HITS else "clean")]
+    if wrong or set(c["of"]) != {"crowded", "clean"}:
+        raise yoke.Refusal("INVALID_REQUEST", f"{choice} does not fit session {session}: blocks {wrong[:5]}")
+    return dict(sorted(chosen.items())), dict(c["of"])
+
+
+def vet_run(target, say=print, shard=(0, 1), count=None, choice=None, name=None):
+    """The checks on the candidates and planted signals of the chosen blocks.
+    The store is opened read-only, and its content is compared before and
+    after: the run writes only its own records, in its own folder."""
+    db = store.connect_readonly()
+    before = store.content(db)
     session, urls = store.cadence_files(db, target)
-    chosen, _ = matched.choose_blocks(db, session)
+    chosen, _ = vet_choice(db, session, choice)
     ctx = _context(db, session)
-    base = vet_folder(target, session)
+    base = vet_folder(target, session, name)
     base.mkdir(parents=True, exist_ok=True)
     todo = [b for i, b in enumerate(chosen) if i % shard[1] == shard[0] and not (base / f"block_{b:03d}.json").exists()]
     todo = todo if count is None else todo[:count]
@@ -991,21 +1015,32 @@ def vet_run(target, say=print, shard=(0, 1), count=None):
                 f"{sum(r['by'] == 'production' for r in f10)}, pass {sum(r['by'] == 'pass' for r in f10)} "
                 f"(pass unexplained, full checks: {sum(r['by'] == 'pass' and rank(r['store']['verdict']) < 2 for r in f10)})"
                 f"; {rec['times']['block_s']} s", flush=True)
+    after = store.content(db)
     db.close()
+    if after != before:
+        raise yoke.Refusal("INVALID_REQUEST", "the store changed during the checks run: "
+                           + ", ".join(k for k in after if after[k] != before.get(k)))
+    say("the store's content is as it was before the run", flush=True)
 
 
-def vet_tables(target, say=print):
-    db = store.connect()
+def vet_tables(target, say=print, choice=None, name=None):
+    db = store.connect_readonly()
     session, _ = store.cadence_files(db, target)
+    chosen, of = vet_choice(db, session, choice)
     db.close()
-    db = store.connect()
-    chosen, _ = matched.choose_blocks(db, session)
-    db.close()
-    recs = [json.loads(p.read_text(encoding="utf-8")) for p in sorted(vet_folder(target, session).glob("block_*.json"))]
+    recs = [json.loads(p.read_text(encoding="utf-8"))
+            for p in sorted(vet_folder(target, session, name).glob("block_*.json"))]
     recs = [r for r in recs if r.get("format") == 2]
+    extra = sorted({r["block"] for r in recs} - set(chosen))
+    if extra:
+        raise yoke.Refusal("INVALID_REQUEST", f"blocks {extra[:5]} are not in the choice")
+    for r in recs:
+        r["class"] = chosen[r["block"]]
     missing = sorted(set(chosen) - {r["block"] for r in recs})
+    weights = {k: v / sum(of.values()) for k, v in of.items()}
     hours = {k: round(sum(r["times"].get(k, 0) for r in recs) / 3600, 2) for k in ("false_s", "planted_s", "block_s")}
-    out = {"blocks": len(recs), "missing_blocks": missing, "hours": hours}
+    out = {"blocks": len(recs), "missing_blocks": missing, "complete": not missing, "hours": hours,
+           "choice": str(choice) if choice else "matched.choose_blocks", "of": of, "weights": weights}
     # how often a pass candidate's full-checks verdict depends on the reference look
     refs = [x["store"]["by_reference"] for r in recs for c in r["false"].values() for rows in c.values()
             for x in rows if x["by"] == "pass"]
@@ -1025,6 +1060,16 @@ def vet_tables(target, say=print):
                     unexpl += len(matched.shared_hits({"_": [x for x in rows if rank(x[way]["verdict"]) < 2]}))
                 f[cfg] = {"distinct_kept": kept, "distinct_unexplained": unexpl, "per_block_unexplained":
                           round(unexpl / len(recs), 4) if recs else None}
+                if choice and recs:
+                    # weighted by each class's share of the session's blocks, as the frozen rates are
+                    def count(r, cfg=cfg, test=None):
+                        rows = [x for rows in r["false"][c].values() for x in rows if cfg in x["configs"]
+                                and (test is None or test(x))]
+                        return len(matched.shared_hits({"_": rows}))
+                    rng = np.random.default_rng(1)
+                    f[cfg]["weighted_kept"] = matched_tables._rate(recs, count, weights, rng)
+                    f[cfg]["weighted_unexplained"] = matched_tables._rate(
+                        recs, lambda r, cfg=cfg: count(r, cfg, lambda x: rank(x[way]["verdict"]) < 2), weights, rng)
             # planted: of those recovered by three looks, left unexplained by the checks
             p = {}
             for cfg in CONFIGS:
@@ -1040,7 +1085,8 @@ def vet_tables(target, say=print):
                                      "false_association": sum(x["three_looks"] == "false association" for x in cell)})
                 p[cfg] = rows
             out[f"cut_{c}_{way}"] = {"false": f, "planted": p}
-    yoke.write(yoke.DATA / "measurements" / "curved-pass-vetting.json",
+    yoke.write(yoke.DATA / "measurements" / ("curved-pass-vetting.json" if not (choice or name) else
+                                             f"curved-pass-vetting-{target}-{session}-{name or 'choice'}.json"),
                {"target": target, "session": session, **out, "kind": "measured", "experimental": True}, stamp=True)
     say(f"{len(recs)} blocks of {len(chosen)} (missing {missing}); hours {hours}; reference sensitivity "
         f"{out['reference_sensitivity']}")
@@ -1394,8 +1440,12 @@ def main(argv=None):
     v.add_argument("target")
     v.add_argument("--shard", default="0/1")
     v.add_argument("--blocks", type=int)
+    v.add_argument("--choice", help="a file of fixed blocks (data/step10/choice.json, matched's blocks.json)")
+    v.add_argument("--name", help="the records' folder: vet-TARGET-SESSION-NAME (default: no suffix)")
     vt = sub.add_parser("vet-tables")
     vt.add_argument("target")
+    vt.add_argument("--choice")
+    vt.add_argument("--name")
     tb = sub.add_parser("turboseti", help="turboSETI on the same blocks and signals, by three looks")
     tb.add_argument("target")
     tb.add_argument("--shard", default="0/1")
@@ -1413,9 +1463,10 @@ def main(argv=None):
     elif a.cmd == "orbits":
         orbits(a.target, shard=tuple(int(x) for x in a.shard.split("/")), count=a.blocks)
     elif a.cmd == "vet":
-        vet_run(a.target, shard=tuple(int(x) for x in a.shard.split("/")), count=a.blocks)
+        vet_run(a.target, shard=tuple(int(x) for x in a.shard.split("/")), count=a.blocks,
+                choice=a.choice, name=a.name)
     elif a.cmd == "vet-tables":
-        vet_tables(a.target)
+        vet_tables(a.target, choice=a.choice, name=a.name)
     elif a.cmd == "turboseti":
         turbo_run(a.target, shard=tuple(int(x) for x in a.shard.split("/")), count=a.blocks)
     elif a.cmd == "turboseti-tables":

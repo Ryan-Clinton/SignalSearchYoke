@@ -32,6 +32,7 @@ import json
 import platform
 import sqlite3
 import socket
+from pathlib import Path
 from datetime import datetime, timezone
 
 import yoke
@@ -214,6 +215,24 @@ def connect(where=None):
     _migrate(db)
     db.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
     return db
+
+
+def connect_readonly(where=None):
+    """The store opened so that nothing through this connection can write:
+    no schema, no migration, no pragma that writes. For measurements that
+    must leave the store's evidence (checks, candidates, rankings) as it is."""
+    where = Path(where or path()).resolve()
+    db = sqlite3.connect(f"{where.as_uri()}?mode=ro", uri=True, timeout=60)
+    db.row_factory = sqlite3.Row
+    return db
+
+
+def content(db):
+    """Rows and the highest rowid of every table: compared before and after
+    a run that must not change the store."""
+    names = [r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'"
+                                      " AND name NOT LIKE 'sqlite_%' ORDER BY name")]
+    return {n: list(db.execute(f'SELECT count(*), max(rowid) FROM "{n}"').fetchone()) for n in names}
 
 
 MIGRATIONS = [("runs", "search_version", "TEXT"), ("hits", "superseded_run", "INTEGER"),
