@@ -1,12 +1,13 @@
 # Using the whole machine: a spec for parallel runs
 
-Status: proposed, not built. Decided 13 November: Step 10 runs as
-planned (3 workers a stage, the runner unchanged); reproducibility of the
-frozen comparison comes before finishing sooner. Part A is dropped for
-Step 10, and Part B (with Part A's record test) is for after its verdict. Written 12 November 2026, while the checks on the
-curved second pass's candidates run (6 workers) and Step 10 waits behind them
-(docs/comparable.md). Nothing here changes what any measurement computes: the
-aim is the same records, sooner.
+Status: Part B is approved in direction and revised below; nothing is
+built. Decided 13 November: Step 10 runs as planned (3 workers a stage, the
+runner unchanged); reproducibility of the frozen comparison comes before
+finishing sooner. Part A is dropped and kept only as a record; Part B is
+built after Step 10's verdict, in three stages with a test gate between
+each. Written 12 November 2026, revised 14 November after review. Nothing
+here changes what any measurement computes: the aim is the same records,
+sooner.
 
 ## What the machine does now (measured, not assumed)
 
@@ -77,87 +78,141 @@ Checked in the code:
    BLAS threads would oversubscribe, and a BLAS reduction's result can depend
    on its thread count.
 
-## Part A: now, for Step 10, without touching frozen code
+## Part A: dropped (kept as a record, not to be built)
 
-Step 10's code is fingerprinted (config/step10.json): changing matched.py,
-curved_pass.py, independent.py or what they import would mean a third freeze.
-The runner (a PowerShell script outside the repository's code) is not
-fingerprinted, and `--shard i/n` already exists. So:
+Part A proposed changing only Step 10's runner (8-12 workers from free
+memory, staggered starts, BLAS pinned) to finish about half a day sooner. It
+was dropped on 13 November: a new runner, worker environment and archive
+load during a frozen measurement is a risk the time saved does not buy.
+**It must not be implemented for Step 10.** Its proof that a split cannot
+change a record moved to Part B's tests.
 
-1. **Worker count from the machine, at the start of each stage**:
-   n = min(cores − 2, floor((free RAM − 4 GB reserve) / 2.5 GB)), and at most
-   12. With the checks run ended this gives about 12 on this PC, against the 3
-   planned.
-2. **Shard 0 starts first** and the others start once its `blocks.json` exists,
-   closing the race in point 2 above.
-3. **BLAS pinned to one thread** per worker (`OPENBLAS_NUM_THREADS=1`,
-   `OMP_NUM_THREADS=1`, `MKL_NUM_THREADS=1` in the environment).
-4. **The archive**: Step 10's measure and curved stages read the six files
-   from the archive, block by block. With 12 workers the burst could reach
-   72 requests. Proposal: start workers 30 s apart so their fetches fall out of
-   step, and cap n at 8 for the stages that fetch (48 at most, about 5 on
-   average). Open question below.
-5. **Proof that the split cannot change a record**, before Step 10 uses it:
-   re-measure 4 of step 4's blocks (2 clean, 2 crowded) with the new runner at
-   n = 4 and with BLAS pinned, and compare each record with the stored one,
-   field by field, everything except `times` and `finished_utc`. Any
-   difference stops the change; the records are what the comparison rests on.
-6. **Disclosed**: comparable.md says how many workers each stage used and that
-   the split was shown not to change records.
+## Part B: after Step 10's verdict
 
-Expected gain: Step 4's matched blocks took 12.4 h of worker time for 121
-blocks and the curved pass 11.6 h; Step 10 has 61 crowded blocks against
-step 4's 20, so more. At 3 workers each stage is roughly 5–7 h; at 8–12,
-roughly 1.5–2.5 h, the long tail aside. About half a day saved in all.
+One mechanism for every run that goes block by block (matched, curved_pass
+run/orbits/vet/turboSETI/recheck). Two guarantees govern it:
 
-## Part B: after Step 10's verdict, in the code
+- a completed block is scientifically identical whichever worker ran it;
+- a crash cannot turn a missing, partial or conflicting result into a
+  valid measurement.
 
-Once nothing is frozen, one shared mechanism for every run that goes block by
-block (matched, curved_pass run/orbits/vet/turboSETI/recheck, the sweep's
-per-block search where it applies):
+**The scheduler knows no science.** It runs a fixed list of blocks through
+an existing function (`matched.block`, `curved_pass.block`, ...), publishes
+validated records and reports status. It never reads curvature, strength,
+ON/OFF matching, thresholds or verdicts. A change that alters a scientific
+value is a new measurement needing its own validation, not an optimisation.
 
-1. **`--workers auto|N`** on each such command, replacing hand-started shards.
-   `auto` is Part A's formula, with the per-worker memory taken from the
-   previous records' peak (seti.py already measures `_peak_memory_mb`) rather
-   than a fixed 2.5 GB. `--shard i/n` stays for running across machines.
-2. **A shared queue instead of fixed shares**: a worker claims the next block
-   by creating `claims/block_NNN` exclusively (`O_CREAT | O_EXCL`), writing its
-   process id. A claim whose process is gone is taken over. Slow blocks then no
-   longer leave one worker behind. Blocks are claimed in a fixed order, the
-   crowded first (the longest first finishes soonest).
-3. **Atomic records everywhere**: every block record and `blocks.json` written
-   through `yoke.write`; on resume a record counts as done only if it reads as
-   JSON of the run's format, so a partial one is redone.
-4. **One machine-wide archive gate**: a Windows named semaphore
-   (`CreateSemaphoreW`, through ctypes, no new dependency) or, if that proves
-   awkward, a fixed set of lock files, so the cap of 6 (never 8) requests in
-   flight holds across every process, as reading.py's comment intends.
-5. **BLAS pinned** by the worker launcher before numpy is imported.
-6. **What the run records**: the run's own metadata (not the block records)
-   notes the worker count, the BLAS setting and the code commit.
-7. **Inside a block, only if the tail still dominates**: the slow part of a
-   vet block is its planted signals (1,572 s of 1,872), and of its false
-   candidates the 20 choices of three ON looks are independent. Either could be
-   spread across processes. This is the riskier step (the planted part draws
-   from the block's random stream and shares a cache of verdicts), so it is
-   done only if measurement after items 1–6 shows crowded blocks still set the
-   end, with the random draws made up front in order, and the same record test.
-8. **The same tests as Part A's item 5**, for each converted command, against
-   records already stored, plus a test of the queue: kill a worker mid-block,
-   check its claim is taken over and the block redone whole.
+**Order may change, membership never.** Crowded blocks are claimed first
+(the longest first finishes soonest), but which blocks a run covers is
+fixed before it starts (for a frozen experiment, by its config) and never
+depends on any result. The run's report checks that every block of the list
+is present, whenever it ran; an incomplete run never gives a pass or fail
+(as `independent.py verdict` already refuses).
+
+### Stage 1: reliable records (fixed shards kept)
+
+1. **Unique temporary files.** `yoke.write` uses one fixed `.part` name per
+   destination, safe for one writer only. Each publication writes to its own
+   temporary file, created exclusively in the destination folder, validates
+   it, then renames it into place.
+2. **`blocks.json` written once**, by the launching process before any
+   worker starts; workers only read it.
+3. **What a block record must prove before a resume skips it** (else it is
+   redone; a record that fails is moved aside, never deleted):
+
+   | property | requirement |
+   |---|---|
+   | target, session, the six files | exact match |
+   | block index | exact match |
+   | run configuration | matching hash |
+   | scientific code | matching fingerprint (the function closure Step 10 uses) |
+   | seed and number of planted signals | matching |
+   | schema | valid and complete |
+   | state | published by its owner |
+
+   Records written before this (every existing one) lack some of these
+   fields. They are kept as they are and never silently taken as a new
+   run's; a separate, explicit migration adds the identity a record can be
+   shown to have (from its run's metadata and commit), and anything it
+   cannot show stays legacy.
+4. **The run's own metadata** (not the block records) holds the worker
+   count, the BLAS setting, the code commit and the config hash.
+5. **Gate:** interrupting a run at random points (during a block, during a
+   publication) never leaves a partial record counted, nor a block skipped.
+
+### Stage 2: a shared queue
+
+1. **Claims.** A worker claims a block by creating `claims/block_NNN`
+   exclusively. The claim holds the run's id, the block, the worker's
+   identity (process id, the process's creation time, a random id, so a
+   reused process id is not mistaken for the owner), a generation number,
+   and its state (claimed, running, publishing, done, failed).
+2. **Taking over.** A claim is abandoned only when its process (id and
+   creation time) no longer exists; a long block whose worker is alive keeps
+   its claim, however long it runs (no lease expires under a slow crowded
+   block). A worker taking over writes generation n+1 by exclusive creation;
+   only one can win.
+3. **Publishing.** Just before the rename, a worker checks its claim still
+   names it at its generation; a stale worker discards its result. The
+   records are deterministic (each block's own random stream,
+   `default_rng([SEED, k])`), so even a publication racing that check could
+   only write the same scientific content; the check keeps the record's
+   provenance single.
+4. **Admission by memory, per workload.** Each command has its own profile:
+   peak memory a block from earlier records (`seti._peak_memory_mb`), plus
+   headroom. A worker starts a new block only if its estimate fits the free
+   memory; idle workers take more only while memory allows. A heavy vet run
+   runs fewer workers than a search. No worker is killed to free memory.
+5. **BLAS pinned** to one thread per worker before numpy is imported.
+6. **Gate:** two workers never publish one block; a killed worker's claim is
+   taken over and its block redone whole.
+
+### Stage 3: the archive and the process lifecycle
+
+1. **One machine-wide archive limit**, around each HTTP request (where
+   reading.py's per-process gate sits now), so the cap of 6 (never 8) holds
+   across every process. Not a Windows semaphore: a semaphore has no owner,
+   and a killed process's permits are never returned. A pool of 6 named
+   mutexes instead: a waiter is told when a holder died (an abandoned
+   mutex), so no permit is lost. A central download process is the
+   alternative if the mutexes prove awkward.
+2. **Start/resume, status, stop**, independent of any terminal session:
+   status lists workers, the block each holds and for how long, blocks done
+   and failed, memory and throughput, and tells a dead worker from one on a
+   slow block; stop assigns no more work, lets running blocks finish, and
+   only then ends workers.
+3. **Gate:** a worker killed mid-download leaves the others running and the
+   limit never exceeded.
+
+### Tests (before the scheduler becomes the default)
+
+Against records already stored, every scientific field compared (planted
+paths, hits, candidate identities, checks verdicts, recovery classes);
+`times`, `finished_utc` and other timestamps excepted:
+
+- 2 clean and 2 crowded blocks of step 4, and its slowest crowded block;
+- the same blocks at 1, 3 and N workers;
+- a download interrupted; a worker killed during publication; a stale claim
+  taken over.
+
+Any difference in a scientific field stops the change.
+
+### Inside a block, only if the tail still dominates
+
+The slow part of a vet block is its planted signals (1,572 s of 1,872), and
+of its false candidates the 20 choices of three ON looks are independent.
+Spreading either across processes is the riskier step (the planted part
+draws from the block's random stream and shares a cache of verdicts), so it
+is done only if measurement after stages 1-3 shows crowded blocks still set
+the end, with the random draws made up front in order, and the same tests.
 
 Not proposed: threads within a process for the Python-level work (the GIL
 keeps them on one core); a GPU path (new code for the search itself, outside
-this aim); running the sweep's download in parallel beyond the archive cap
-(the server is shared).
+this aim); downloading beyond the archive cap (the server is shared).
 
 ## Open questions
 
-1. Is a cap of 8 workers (48 requests at most, about 5 on average) a fair use
-   of Breakthrough Listen's server for Step 10's fetching stages, or should
-   Part A wait for Part B's machine-wide gate and keep the fetching stages
-   lower?
-2. Is re-measuring 4 of step 4's blocks enough to show the split cannot
-   change a record, or should it be every block of one class?
-3. Should Part A's runner change be disclosed as a change to Step 10's plan
-   (comparable.md), even though no fingerprinted file changes? Proposed: yes.
+1. The archive cap of 6 across the machine is reading.py's own; is it still
+   the right figure once more workers fetch at once?
+2. Across machines (`--shard i/n`) shares stay fixed; is a shared queue
+   across machines worth its cost?

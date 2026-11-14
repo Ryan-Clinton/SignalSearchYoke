@@ -556,7 +556,18 @@ it through `store.done_blocks`, as the rest of the code does (commit
 the choice on runs with `--deviation` (data/step10/deviations.json) and the
 verdict prints it. The rule, its seed and the measuring code are unchanged,
 and the choice follows from the hit counts and seed 10 alone. Measure and
-the curved pass run with 3 workers each.
+the curved pass run with 3 workers each. Both codes are kept: the frozen
+fingerprints in config/step10.json at the commit the verdict names, and the
+commit each stage ran at in deviations.json and the verdict. The verdict
+page is published as generated; its line "fingerprints as frozen" is read
+with the deviation line above it (the code differs from the freeze in that
+one query).
+
+**What it can and cannot show:** both sessions are Green Bank's, and both
+are Breakthrough Listen's spliced spectra from the same pipeline. A result
+that holds has reproduced across two observing sessions of one telescope,
+in different bands and years; it says nothing yet of Parkes, MeerKAT or
+another receiver, nor of an interference environment unlike Green Bank's.
 
 **Done when:** the new session's page is in `docs/results/` and
 `docs/seti.md` says whether step 4's result held there.
@@ -590,6 +601,17 @@ same data, is the open question.
 **Done when:** BLISS's false curve, matched cut and recovery by drift and
 strength are on step 4's page beside the other two, with the signals
 BLISS finds that this search misses listed and explained.
+
+### Step 12: a third session, before any broad claim
+
+Two sessions of one telescope do not make a general claim of greater
+sensitivity. Before one is made, steps 4 and 10's comparison runs, frozen
+the same way, on a third session: another telescope if the archive's
+listing has a whole ON-OFF cadence of one (Parkes, MeerKAT), otherwise a
+markedly different interference environment, chosen from the listing alone
+before any of its spectra are read.
+
+**Done when:** its verdict is published beside step 10's, as generated.
 
 ## 3. What this plan does not do
 
