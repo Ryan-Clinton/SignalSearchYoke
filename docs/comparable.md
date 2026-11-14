@@ -572,6 +572,17 @@ another receiver, nor of an interference environment unlike Green Bank's.
 **Done when:** the new session's page is in `docs/results/` and
 `docs/seti.md` says whether step 4's result held there.
 
+**Done, 14 November 2026 (09:41 UTC):** the page is
+docs/results/HIP17147-AGBT16A_999_192-step10.md, as generated. Recovery
+held (4,337 against 417 of 13,310 in all three ON looks; the curved pass
+2,769 against 389 of 7,260, none of production's lost). Both false rates
+failed: this search 39.1 a block at SNR 30 (13.6-69.2), turboSETI 1.27
+(0.27-2.8), against 0.1; the pass the same as production. This is the
+result, as fixed beforehand. Described after it, not a criterion: 3,890 of
+this search's 3,938 false candidates are in blocks overlapping the known
+satellite bands (GNSS, Inmarsat), 3,654 in 7 blocks (docs/seti.md, "The
+pipelines at matched sensitivity").
+
 ### Step 11: against BLISS, at matched rates
 
 Step 4 shows this search ahead of turboSETI, whose loss at drift was already

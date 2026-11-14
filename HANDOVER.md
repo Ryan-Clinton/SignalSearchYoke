@@ -204,7 +204,8 @@ the default place.
   search recovers 4,520 of 13,310 planted signals in all three ON looks,
   turboSETI 442 (docs/seti.md, "The pipelines at matched sensitivity").
   The cuts were chosen on the same blocks, so step 10 (fixed beforehand:
-  SNR 30 both, another session's whole cadence) tests them unchanged.
+  SNR 30 both, another session's whole cadence) tested them unchanged:
+  recovery held, the false rate did not (below).
   Step 5 is done (11 November 2026, `ranking.py`): every candidate
   ranked by the sum of the checks' chances (nothing fitted); planted
   signals rank ahead of every real candidate as often as they are kept,
@@ -230,9 +231,12 @@ the default place.
   the pass's 9,118 of 16,335 at cut 30, controls holding. The checks on
   the pass's candidates (12 Nov, 121 blocks): it adds no unexplained false
   candidate, and the checks keep 42% of its recovered signals against 43%
-  of production's. Next: step 10 (swept and chosen 13 Nov; measuring, one logged plumbing deviation)
-  (frozen in `config/step10.json`: HIP17147 AGBT16A_999_192, L band, 2016;
-  `independent.py`), before any change to `onoff.py`.
+  of production's. Step 10 (14 Nov; HIP17147 AGBT16A_999_192, L band,
+  2016, frozen in `config/step10.json`, one logged query-fix deviation):
+  recovery held (4,337 against turboSETI's 417 of 13,310; the pass 2,769
+  against 389 curved), both false rates failed at SNR 30 (this search 39.1
+  a block, turboSETI 1.27, limit 0.1), 3,890 of 3,938 in blocks touching
+  the known satellite bands; docs/results/HIP17147-AGBT16A_999_192-step10.md.
 - **Real signals:** Voyager 1's carrier and sidebands found at turboSETI's
   published frequencies and drifts, the drift the Earth's; wide signals
   (its 322 Hz sidebands) are tiled with many hits, a known gap. HIP 91699's

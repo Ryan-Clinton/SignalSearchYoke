@@ -1000,13 +1000,58 @@ Below 0.026 a block only turboSETI was measured (203 at its cut of 50,
 its SNR falls (it finds none there at the matched cut), but this search
 also recovers five times as many near zero drift.
 
+**On another session (step 10, 14 November 2026): recovery held, the
+false rate did not.** HIP17147, AGBT16A_999_192 (L band, 2016, the same
+telescope), every choice fixed beforehand in config/step10.json, one logged
+deviation (a query fix, comparable.md step 10); the page as generated is
+docs/results/HIP17147-AGBT16A_999_192-step10.md. At SNR 30:
+
+| | false a block (95%) | recovered in all three ON looks |
+|---|---|---|
+| this search | 39.1 (13.6-69.2) | 4,337 of 13,310 |
+| turboSETI | 1.27 (0.27-2.8) | 417 of 13,310 |
+| step 4, for comparison | 0.068 and 0.049 | 4,520 and 442 |
+
+- **Recovery reproduced:** this search ahead of turboSETI with the
+  intervals apart (paired, 3,925 by this search alone, 5 by turboSETI
+  alone; difference +0.294, 0.284-0.304), close to step 4's figures. The
+  curved pass held both its recovery criteria (2,769 against production's
+  389 of 7,260 curved signals; none of production's lost).
+- **The false rate failed, for both pipelines,** this search's by far the
+  more: 39 a block against the limit of 0.1. The pass adds almost nothing
+  to it (39.2 against 39.1) but fails with production. As fixed
+  beforehand, this is the result; it is not mended by a new cut, rule or
+  blocks. SNR 30 does not hold this search at 0.1 a block on this session,
+  so the matched comparison of step 4 (both at 0.1) is not reproduced here.
+- **Where the false candidates are** (described after the verdict, not a
+  criterion; counts are distinct candidates at SNR 30 by shared hits, as
+  the rate counts them, before the full checks): 3,890 of 3,938 are in
+  blocks overlapping check 3's known bands, satellite navigation (GPS L1
+  and L5, Galileo, BeiDou) and mobile satellites (Inmarsat), and 7 blocks
+  hold 3,654 (1,602 MHz 783, 1,198 MHz 733, 1,531 MHz 713, 1,180 MHz 513,
+  1,201 MHz 473, 1,183 MHz 356, 1,186 MHz 83). Outside the listed bands
+  the 27 crowded blocks have 46 (1.7 a block, 27 of them in one block at
+  1,376-1,379 MHz) and the 50 clean ones 2. So the cadence test alone does
+  not reject these satellites' signals at L band, as it did the interference
+  of step 4's S-band session; and even outside the listed bands the
+  crowded blocks are above 0.1.
+- **Not measured yet:** how many of them the full checks leave unexplained
+  (check 3 marks every one in a listed band "indicated", for a person).
+  The frozen measurement is the cadence test's output, as step 4's was.
+- **What it means for the claims:** "recovers about ten times as many
+  planted signals as turboSETI at SNR 30" held on a second session. "At a
+  matched false rate of 0.1 a block" did not: at L band, at SNR 30,
+  neither pipeline reached it, and this search's cadence test passes far
+  more satellite interference than turboSETI's. Both sessions are Green
+  Bank's (comparable.md step 12).
+
 What this does not show: it is one session at one telescope, and blocks
 near each other share interference, so the intervals describe this sample
 of blocks, not observations in general; the recovery intervals are for
 signals, which within a block are not independent either. The cuts were
 chosen on the same blocks they are judged on, so they may be optimistic
-for another session; comparable.md step 10 tests them, fixed beforehand,
-on one. turboSETI's
+for another session; comparable.md step 10 tested them, fixed beforehand,
+on one, and the false rate did not hold there (above). turboSETI's
 three-look recovery uses its own hit tables at the cut (its event table
 does not list every look), so which hits its events used is not
 recorded. Two false candidates of this search that the checks left
@@ -1697,8 +1742,9 @@ cut 30, with the same number left.) What this says:
   this search is the band list's coverage first and the other checks'
   cost (about 10%) second; a signal in a listed band is left for a person,
   marked, not discarded. At cut 10 the same: outside the bands 91%
-  (straight) and 89% (curved, the pass) are left. Whether Step 10's L band
-  shows the same split is left open.
+  (straight) and 89% (curved, the pass) are left. Step 10's L band put
+  3,890 of its 3,938 false candidates at SNR 30 in blocks overlapping the
+  listed bands (above); the full checks have not been run on them.
 - **The reference look matters for 7.7%.** Of 14,732 pass candidates
   checked with each member look as the reference, 1,131 change between
   explained and unexplained. The tables use the strongest member, as for
