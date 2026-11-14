@@ -133,6 +133,74 @@ def _near_any(sorted_values, targets, tol):
     return bool(np.any(gap <= tol))
 
 
+_SLACK_MHZ = 1e-6   # check 8's lookups take hits within the tolerance plus 1 Hz; the exact test then decides
+
+
+def _relations_and_chance(f, freqs, strong0, trials=200):
+    """Check 8: the relations of f to the session's hits (harmonics within
+    1 kHz, clock-multiple spacings, a·f1 ± b·f2 of strong zero-drift hits),
+    and the share of `trials` random frequencies in the band with any.
+
+    The hits are sorted once and only those near each target are tested,
+    with the same expression as a scan of every hit, so the answers are the
+    same; a random trial stops at its first relation, since only whether it
+    has one counts. (Before 15 Nov 2026 every target scanned every hit and
+    every trial found every relation: the same results, at L band's 445,000
+    hits about 170 s a candidate.)"""
+    if not len(freqs):
+        return [], 0.0
+    fs = np.sort(freqs)
+    strong_sorted = np.sort(strong0)
+    lo_band, hi_band = float(fs[0]), float(fs[-1])
+    tol_mhz = TOLERANCE_HZ / 1e6
+
+    def relations(x, first=False):
+        found = []
+        for n in HARMONICS:
+            for target_f, kind in ((x * n, f"x{n}"), (x / n, f"/{n}")):
+                if lo_band <= target_f <= hi_band:
+                    i, j = np.searchsorted(fs, [target_f - tol_mhz - _SLACK_MHZ, target_f + tol_mhz + _SLACK_MHZ])
+                    if np.any(np.abs(fs[i:j] - target_f) <= tol_mhz):
+                        found.append(kind)
+                        if first:
+                            return found
+        span = max(abs(hi_band - x), abs(x - lo_band))
+        for clock in CLOCKS_MHZ:
+            ks = np.arange(1, int(span / clock) + 2)
+            centres = np.concatenate([x + ks * clock, x - ks * clock])
+            lo = np.searchsorted(fs, centres - tol_mhz - _SLACK_MHZ)
+            hi = np.searchsorted(fs, centres + tol_mhz + _SLACK_MHZ)
+            keep = hi > lo
+            if keep.any():
+                sub = fs[np.unique(np.concatenate([np.arange(a, b) for a, b in zip(lo[keep], hi[keep])]))]
+                m = np.round(np.abs(sub - x) / clock)
+                if ((m >= 1) & (np.abs(np.abs(sub - x) - m * clock) <= tol_mhz)).any():
+                    found.append(f"{clock:g} MHz spacing")
+                    if first:
+                        return found
+        if len(strong_sorted) >= 2:
+            # a·f1 − b·f2 = x or a·f1 + b·f2 = x: for each f1 the f2 it
+            # needs, looked up in the sorted list (the same test as every
+            # pair, without the N×N tables a whole sweep makes too big); a
+            # need beyond the strong hits' range by more than the tolerance
+            # cannot match and is not looked up.
+            s_lo, s_hi = strong_sorted[0], strong_sorted[-1]
+            for a in (1, 2, 3):
+                for b in (1, 2, 3):
+                    t = tol_mhz / b
+                    need = np.concatenate([(a * strong_sorted - x) / b, (x - a * strong_sorted) / b])
+                    need = need[(need >= s_lo - t - _SLACK_MHZ) & (need <= s_hi + t + _SLACK_MHZ)]
+                    if len(need) and _near_any(strong_sorted, need, t):
+                        found.append(f"{a}f1+-{b}f2")
+                        if first:
+                            return found
+        return found
+
+    rng = np.random.default_rng(int(f * 1e6) % (2 ** 32))
+    chance = sum(bool(relations(float(rng.uniform(lo_band, hi_band)), first=True)) for _ in range(trials)) / trials
+    return relations(f), chance
+
+
 def _recur_window(drift, dt):
     """The width check 6 accepts a match in, for a file dt seconds away: two
     windows of 100 Hz plus the drift's travel, one where the drift carries
@@ -338,38 +406,10 @@ def vet(event, looks, target=None, others=(), session_hits=(), report_dir=None, 
     freqs = np.array([h["frequency_mhz"] for h in session_hits]) if session_hits else np.array([])
     strong0 = np.array([h["frequency_mhz"] for h in session_hits
                         if abs(h["drift_hz_s"]) < step and h["snr"] >= 20]) if session_hits else np.array([])
-    strong_sorted = np.sort(strong0)
     lo_band = float(freqs.min()) if len(freqs) else f - 1
     hi_band = float(freqs.max()) if len(freqs) else f + 1
-
-    def relations(x):
-        found = []
-        if len(freqs):
-            tol_mhz = TOLERANCE_HZ / 1e6
-            for n in HARMONICS:
-                for target_f, kind in ((x * n, f"x{n}"), (x / n, f"/{n}")):
-                    if lo_band <= target_f <= hi_band and np.any(np.abs(freqs - target_f) <= tol_mhz):
-                        found.append(kind)
-            for clock in CLOCKS_MHZ:
-                m = np.round(np.abs(freqs - x) / clock)
-                ok = (m >= 1) & (np.abs(np.abs(freqs - x) - m * clock) <= tol_mhz)
-                if ok.any():
-                    found.append(f"{clock:g} MHz spacing")
-            if len(strong0) >= 2:
-                # a·f1 − b·f2 = x or a·f1 + b·f2 = x: for each f1 the f2 it
-                # needs, looked up in the sorted list (the same test as every
-                # pair, without the N×N tables a whole sweep makes too big).
-                for a in (1, 2, 3):
-                    for b in (1, 2, 3):
-                        need = np.concatenate([(a * strong_sorted - x) / b, (x - a * strong_sorted) / b])
-                        if _near_any(strong_sorted, need, tol_mhz / b):
-                            found.append(f"{a}f1+-{b}f2")
-        return found
-    rel = relations(f)
-    rng = np.random.default_rng(int(f * 1e6) % (2 ** 32))
     trials = 200
-    chance8 = (sum(bool(relations(float(rng.uniform(lo_band, hi_band)))) for _ in range(trials)) / trials
-               if len(freqs) else 0.0)
+    rel, chance8 = _relations_and_chance(f, freqs, strong0, trials)
     strength8 = ("indicated" if rel and chance8 < CHANCE_SMALL else "coincidence possible" if rel else None)
     checks.append(_check(8, "harmonics and intermodulation", ", ".join(rel) if rel else "none found", strength8,
                          relations=rel, chance=round(chance8, 3), hits_compared=int(len(freqs)),
