@@ -1058,6 +1058,36 @@ docs/results/HIP17147-AGBT16A_999_192-step10.md. At SNR 30:
   criterion: the frozen rate is the cadence test's output, and a later
   checks result is a separate, post-hoc measurement, never a substitute
   for it.
+- **Measured (2026-11-15), post hoc, the verdict unchanged:** the checks
+  on step 10's 121 blocks and on step 4's 121 again, the same code, the
+  store opened read-only and unchanged by both runs. Production's row,
+  distinct wrong-choice candidates kept by the cadence test and those the
+  checks leave unexplained, and planted signals recovered and still kept
+  after the checks:
+
+  | Session | Cut | False kept | Unexplained: uniform / measured / store | Planted recovered | Kept after the full checks |
+  |---|---|---|---|---|---|
+  | HIP17147 (step 10, L band) | 10 | 10,836 | 86 / 65 / 8 | 6,174 | 4,076 (66%) |
+  | HIP17147 | 30 | 3,938 | 13 / 14 / 0 | 3,729 | 2,456 (66%) |
+  | KIC8462852 (step 4, S band) | 10 | 991 | 24 / 6 / 3 | 6,749 | 2,838 (42%) |
+  | KIC8462852 | 30 | 21 | 3 / 0 / 0 | 4,078 | 1,735 (43%) |
+
+  - The full checks reduce step 10's thousands of false candidates to 8
+    at SNR 10 and none at SNR 30, as they do step 4's. This was not a
+    criterion fixed beforehand, and it does not change step 10's result.
+  - What they cost differs: on step 10's blocks a third of the recovered
+    planted signals are rejected with them, on step 4's more than half.
+    Which checks reject the planted signals, and whether that rests on
+    the band list rather than the looks, is not yet broken down.
+  - Step 4's blocks again: every figure the same as the first run, except
+    that the full checks now reject 2 to 5 more planted signals a row
+    (2,841 to 2,838 at SNR 10, 1,737 to 1,735 at SNR 30), the recurrence
+    from the second session now in the store. The run took 12.7 hours of
+    blocks against the first's 61.8 (check 8 looks hits up by index).
+  - The pass adds 1 to 3 false candidates on step 4's blocks, none left
+    unexplained by the full checks; on both sessions the pass's rows
+    follow production's (data/logs/vet-step10-tables.log,
+    vet-same-store-tables.log).
 - **Not done: masking the bands.** Leaving the listed bands out would
   lower the rate by making a blind spot where the interference is worst,
   and a transmitter of interest could sit there too. Any change that

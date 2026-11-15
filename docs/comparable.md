@@ -583,8 +583,11 @@ this search's 3,938 false candidates are in blocks overlapping the known
 satellite bands (GNSS, Inmarsat), 3,654 in 7 blocks (docs/seti.md, "The
 pipelines at matched sensitivity"); 3,888 lie inside a listed band by their
 own frequencies. The full checks on the same 121 blocks, and again on step
-4's with the same code and store, are measured next (post hoc, apart from
-the verdict, which stands). No band is masked, and the cadence test is not
+4's with the same code and store, were measured after it (post hoc, apart
+from the verdict, which stands; docs/seti.md): the full checks leave 8 of
+step 10's false candidates unexplained at SNR 10 and none at SNR 30, and
+keep 66% of the recovered planted signals there, against 42-43% on step
+4's blocks. No band is masked, and the cadence test is not
 changed, until the evidence that separates these signals from planted ones
 is known.
 
