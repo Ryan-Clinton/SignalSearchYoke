@@ -624,11 +624,13 @@ failure is the Cap'n Proto hit-file round trip ("bad optional access"),
 which is not used here (hits are read through its Python module).
 - **Its files need one attribute ours lack:** `DIMENSION_LABELS` on the
   data set; added to BLISS's own copy of each slice, the spectra
-  unchanged. A block is one Green Bank coarse channel less its last
-  channel (it starts on the boundary: block 34's first channel is 273 x
-  2^20), so that channel is padded with a copy of its neighbour and BLISS
-  is given the whole coarse channel, which lets its own channelization
-  and passband equalizer apply.
+  unchanged. A block is one Green Bank coarse channel less one channel:
+  `seti.blocks` gives it as MHz, and read back it starts on the coarse
+  channel's first channel (block 34's is 273 x 2^20) or one after (block
+  13's), as the rounding falls. The missing channel, last or first, is
+  padded with a copy of its neighbour (fch1 moved back a channel when it is
+  the first), and BLISS is given the whole coarse channel, which lets its
+  own channelization and passband equalizer apply.
 - **Its authors' pipeline, from `bliss_find_hits` and its defaults:**
   normalize; equalize the passband with the Green Bank channel response
   its own tool makes (`bliss_generate_channelizer_response -f 1048576 -N

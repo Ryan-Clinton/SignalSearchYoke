@@ -9,8 +9,9 @@ block as seti.save writes it: one Green Bank coarse channel less its last
 channel. CUTS: comma-separated SNRs. CHOICES: "all" (the 20 choices of three
 ON looks) or "true" (0,2,4 only).
 
-Each slice is copied with the coarse channel's last channel padded (a copy
-of its neighbour) and the DIMENSION_LABELS attribute BLISS reads, the
+Each slice is copied with the coarse channel's missing channel padded (a
+copy of its neighbour; the last, or the first with fch1 moved back a
+channel, as the block was read) and the DIMENSION_LABELS attribute BLISS reads, the
 spectra otherwise unchanged. Each look then goes through bliss_find_hits's
 own steps and defaults on the GPU (normalize; the passband equalized with
 the Green Bank response from bliss_generate_channelizer_response -f 1048576
@@ -59,12 +60,18 @@ def padded(src, out):
             d.attrs[k] = v
         x = s["data"][:]
         assert x.shape[2] == PER_COARSE - 1, f"{src}: {x.shape[2]} channels, not one coarse channel less one"
-        assert int(s["data"].attrs.get("first_channel", 0)) % PER_COARSE == 0, f"{src}: not on a coarse boundary"
-        x = np.concatenate([x, x[:, :, -1:]], axis=2)
+        # seti.blocks gives a block as MHz; read back, it starts on the coarse channel's first channel or one
+        # after (the rounding differs by block), so the missing channel is the last or the first
+        offset = int(s["data"].attrs.get("first_channel", 0)) % PER_COARSE
+        assert offset in (0, 1), f"{src}: starts {offset} channels into its coarse channel"
+        x = np.concatenate([x, x[:, :, -1:]] if offset == 0 else [x[:, :, :1], x], axis=2)
         ds = d.create_dataset("data", data=x)
         for k, v in s["data"].attrs.items():
             ds.attrs[k] = v
         ds.attrs["nchans"] = x.shape[2]
+        if offset:
+            ds.attrs["fch1"] = float(s["data"].attrs["fch1"]) - float(s["data"].attrs["foff"])
+            ds.attrs["first_channel"] = int(s["data"].attrs["first_channel"]) - 1
         ds.attrs["DIMENSION_LABELS"] = np.array([b"time", b"feed_id", b"frequency"], dtype=object)
     return out
 
