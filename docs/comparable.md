@@ -624,8 +624,33 @@ failure is the Cap'n Proto hit-file round trip ("bad optional access"),
 which is not used here (hits are read through its Python module).
 - **Its files need one attribute ours lack:** `DIMENSION_LABELS` on the
   data set; added to BLISS's own copy of each slice, the spectra
-  unchanged. A block is given as one coarse channel (its 1,048,575
-  channels), so the coarse-channel edge flagging is not applied.
+  unchanged. A block is one Green Bank coarse channel less its last
+  channel (it starts on the boundary: block 34's first channel is 273 x
+  2^20), so that channel is padded with a copy of its neighbour and BLISS
+  is given the whole coarse channel, which lets its own channelization
+  and passband equalizer apply.
+- **Its authors' pipeline, from `bliss_find_hits` and its defaults:**
+  normalize; equalize the passband with the Green Bank channel response
+  its own tool makes (`bliss_generate_channelizer_response -f 1048576 -N
+  12 -M 256`, the recipe it prints for GBT); flag by spectral kurtosis
+  (0.25, 50, 2) and sigma clipping (5 iterations, 3, 4); the noise by its
+  masked standard deviation; the drift search desmeared; hits by
+  connected components at neighbour distance 7; its hit filter (zero
+  drift and sigma-clip filters on). Changed for the comparison: the drift
+  range, ±4 Hz/s like the others (its default is ±5). The README's
+  Python example (no normalizing or equalizing, the coarse channel
+  unrecognised) was tried first: its noise estimate took in the passband's
+  shape (the standard deviation 3.3 times a robust one), and no hit on
+  block 34's first look passed SNR 13.3; through `bliss_find_hits`'s
+  steps the same look gives 402 hits at SNR 10 (162 after its filter),
+  the strongest at 51.8, in about 9 s a look and cut on the GPU. The
+  backend comparison below was made with the README's example.
+- **Its event stage, ported:** its own, on a whole block, held every pair
+  of hits it compared in a cache until the 35 GB WSL has ran out (killed
+  by the kernel). `tools/bliss/bliss_events.py` is the same algorithm line
+  for line, run on hits found once; on block 34 cut to 65,535 channels,
+  on the CPU backend, it gives BLISS's own 5 events exactly. It is fed the
+  hits in a fixed order (by channel, then drift), so it repeats.
 - **One change to its code, for speed only:**
   `tools/bliss/event_search_off_hits_once.patch`. A scan does not keep its
   hits, so each `hits()` call runs the drift search again, and its event
