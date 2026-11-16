@@ -686,8 +686,19 @@ which is not used here (hits are read through its Python module).
     block counts as done only when its record parses and has this
     configuration, so a record cut short or made by other code is run
     again. A block BLISS fails on (an error, or more than 4 hours) is
-    recorded as failed with the error and the run goes on; the tables name
-    every failed block. Crowded blocks run first. Where it runs (the WSL
+    recorded as failed with the error and the run goes on; it is tried
+    once more on the next run (a failure caused by WSL stopping or the
+    machine restarting is not BLISS's), and counts as failed after two;
+    the tables name every failed block. Crowded blocks run first.
+  - **Stops and restarts:** the run holds an OS lock on `bliss/run_i.lock`
+    while it lives (freed however it ends), so a second run beside it is
+    refused. Each block's unplanted half is kept under `bliss/partial/`
+    until the block is recorded, so a stop loses at most the planted half
+    of one block. `tools/jobs.ps1` runs a queue of such commands
+    (`data/jobs.txt`) one after another, takes a job off only when it exits
+    cleanly, tries a failing one three times, and runs only once at a
+    time; with `-Install` it also starts at every logon, so after a power
+    cut it picks up at the next logon. Where it runs (the WSL
     distribution, BLISS's Python, the CUDA libraries) are settings
     (`SSY_BLISS_DISTRO`, `SSY_BLISS_PYTHON`, `SSY_BLISS_LD_PATH`; and
     `BLISS_PYTHON_DIR`, `BLISS_RESPONSE`, `BLISS_DEVICE` for the adapter),

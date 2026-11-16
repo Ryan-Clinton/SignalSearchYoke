@@ -691,15 +691,40 @@ def _bliss_tool(out, which, paths, tones=None):
     return json.loads(Path(out).read_text(encoding="utf-8"))
 
 
+BLISS_ATTEMPTS = 2
+
+
 def bliss_done(path, config):
     """A block's BLISS record that parses and was made with this
-    configuration (a failure recorded with it counts as done, and is
-    reported)."""
+    configuration. A failure counts as done (and is reported) once it has
+    failed BLISS_ATTEMPTS times: a run cut off by WSL stopping or the
+    machine restarting is tried again, not recorded as BLISS's failure."""
     try:
         r = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return False
-    return r.get("config") == config and ("failed" in r or len(r.get("tones", [])) == TONES)
+    if r.get("config") != config:
+        return False
+    return r.get("attempts", 1) >= BLISS_ATTEMPTS if "failed" in r else len(r.get("tones", [])) == TONES
+
+
+def _run_lock(path):
+    """Hold an OS lock on `path` for the life of the process (released by the
+    OS however the process ends, a power cut included); refused if another
+    run holds it, so a restart cannot run beside a run still going."""
+    f = open(path, "a+")
+    try:
+        if sys.platform == "win32":
+            import msvcrt
+            f.seek(0)
+            msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        f.close()
+        raise yoke.Refusal("INVALID_REQUEST", f"another run holds {path}") from None
+    return f
 
 
 def _bliss_kept(rows):
@@ -747,6 +772,9 @@ def add_bliss(target, say=print, shard=(0, 1), count=None):
     db.close()
     base, out = folder(target, session), bliss_folder(target, session)
     out.mkdir(parents=True, exist_ok=True)
+    lock = _run_lock(out / f"run_{shard[0]}.lock")  # noqa: F841 -- held until the process ends
+    partial = out / "partial"  # a block's unplanted half, kept so a stop mid-block loses at most the planted half
+    partial.mkdir(exist_ok=True)
     config = bliss_config()
     block_list = seti.blocks(seti.reading.prepare(urls[:1])[0])
     recs = sorted(base.glob("block_*.json"))
@@ -786,8 +814,18 @@ def add_bliss(target, say=print, shard=(0, 1), count=None):
                 raise yoke.Refusal("INVALID_REQUEST", f"block {rec['block']}: signals not where recorded: {moved[:3]}")
             shutil.rmtree(work, ignore_errors=True)
             try:
-                plain_paths = [seti.save(c["s"], work / "plain" / f"{j}.h5") for j, c in enumerate(cad)]
-                plain = _bliss_tool(work / "bliss_plain.json", "all", plain_paths)
+                kept = partial / p.name
+                try:
+                    k = json.loads(kept.read_text(encoding="utf-8"))
+                    plain = k["plain"] if k["config"] == config else None
+                except (OSError, ValueError, KeyError):
+                    plain = None
+                if plain is None:
+                    plain_paths = [seti.save(c["s"], work / "plain" / f"{j}.h5") for j, c in enumerate(cad)]
+                    plain = _bliss_tool(work / "bliss_plain.json", "all", plain_paths)
+                    yoke.write(kept, {"config": config, "plain": plain}, indent=None)
+                else:
+                    log(f"block {rec['block']}: unplanted half from before a stop")
                 planted = plant(cad, rec["tones"])
                 planted_paths = [seti.save(dict(x["s"], spectra=x["spectra"]), work / "planted" / f"{j}.h5")
                                  for j, x in enumerate(planted)]
@@ -797,11 +835,17 @@ def add_bliss(target, say=print, shard=(0, 1), count=None):
                 (work / "tones.json").write_text(json.dumps(tracks), encoding="utf-8")
                 bp = _bliss_tool(work / "bliss_planted.json", "true", planted_paths, tones=work / "tones.json")
             except (yoke.Refusal, subprocess.TimeoutExpired, OSError, ValueError) as e:
+                try:
+                    before = json.loads((out / p.name).read_text(encoding="utf-8"))
+                    tries = before.get("attempts", 1) if before.get("config") == config and "failed" in before else 0
+                except (OSError, ValueError):
+                    tries = 0
                 yoke.write(out / p.name, {"format": FORMAT, "block": rec["block"], "class": rec["class"],
-                                          "config": config, "failed": str(e)[-600:],
+                                          "config": config, "failed": str(e)[-600:], "attempts": tries + 1,
                                           "finished_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())},
                            indent=None)
-                log(f"block {rec['block']} ({rec['class']}): BLISS FAILED, recorded as failed: {str(e)[-200:]}")
+                log(f"block {rec['block']} ({rec['class']}): BLISS FAILED (attempt {tries + 1} of "
+                    f"{BLISS_ATTEMPTS}): {str(e)[-200:]}")
                 continue
             finally:
                 shutil.rmtree(work, ignore_errors=True)
@@ -853,6 +897,7 @@ def add_bliss(target, say=print, shard=(0, 1), count=None):
                    "peak_mb": {"plain": plain["peak_mb"], "planted": bp["peak_mb"]},
                    "finished_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
             yoke.write(out / p.name, res, indent=None)
+            kept.unlink(missing_ok=True)
             n, pub = len(tones_out), ck(PUBLISHED["turboseti"])
             log(f"block {rec['block']} ({rec['class']}): at SNR 10, BLISS recovered "
                 f"{sum(x['bliss'][pub]['three_looks'] == 'recovered' for x in tones_out)}/{n} in all three ON "
