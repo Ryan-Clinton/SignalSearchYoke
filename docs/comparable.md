@@ -640,6 +640,21 @@ which is not used here (hits are read through its Python module).
   from run to run (1 to 3 of 26 on the same cut); and the two backends
   disagree on the same look (78 hits on the CPU at SNR 10, 108 on the GPU;
   5 events against 26).
+- **Where the backends part (measured on that look):** the same mask, noise
+  estimates within a few parts per million, and the same drift plane except
+  within about 420 channels of either end, where a track runs off the band
+  (the CPU writes zeros there, the GPU a partial sum). The hits differ in
+  the grouping: both grow a hit from a cell above the cut through every
+  neighbouring cell above half of it, the CPU by flooding each region to
+  the end, the GPU by labelling cells in parallel. All 77 CPU hits away
+  from the edges are among the GPU's; the GPU's 29 others (one at SNR 20)
+  lie between channels 46,000 and 59,600, where the CPU reports a single
+  hit, at the band's edge (SNR 31.8). Most likely one large region above
+  half the cut, flooded into one hit on the CPU; not yet confirmed.
+- **So the GPU backend is the one compared** (the one its README runs, and
+  the only one fast enough), with this said beside its figures; its hits
+  go through this search's cadence test as well as its own event stage,
+  and the event stage's run-to-run spread is measured, not hidden.
 
 **Done when:** BLISS's false curve, matched cut and recovery by drift and
 strength are on step 4's page beside the other two, with the signals
