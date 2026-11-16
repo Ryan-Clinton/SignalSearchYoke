@@ -39,6 +39,87 @@ def distance(a, b):
             + SNR_DIFFERENCE_WEIGHT * snr_difference)
 
 
+FIELDS = ("start_freq_MHz", "drift_rate_Hz_per_sec", "snr", "start_time_sec", "duration_sec")
+
+
+def _arrays(hits):
+    import numpy as np
+    return {k: np.array([h[k] for h in hits], dtype=np.float64) for k in FIELDS}
+
+
+def _distance_to_many(a, b):
+    """distance(a, b) for one hit a (dict) against arrays b, as distance()."""
+    import numpy as np
+    da, db = a["drift_rate_Hz_per_sec"], b["drift_rate_Hz_per_sec"]
+    drift_difference = np.abs(da - db) / (EPS + da * da + db * db)
+    first = np.minimum(a["start_time_sec"], b["start_time_sec"])
+    last = np.maximum(a["start_time_sec"] + b["duration_sec"], b["start_time_sec"] + b["duration_sec"])
+    rendezvous = (last + first) / 2
+    fa = a["start_freq_MHz"] * 1e6 + da * (rendezvous - a["start_time_sec"])
+    fb = b["start_freq_MHz"] * 1e6 + db * (rendezvous - b["start_time_sec"])
+    return (FREQ_LOCALIZATION_WEIGHT * np.abs(fa - fb) + DRIFT_ERROR_WEIGHT * drift_difference * drift_difference
+            + SNR_DIFFERENCE_WEIGHT * np.abs(a["snr"] - b["snr"]))
+
+
+def _many_to_one(a, b):
+    """distance(a_i, b) for arrays a against one hit b (dict), as distance()."""
+    import numpy as np
+    da, db = a["drift_rate_Hz_per_sec"], b["drift_rate_Hz_per_sec"]
+    drift_difference = np.abs(da - db) / (EPS + da * da + db * db)
+    first = np.minimum(a["start_time_sec"], b["start_time_sec"])
+    last = np.maximum(a["start_time_sec"] + b["duration_sec"], b["start_time_sec"] + b["duration_sec"])
+    rendezvous = (last + first) / 2
+    fa = a["start_freq_MHz"] * 1e6 + da * (rendezvous - a["start_time_sec"])
+    fb = b["start_freq_MHz"] * 1e6 + db * (rendezvous - b["start_time_sec"])
+    return (FREQ_LOCALIZATION_WEIGHT * np.abs(fa - fb) + DRIFT_ERROR_WEIGHT * drift_difference * drift_difference
+            + SNR_DIFFERENCE_WEIGHT * np.abs(a["snr"] - b["snr"]))
+
+
+def event_search_fast(on_scans, off_scans):
+    """event_search, the same steps on arrays: the same events."""
+    import numpy as np
+    on_hits = [list(h) for _, _, h in on_scans]
+    on_arr = [_arrays(h) for h in on_hits]
+    alive = [np.ones(len(h), dtype=bool) for h in on_hits]
+    off_arr = [_arrays(o) for o in off_scans if len(o)]
+    events = []
+    for i, (tstart, tdur, _) in enumerate(on_scans):
+        for start in [on_hits[i][k] for k in np.flatnonzero(alive[i])]:     # those earlier looks left
+            ev = {"hits": [start], "average_power": start["power"], "average_snr": start["snr"],
+                  "average_drift_rate_Hz_per_sec": start["drift_rate_Hz_per_sec"],
+                  "event_start_seconds": tstart * SECONDS_PER_DAY,
+                  "starting_frequency_Hz": start["start_freq_MHz"] * 1e6,
+                  "event_end_seconds": tstart * SECONDS_PER_DAY + tdur}
+            for j in range(i + 1, len(on_scans)):
+                idx = np.flatnonzero(alive[j])
+                if not len(idx):
+                    continue
+                sub = {k: v[idx] for k, v in on_arr[j].items()}
+                low = None
+                for h in ev["hits"]:
+                    d = _distance_to_many(h, sub)
+                    low = d if low is None else np.minimum(low, d)
+                k = int(np.argmin(low))
+                if low[k] < MATCH:
+                    alive[j][idx[k]] = False
+                    ev["hits"].append(on_hits[j][idx[k]])
+            in_off = 0
+            for off in off_arr:
+                total = None
+                for h in ev["hits"]:
+                    d = _many_to_one(off, h)
+                    total = d if total is None else total + d
+                in_off += int(np.count_nonzero(total / len(ev["hits"]) < MATCH))
+            if len(ev["hits"]) > 1 and in_off == 0:
+                n = len(ev["hits"])
+                ev["average_drift_rate_Hz_per_sec"] = sum(h["drift_rate_Hz_per_sec"] for h in ev["hits"]) / n
+                ev["average_power"] = sum(h["power"] for h in ev["hits"]) / n
+                ev["average_bandwidth"] = sum(h["bandwidth"] for h in ev["hits"]) / n
+                ev["average_snr"] = sum(h["snr"] for h in ev["hits"]) / n
+                events.append(ev)
+    return events
+
+
 def event_search(on_scans, off_scans):
     """on_scans: [(tstart_mjd, tduration_s, [hit, ...]), ...] in time order;
     off_scans: [[hit, ...], ...]. The events, as BLISS's event_search."""
