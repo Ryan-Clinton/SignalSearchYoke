@@ -1,0 +1,31 @@
+diff --git a/bliss/drift_search/event_search.cpp b/bliss/drift_search/event_search.cpp
+index 94d4ea7..a3c463c 100644
+--- a/bliss/drift_search/event_search.cpp
++++ b/bliss/drift_search/event_search.cpp
+@@ -88,12 +88,12 @@ std::vector<event> bliss::event_search(cadence cadence_with_hits) {
+         on_scan_hits.push_back(scan.hits());
+     }
+ 
+-    // Flatten all OFF scans (order doesn't matter)
+-    std::vector<scan> off_scans;
++    // Flatten all OFF scans (order doesn't matter); each one's hits found once
++    std::vector<std::list<hit>> off_scan_hits;
+     for (size_t ii = 0; ii < cadence_with_hits._observations.size(); ++ii) {
+         if (ii != on_target_index) {
+             for (auto &target_scan : cadence_with_hits._observations[ii]._scans) {
+-                off_scans.push_back(target_scan);
++                off_scan_hits.push_back(target_scan.hits());
+             }
+         }
+     }
+@@ -158,8 +158,8 @@ std::vector<event> bliss::event_search(cadence cadence_with_hits) {
+             }
+ 
+             int times_event_in_off = 0;
+-            for (auto off_scan : off_scans) {
+-                for (auto off_hit : off_scan.hits()) {
++            for (const auto &off_hits : off_scan_hits) {
++                for (auto off_hit : off_hits) {
+                     float distance_to_event_hits = 0;
+                     for (auto event_hit : candidate_event.hits) {
+                         distance_to_event_hits += distance(off_hit, event_hit);

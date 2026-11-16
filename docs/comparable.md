@@ -617,6 +617,30 @@ same data, is the open question.
 - **hyperseti** if it runs (it needs cupy, so the GPU); listed, not
   promised: it has no ON/OFF stage.
 
+**Running it here (so far):** BLISS at commit 2b98afe, built twice in WSL
+(CPU only, and with CUDA 12.6 for the GTX 1080, a user-level conda-forge
+toolkit). Its own tests: 31 of 32 assertions pass in both builds; the one
+failure is the Cap'n Proto hit-file round trip ("bad optional access"),
+which is not used here (hits are read through its Python module).
+- **Its files need one attribute ours lack:** `DIMENSION_LABELS` on the
+  data set; added to BLISS's own copy of each slice, the spectra
+  unchanged. A block is given as one coarse channel (its 1,048,575
+  channels), so the coarse-channel edge flagging is not applied.
+- **One change to its code, for speed only:**
+  `tools/bliss/event_search_off_hits_once.patch`. A scan does not keep its
+  hits, so each `hits()` call runs the drift search again, and its event
+  stage asked each OFF scan for its hits once for every candidate: over 3
+  hours for one block on the GPU without finishing. The patch finds each
+  OFF scan's hits once. On the CPU backend, whose hits come in a fixed
+  order, the patched and unpatched builds give identical events on block
+  34 cut to 65,535 channels (5 and 5; 191 s against 19,727 s).
+- **Not yet understood, before any BLISS figure is used:** the GPU backend
+  returns the same set of hits on every call but in a different order,
+  and its event stage pairs hits greedily, so its events change slightly
+  from run to run (1 to 3 of 26 on the same cut); and the two backends
+  disagree on the same look (78 hits on the CPU at SNR 10, 108 on the GPU;
+  5 events against 26).
+
 **Done when:** BLISS's false curve, matched cut and recovery by drift and
 strength are on step 4's page beside the other two, with the signals
 BLISS finds that this search misses listed and explained.
