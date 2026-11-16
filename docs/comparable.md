@@ -651,6 +651,16 @@ which is not used here (hits are read through its Python module).
   for line, run on hits found once; on block 34 cut to 65,535 channels,
   on the CPU backend, it gives BLISS's own 5 events exactly. It is fed the
   hits in a fixed order (by channel, then drift), so it repeats.
+- **The run:** `python matched.py bliss KIC8462852 [--shard i/n]` reads
+  each of step 4's 121 recorded blocks again (refused unless its MHz range,
+  look starts and every planted signal's MHz are the record's), runs
+  `tools/bliss_curves.py` on the unplanted looks with all 20 choices and on
+  the signals planted again with the true choice, at turboSETI's cuts, and
+  scores them as the others (`_status`, TOL_HZ and TOL_DRIFT); one record a
+  block under the run's `bliss/` folder, step 4's records only read.
+  BLISS's frequency is at the look's start: on block 6 its nearest hits to
+  49 planted signals are off by 0.23 Hz per Hz/s of drift (half a spectrum
+  would be 9.13) and 0.47 Hz in the median. About 15 minutes a block.
 - **One change to its code, for speed only:**
   `tools/bliss/event_search_off_hits_once.patch`. A scan does not keep its
   hits, so each `hits()` call runs the drift search again, and its event
