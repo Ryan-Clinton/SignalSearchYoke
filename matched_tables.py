@@ -418,6 +418,182 @@ def markdown(r):
     return "\n".join(out)
 
 
+# --- BLISS beside the others (comparable.md step 11) ---------------------------------
+
+def _bliss_loss(t, cut):
+    """Where a planted signal BLISS did not recover in all three ON looks
+    was lost: flagged (most of its track in some ON look under BLISS's
+    flags), not found by its search, removed by its hit filter, or found
+    in all three looks but not made an event."""
+    c = matched.ck(cut)
+    if t["bliss"][c].get("three_looks") == "recovered":
+        return "recovered"
+    if t["bliss"][c].get("three_looks") == "false association":
+        return "false association"
+    if t["bliss_on_hits"][c] == len(matched.TRUE):
+        return "event stage"
+    if t["bliss_on_hits_unfiltered"][c] == len(matched.TRUE):
+        return "hit filter"
+    if any(f is not None and f > 0.5 for f in t["bliss_flagged"]):
+        return "flagged"
+    return "search"
+
+
+def write_bliss(target, say=print, name="matched-bliss.json"):
+    """BLISS's false-candidate curve and matched cut, made as the others'
+    (_rate, _matched_cut, shared hits), and recovery at the matched cuts of
+    all three pipelines on the same planted signals, from the blocks BLISS
+    has a record of (failed ones named). The event stage's dependence on
+    hit order is shown by the same curves and recovery with the hits in
+    seeded random orders."""
+    session, meta, recs = load(target)
+    bfolder = matched.bliss_folder(target, session)
+    config = matched.bliss_config()
+    brecs, failed, other = {}, [], []
+    for p in sorted(bfolder.glob("block_*.json")):
+        r = json.loads(p.read_text(encoding="utf-8"))
+        if r.get("config") != config:
+            other.append(r["block"])
+        elif "failed" in r:
+            failed.append({"block": r["block"], "class": r["class"], "error": r["failed"][-200:]})
+        else:
+            brecs[r["block"]] = r
+    recs = [r for r in recs if r["block"] in brecs and _has_tracks(r)]
+    if not recs:
+        raise yoke.Refusal("NOT_FOUND", "No block has a BLISS record of this configuration.")
+    for r in recs:
+        b = brecs[r["block"]]
+        assert [t["f_mhz"] for t in b["tones"]] == [t["f_mhz"] for t in r["tones"]], r["block"]
+        r["bliss"] = {"false": b["false"]}
+        for t, bt in zip(r["tones"], b["tones"]):
+            t.update({k: bt[k] for k in ("bliss", "bliss_on_hits", "bliss_on_hits_unfiltered", "bliss_flagged")})
+    rng = np.random.default_rng(1)
+    total = meta["of"]["clean"] + meta["of"]["crowded"]
+    weights = {c: meta["of"][c] / total for c in ("clean", "crowded")}
+    grids = {"ours": matched.CUTS_OURS, "turboseti": matched.CUTS_TURBO, "bliss": matched.CUTS_BLISS}
+
+    def curve(p, false_of):
+        return {matched.ck(c): _rate(recs, lambda r: distinct(r, false_of(r).get(matched.ck(c), {}), "shared hits"),
+                                     weights, rng) for c in grids[p]}
+    curves = {p: curve(p, lambda r, p=p: r[p]["false"]) for p in grids}
+    cuts = {p: _matched_cut(curves[p]) for p in grids}
+    shuffles = sorted({k for b in brecs.values() for k in b.get("shuffled", {})})
+    shuffled = {}
+    for k in shuffles:
+        cv = curve("bliss", lambda r, k=k: brecs[r["block"]]["shuffled"][k]["false"])
+        shuffled[k] = {"curve": cv, "matched_cut": _matched_cut(cv)}
+    tones = [dict(t, cls=r["class"], block=r["block"]) for r in recs for t in r["tones"]]
+    at = {p: float(cuts[p]["cut"]) for p in grids if cuts[p]["cut"] is not None}
+
+    def total_got(p, cut, how="three_looks"):
+        return sum(_got(t, p, cut, how) for t in tones)
+
+    def pair(a, b, how="three_looks"):
+        if a not in at or b not in at:
+            return None
+        ga = [_got(t, a, at[a], how) for t in tones]
+        gb = [_got(t, b, at[b], how) for t in tones]
+        return {"both": sum(x and y for x, y in zip(ga, gb)), f"{a}_only": sum(x and not y for x, y in zip(ga, gb)),
+                f"{b}_only": sum(y and not x for x, y in zip(ga, gb)), "neither": sum(not x and not y for x, y in zip(ga, gb))}
+    shuffled_recovery = {}
+    if "bliss" in at:
+        c = matched.ck(at["bliss"])
+        for k in shuffles:
+            shuffled_recovery[k] = sum(x[c]["three_looks"] == "recovered"
+                                       for r in recs for x in brecs[r["block"]]["shuffled"][k]["tones"])
+    losses = {}
+    for label, cut in (("published", 10), ("matched", at.get("bliss"))):
+        if cut is None:
+            continue
+        losses[label] = {"cut": cut, **{k: sum(_bliss_loss(t, cut) == k for t in tones) for k in
+                                        ("recovered", "false association", "event stage", "hit filter", "flagged",
+                                         "search")}}
+    rec = {"target": target, "session": session, "blocks": len(recs),
+           "classes": {c: sum(r["class"] == c for r in recs) for c in ("clean", "crowded")}, "of": meta["of"],
+           "bliss_failed": failed, "bliss_other_config": other, "config": config, "rate_matched": RATE,
+           "false_curves": curves, "matched_cuts": cuts, "matched_at": at, "tones": len(tones),
+           "recovery_matched": ({how: {cl: recovery([t for t in tones if cl == "all" or t["cls"] == cl], at, how)
+                                       for cl in ("all", "clean", "crowded")} for how in ("three_looks", "strict")}
+                                if at else None),
+           "totals_matched": {p: total_got(p, at[p]) for p in at},
+           "totals_published": {p: total_got(p, 10) for p in grids},
+           "pairs_matched": {f"{a}/{b}": pair(a, b) for a, b in (("ours", "bliss"), ("turboseti", "bliss"))},
+           "bliss_shuffled": {k: dict(v, recovery_at_sorted_matched_cut=shuffled_recovery.get(k))
+                              for k, v in shuffled.items()},
+           "bliss_losses": losses,
+           "kind": "measured", "written_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+    yoke.write(yoke.DATA / "measurements" / name, rec, stamp=True)
+    page = yoke.ROOT / "docs" / "results" / f"{target}-{session}-bliss.md"
+    page.write_text(markdown_bliss(rec), encoding="utf-8")
+    say(f"{page}: {len(recs)} blocks with BLISS, {len(tones)} planted signals; {len(failed)} failed")
+    return rec
+
+
+def markdown_bliss(r):
+    nm = dict(NAME, bliss="BLISS")
+    out = [f"# {r['target']} {r['session']}: BLISS beside this search and turboSETI", "",
+           f"Written by `python matched_tables.py bliss {r['target']}` from `matched.py bliss` (comparable.md step "
+           f"11); the record is data/measurements/matched-bliss.json. BLISS at commit "
+           f"{r['config']['bliss_commit'][:7]}, its GPU backend, through `bliss_find_hits`'s steps, its event stage "
+           "run on its hits in a fixed order (channel, then drift; `tools/bliss/bliss_events.py`). Its CPU backend "
+           "groups hits differently and is not what is compared here.", "",
+           f"{r['blocks']} blocks ({r['classes']['crowded']} crowded, {r['classes']['clean']} clean), the same as "
+           "step 4's, weighted as there."
+           + (f" BLISS failed on {len(r['bliss_failed'])}, left out: "
+              + ", ".join(f"{x['block']} ({x['error'][:80]})" for x in r["bliss_failed"]) if r["bliss_failed"] else "")
+           + (f" Blocks with a record of another configuration, left out: {r['bliss_other_config']}."
+              if r["bliss_other_config"] else ""), "",
+           "## False candidates against the cut (shared hits, as step 4's)", ""]
+    for p in ("ours", "turboseti", "bliss"):
+        out += [f"**{nm[p]}**", "", "| cut | all blocks | clean | crowded |", "|---|---|---|---|"]
+        for c, v in sorted(r["false_curves"][p].items(), key=lambda x: float(x[0])):
+            out.append(f"| {c} | {v['per_block']:.3g} ({_iv(v['interval'])}) | {v['clean']['per_block']:.3g} | "
+                       f"{v['crowded']['per_block']:.3g} |")
+        m = r["matched_cuts"][p]
+        out += ["", (f"Cut for {r['rate_matched']} a block: {m['cut']} (interval {m['interval'][0]} to "
+                     f"{m['interval'][1]})." if m["cut"] is not None else
+                     f"No cut in the tested range gives {r['rate_matched']} a block or fewer: not matched."), ""]
+    if r["bliss_shuffled"]:
+        out += ["**BLISS with its hits in random orders** (its GPU returns them in an order that changes from run "
+                "to run, and its event stage pairs greedily): the matched cut, and recovery in all three ON looks "
+                "at the fixed order's matched cut, for each seeded order:", ""]
+        for k, v in r["bliss_shuffled"].items():
+            out.append(f"- order {k}: matched cut {v['matched_cut']['cut']}; recovered "
+                       f"{v['recovery_at_sorted_matched_cut']}")
+        out.append("")
+    out += ["## Recovery at the matched cuts (all three ON looks)", ""]
+    if r["recovery_matched"]:
+        out += ["Planted signals recovered, of " + str(r["tones"]) + ": "
+                + "; ".join(f"{nm[p]} {n} (cut {r['matched_at'][p]:g})" for p, n in r["totals_matched"].items())
+                + ". Pipelines without a matched cut are left out.", ""]
+        for k, v in r["pairs_matched"].items():
+            if v:
+                out.append(f"- {k}: " + ", ".join(f"{a} {b}" for a, b in v.items()))
+        ps = [p for p in ("ours", "turboseti", "bliss") if p in r["matched_at"]]
+        out += [""] + ["| drift (Hz/s) | S_in | " + " | ".join(nm[p] for p in ps) + " |",
+                       "|---" * (2 + len(ps)) + "|"]
+        for row in r["recovery_matched"]["three_looks"]["all"]:
+            out.append(f"| {row['drift_hz_s'][0]}-{row['drift_hz_s'][1]} | {row['s_in']} | "
+                       + " | ".join(f"{row[p]['recovered']}/{row[p]['planted']}" for p in ps) + " |")
+    else:
+        out.append("Not made: no pipeline has a matched cut.")
+    out += ["", "At each pipeline's SNR 10: " + "; ".join(f"{nm[p]} {n}" for p, n in r["totals_published"].items())
+            + " (not at a matched rate).", "", "## Where BLISS loses planted signals", "",
+            "Each planted signal BLISS did not recover in all three ON looks, by the first stage that explains it: "
+            "flagged (more than half its track in some ON look under its spectral-kurtosis or sigma-clip flags), "
+            "its search (no matching hit in all three ON looks before its hit filter), its hit filter (matching "
+            "hits before it, not after) or its event stage (matching hits in all three, no event).", "",
+            "| cut | recovered | false association | event stage | hit filter | flagged | search |",
+            "|---|---|---|---|---|---|---|"]
+    for label, v in r["bliss_losses"].items():
+        out.append(f"| {label} ({v['cut']:g}) | {v['recovered']} | {v['false association']} | {v['event stage']} | "
+                   f"{v['hit filter']} | {v['flagged']} | {v['search']} |")
+    return "\n".join(out) + "\n"
+
+
 if __name__ == "__main__":
     import sys
-    write(sys.argv[1] if len(sys.argv) > 1 else "KIC8462852")
+    if len(sys.argv) > 1 and sys.argv[1] == "bliss":
+        write_bliss(sys.argv[2] if len(sys.argv) > 2 else "KIC8462852")
+    else:
+        write(sys.argv[1] if len(sys.argv) > 1 else "KIC8462852")

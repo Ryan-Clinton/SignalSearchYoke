@@ -653,6 +653,19 @@ which is not used here (hits are read through its Python module).
   for line, run on hits found once; on block 34 cut to 65,535 channels,
   on the CPU backend, it gives BLISS's own 5 events exactly. It is fed the
   hits in a fixed order (by channel, then drift), so it repeats.
+  - **Checked against BLISS's own** (`tools/bliss/port_vs_bliss.py`: the
+    CPU backend, whose order is fixed, so both see the hits in the same
+    order; every event's member hits compared): four 65,535-channel
+    segments across block 34 at SNR 5, 10 and 20, 12 of 12 identical, but
+    only 9 events among them, so the same with step 4's 110 signals
+    planted in block 34, over eight segments, is run next for a test with
+    events in it. A whole block cannot be compared: BLISS's own stage
+    keeps every pair of hits it compares, which on a whole block exceeded
+    WSL's 35 GB.
+  - **Its array version against the line-for-line one:** identical events
+    on block 34 (8 cases: SNR 5 and 10, four choices) and on 600 random
+    cadences crowded around a few frequencies so that matching and the OFF
+    veto are exercised (`bliss_curves.py selftest`).
 - **The run:** `python matched.py bliss KIC8462852 [--shard i/n]` reads
   each of step 4's 121 recorded blocks again (refused unless its MHz range,
   look starts and every planted signal's MHz are the record's), runs
@@ -662,7 +675,38 @@ which is not used here (hits are read through its Python module).
   block under the run's `bliss/` folder, step 4's records only read.
   BLISS's frequency is at the look's start: on block 6 its nearest hits to
   49 planted signals are off by 0.23 Hz per Hz/s of drift (half a spectrum
-  would be 9.13) and 0.47 Hz in the median. About 15 minutes a block.
+  would be 9.13) and 0.47 Hz in the median. About 20 minutes a block.
+  - **Its records:** written whole or not at all (`yoke.write`), each with
+    the comparison's configuration (`matched.bliss_config`: BLISS's commit,
+    the cuts, hashes of the adapter, the event stage and the patch) and
+    what ran (`bliss_curves.provenance`: BLISS's checkout and a hash of its
+    local changes, the module, the CUDA runtime, the GPU and its driver,
+    Python and package versions, the response file's hash, the steps). A
+    block counts as done only when its record parses and has this
+    configuration, so a record cut short or made by other code is run
+    again. A block BLISS fails on (an error, or more than 4 hours) is
+    recorded as failed with the error and the run goes on; the tables name
+    every failed block. Crowded blocks run first. Where it runs (the WSL
+    distribution, BLISS's Python, the CUDA libraries) are settings
+    (`SSY_BLISS_DISTRO`, `SSY_BLISS_PYTHON`, `SSY_BLISS_LD_PATH`; and
+    `BLISS_PYTHON_DIR`, `BLISS_RESPONSE`, `BLISS_DEVICE` for the adapter),
+    with this machine's as the defaults; they are not part of the
+    comparison.
+  - **Where BLISS loses a planted signal:** for each, the share of its
+    track under BLISS's flags in each ON look, and its matching hits before
+    and after BLISS's hit filter, so each loss is put to the flags, the
+    search, the filter or the event stage. On block 6 at SNR 10, 17 planted
+    signals have matching hits in all three ON looks before its filter and
+    none after.
+  - **Its hit order:** the event stage is also run with each look's hits in
+    three seeded random orders, and the tables give the matched cut and
+    recovery for each (below).
+  - **The tables:** `python matched_tables.py bliss KIC8462852` writes
+    docs/results/TARGET-SESSION-bliss.md: the three pipelines' false
+    curves (shared hits, step 4's weights), their matched cuts (or "not
+    matched" where no tested cut reaches 0.1 a block), recovery at the
+    matched cuts on the same planted signals with the pairs found by one
+    and not the other, and BLISS's losses by stage.
 - **One change to its code, for speed only:**
   `tools/bliss/event_search_off_hits_once.patch`. A scan does not keep its
   hits, so each `hits()` call runs the drift search again, and its event
@@ -671,12 +715,20 @@ which is not used here (hits are read through its Python module).
   OFF scan's hits once. On the CPU backend, whose hits come in a fixed
   order, the patched and unpatched builds give identical events on block
   34 cut to 65,535 channels (5 and 5; 191 s against 19,727 s).
-- **Not yet understood, before any BLISS figure is used:** the GPU backend
-  returns the same set of hits on every call but in a different order,
-  and its event stage pairs hits greedily, so its events change slightly
-  from run to run (1 to 3 of 26 on the same cut); and the two backends
-  disagree on the same look (78 hits on the CPU at SNR 10, 108 on the GPU;
-  5 events against 26).
+- **Its GPU hits repeat; their order does not** (`tools/bliss_curves.py
+  selftest`, block 34, SNR 5 and 10, every look twice): every field used
+  (channel, frequency, drift, SNR, power, bandwidth, width, times) is the
+  same on every run; only `time_span_steps` differs, in every hit, and
+  looks unset (nothing here reads it). The order they come in changes, and
+  the event stage pairs greedily, so its events change with it: over the
+  20 choices at SNR 10, two runs in BLISS's own order give 181 and 182
+  events with 129 the same, and the fixed order 178, 96 of them the same
+  as the first run's; at SNR 5, 199 each, 195 and 165 the same. The counts
+  hardly move; which hits make up the events does. So the fixed order is
+  one draw among BLISS's own, not BLISS's answer, and its effect is
+  measured in the run (three random orders beside it). The two backends
+  also disagree on the same look (78 hits on the CPU at SNR 10, 108 on
+  the GPU; 5 events against 26), explained next.
 - **Where the backends part (measured on that look):** the same mask, noise
   estimates within a few parts per million, and the same drift plane except
   within about 420 channels of either end, where a track runs off the band
@@ -686,12 +738,21 @@ which is not used here (hits are read through its Python module).
   the end, the GPU by labelling cells in parallel. All 77 CPU hits away
   from the edges are among the GPU's; the GPU's 29 others (one at SNR 20)
   lie between channels 46,000 and 59,600, where the CPU reports a single
-  hit, at the band's edge (SNR 31.8). Most likely one large region above
-  half the cut, flooded into one hit on the CPU; not yet confirmed.
-- **So the GPU backend is the one compared** (the one its README runs, and
-  the only one fast enough), with this said beside its figures; its hits
-  go through this search's cadence test as well as its own event stage,
-  and the event stage's run-to-run spread is measured, not hidden.
+  hit, at the band's edge (SNR 31.8). Confirmed
+  (`tools/bliss/backend_components.py`, which rebuilds BLISS's SNR plane
+  from its drift plane and noise, gets 185 of the two backends' 186 hits'
+  SNR within 0.1%, and joins the cells above half the cut at its
+  neighbour distance): of the 79 regions holding a hit, the backends put
+  the same number in 77; one region of 14 million cells (27% of the
+  plane) is one hit on the CPU and 30 on the GPU, and the GPU's last hit
+  is in the edge strip the CPU zeroes. That look went through the
+  README's example (no passband equalizing), where such regions are
+  largest.
+- **So the GPU backend is the one compared** (the one `bliss_find_hits`
+  runs by default, and the only one fast enough), named as such beside
+  its figures; its event stage's dependence on hit order is measured in
+  the run. Still to do: its hits through this search's cadence test as
+  well as its own event stage.
 
 **Done when:** BLISS's false curve, matched cut and recovery by drift and
 strength are on step 4's page beside the other two, with the signals

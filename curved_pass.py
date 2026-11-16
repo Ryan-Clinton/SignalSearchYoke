@@ -1085,6 +1085,22 @@ def vet_tables(target, say=print, choice=None, name=None):
                                      "false_association": sum(x["three_looks"] == "false association" for x in cell)})
                 p[cfg] = rows
             out[f"cut_{c}_{way}"] = {"false": f, "planted": p}
+            # what each rejection rests on: the band list alone, it with other checks, other checks only
+            att = {}
+            for cfg in CONFIGS:
+                fa = dict.fromkeys(EVIDENCE, 0)
+                for r in recs:
+                    rows = [x for rows in r["false"][c].values() for x in rows if cfg in x["configs"]]
+                    for g in matched.shared_hits({"_": rows}):
+                        fa[_group_evidence([(x[way]["verdict"], x[way].get("reasons")) for x in g])] += 1
+                pa = dict.fromkeys(EVIDENCE, 0)
+                for r in recs:
+                    for t in r["tones"]:
+                        x = t["vet"][c][cfg]
+                        if x["three_looks"] == "recovered":
+                            pa[evidence(x[way])] += 1
+                att[cfg] = {"false_distinct": fa, "planted_recovered": pa}
+            out[f"cut_{c}_{way}"]["evidence"] = att
     yoke.write(yoke.DATA / "measurements" / ("curved-pass-vetting.json" if not (choice or name) else
                                              f"curved-pass-vetting-{target}-{session}-{name or 'choice'}.json"),
                {"target": target, "session": session, **out, "kind": "measured", "experimental": True}, stamp=True)
@@ -1099,7 +1115,48 @@ def vet_tables(target, say=print, choice=None, name=None):
                 pr = x["planted"][cfg]
                 say(f"  {cfg:>14}: false {x['false'][cfg]['distinct_kept']} / {x['false'][cfg]['distinct_unexplained']}"
                     f"   planted {sum(r['recovered'] for r in pr)} / {sum(r['unexplained'] for r in pr)}")
+            e = x["evidence"]["production"]
+            say("  production, what each rests on (" + ", ".join(EVIDENCE) + "):")
+            say("     false " + " / ".join(str(e["false_distinct"][k]) for k in EVIDENCE))
+            say("   planted " + " / ".join(str(e["planted_recovered"][k]) for k in EVIDENCE))
     return out
+
+
+# What a verdict rests on. A "shown" verdict is shown by evidence from the looks or the store (check 3,
+# the band list, only ever indicates); an "indicated" one names every check that indicated it.
+BAND = "known interference bands"
+EVIDENCE = ("unexplained", "shown by evidence", "band list alone", "band list and other checks", "other checks only")
+
+
+def _reasons(verdict):
+    inside = verdict.split("(", 1)[1].rstrip(")") if "(" in verdict else ""
+    return [s.strip() for s in inside.split(":", 1)[1].split(";")] if ":" in inside else []
+
+
+def evidence(verdict, reasons=None):
+    if rank(verdict) < 2:
+        return "unexplained"
+    if verdict.startswith("interference (shown"):
+        return "shown by evidence"
+    named = _reasons(verdict)
+    if named == [BAND]:
+        return "band list alone"
+    return "band list and other checks" if BAND in named else "other checks only"
+
+
+def _group_evidence(members):
+    """One distinct false signal (its member candidates): unexplained if any
+    member is, else shown if any is, else by the union of what indicated
+    them."""
+    kinds = [evidence(v) for v, _ in members]
+    if "unexplained" in kinds:
+        return "unexplained"
+    if "shown by evidence" in kinds:
+        return "shown by evidence"
+    named = {n for v, _ in members for n in _reasons(v)}
+    if named == {BAND}:
+        return "band list alone"
+    return "band list and other checks" if BAND in named else "other checks only"
 
 
 # --- turboSETI on the same curved signals, by the same three-look standard -----------

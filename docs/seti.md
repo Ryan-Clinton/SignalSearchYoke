@@ -1063,7 +1063,10 @@ docs/results/HIP17147-AGBT16A_999_192-step10.md. At SNR 30:
   store opened read-only and unchanged by both runs. Production's row,
   distinct wrong-choice candidates kept by the cadence test and those the
   checks leave unexplained, and planted signals recovered and still kept
-  after the checks:
+  after the checks. The planted signals here are the vetting run's own
+  (`curved_pass.py vet`: straight and accelerating, planted afresh), not
+  the 13,310 of steps 4 and 10's comparison, so these counts are not that
+  comparison's (step 10's 4,337, for one):
 
   | Session | Cut | False kept | Unexplained: uniform / measured / store | Planted recovered | Kept after the full checks |
   |---|---|---|---|---|---|
@@ -1077,8 +1080,31 @@ docs/results/HIP17147-AGBT16A_999_192-step10.md. At SNR 30:
     criterion fixed beforehand, and it does not change step 10's result.
   - What they cost differs: on step 10's blocks a third of the recovered
     planted signals are rejected with them, on step 4's more than half.
-    Which checks reject the planted signals, and whether that rests on
-    the band list rather than the looks, is not yet broken down.
+  - **What each rejection rests on** (`vet-tables` now breaks it down from
+    the records: a verdict "shown" by evidence from the looks or the
+    store; else "indicated" by the band list alone, by it and other
+    checks, or by other checks only; check 3, the band list, only ever
+    indicates). Production, the full checks, SNR 30:
+
+    | Session | | Unexplained | Shown | Band list alone | Band list and other checks | Other checks only |
+    |---|---|---|---|---|---|---|
+    | HIP17147 (L band) | false (3,938) | 0 | 39 | 21 | 3,835 | 43 |
+    | | planted recovered (3,729) | 2,456 | 0 | 913 | 185 | 175 |
+    | KIC8462852 (S band) | false (21) | 0 | 7 | 1 | 10 | 3 |
+    | | planted recovered (4,078) | 1,735 | 0 | 1,685 | 490 | 168 |
+
+    The false candidates do not rest on the band list: 21 of L band's
+    3,938 are rejected by it alone, and every other one is also indicated
+    or shown by another check, so without the list they would still be
+    rejected. The planted signals do: of those the full checks reject,
+    913 of 1,273 at L band and 1,685 of 2,343 at S band are rejected by
+    the band list alone (they were planted there). So the zero
+    unexplained is not built in by the list, but most of what the checks
+    cost in planted signals is the list. At SNR 10 the same holds (L
+    band: 320 of 10,836 false candidates rest on the list alone, 1,405 of
+    2,098 planted losses). The other checks' share of planted losses (175
+    and 168 at SNR 30, "other checks only") is the part to look into
+    before the list's weight is changed; nothing is changed yet.
   - Step 4's blocks again: every figure the same as the first run, except
     that the full checks now reject 2 to 5 more planted signals a row
     (2,841 to 2,838 at SNR 10, 1,737 to 1,735 at SNR 30), the recurrence

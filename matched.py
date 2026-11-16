@@ -653,10 +653,25 @@ def add_tracks(target, say=print):
 
 # --- BLISS (comparable.md step 11) ---------------------------------------------
 
+# What the comparison is (kept in every record, and a record is only taken as done when it matches) ...
 BLISS_COMMIT = "2b98afe960f13ee7e467aca499576d87ee7502f5"
-BLISS_WSL = ("wsl", "-d", "Ubuntu", "--", "env", "LD_LIBRARY_PATH=/home/facepipe/ssy/cuda126/lib:/usr/lib/wsl/lib",
-             "/home/facepipe/ssy/blissenv/bin/python")
+BLISS_FORMAT = 2                # 2: configuration and provenance kept; flags and the hit filter on planted tracks
 CUTS_BLISS = CUTS_TURBO
+BLISS_TOOLS = ("tools/bliss_curves.py", "tools/bliss/bliss_events.py", "tools/bliss/event_search_off_hits_once.patch")
+# ... and where it runs on this machine (settings, not part of the comparison): the WSL distribution, the
+# Python with BLISS's module, and the libraries it needs. bliss_curves.py takes BLISS_PYTHON_DIR,
+# BLISS_RESPONSE and BLISS_DEVICE from the same environment.
+BLISS_DISTRO = __import__("os").environ.get("SSY_BLISS_DISTRO", "Ubuntu")
+BLISS_PYTHON = __import__("os").environ.get("SSY_BLISS_PYTHON", "/home/facepipe/ssy/blissenv/bin/python")
+BLISS_LD_PATH = __import__("os").environ.get("SSY_BLISS_LD_PATH", "/home/facepipe/ssy/cuda126/lib:/usr/lib/wsl/lib")
+BLISS_TIMEOUT_S = 4 * 3600
+
+
+def bliss_config():
+    import hashlib
+    return {"bliss_format": BLISS_FORMAT, "bliss_commit": BLISS_COMMIT, "cuts": list(CUTS_BLISS),
+            "tools": {t: hashlib.sha256((yoke.ROOT / t).read_bytes().replace(b"\r\n", b"\n")).hexdigest()[:16]
+                      for t in BLISS_TOOLS}}
 
 
 def _wsl_path(p):
@@ -664,14 +679,27 @@ def _wsl_path(p):
     return f"/mnt/{p[0].lower()}{p[2:]}" if len(p) > 1 and p[1] == ":" else p
 
 
-def _bliss_tool(out, which, paths):
+def _bliss_tool(out, which, paths, tones=None):
     import subprocess
-    done = subprocess.run([*BLISS_WSL, _wsl_path(yoke.ROOT / "tools" / "bliss_curves.py"), _wsl_path(out),
+    extra = ["--tones", _wsl_path(tones)] if tones else []
+    done = subprocess.run(["wsl", "-d", BLISS_DISTRO, "--", "env", f"LD_LIBRARY_PATH={BLISS_LD_PATH}", BLISS_PYTHON,
+                           _wsl_path(yoke.ROOT / "tools" / "bliss_curves.py"), *extra, _wsl_path(out),
                            ",".join(map(str, CUTS_BLISS)), which, *map(_wsl_path, paths)],
-                          capture_output=True, text=True, timeout=7200)
+                          capture_output=True, text=True, timeout=BLISS_TIMEOUT_S)
     if done.returncode:
         raise yoke.Refusal("INTERNAL_ERROR", f"bliss_curves.py failed: {done.stderr.strip()[-400:]}")
     return json.loads(Path(out).read_text(encoding="utf-8"))
+
+
+def bliss_done(path, config):
+    """A block's BLISS record that parses and was made with this
+    configuration (a failure recorded with it counts as done, and is
+    reported)."""
+    try:
+        r = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return r.get("config") == config and ("failed" in r or len(r.get("tones", [])) == TONES)
 
 
 def _bliss_kept(rows):
@@ -682,11 +710,12 @@ def _bliss_kept(rows):
              "members": [[h["look"], None, h["freq_mhz"], h["drift_hz_s"]] for h in r["hits"]]} for r in rows]
 
 
-def _bliss_on_hits(rec, t_f, drift, cut):
-    """In how many true ON looks BLISS's own hits (planted run, at `cut`)
-    hold one matching the planted signal."""
+def _bliss_on_hits(rec, t_f, drift, cut, which="hits"):
+    """In how many true ON looks BLISS's own hits (planted run, at `cut`;
+    with which="hits_unfiltered", before its hit filter) hold one matching
+    the planted signal."""
     return sum(_match({j: t_f[j]}, drift, [{"look": j, "f_mhz": h["freq_mhz"], "drift": h["drift_hz_s"]}
-                                           for h in rec["hits"][str(float(cut))][j]])[0] for j in TRUE)
+                                           for h in rec[which][str(float(cut))][j]])[0] for j in TRUE)
 
 
 def bliss_folder(target, session):
@@ -699,17 +728,32 @@ def add_bliss(target, say=print, shard=(0, 1), count=None):
     record's), its unplanted looks through tools/bliss_curves.py with every
     choice, the record's signals planted again (plant(), their MHz checked
     against the record's) and the planted looks through it with the true
-    choice; scored as the others are (_status, at the look's start). One
-    JSON a block under the run's bliss/ folder; the step 4 records are only
-    read."""
+    choice; scored as the others are (_status, at the look's start). For
+    each planted signal also: the share of its track BLISS's flags cover in
+    each ON look, and its matching hits before and after BLISS's hit filter,
+    so a loss can be put to the flags, the search, the filter or the event
+    stage.
+
+    One JSON a block under the run's bliss/ folder, written whole or not at
+    all, with the comparison's configuration (bliss_config: BLISS's commit,
+    the cuts, hashes of the tools and the patch) and the run's provenance
+    (from bliss_curves.py). A block counts as done only when its record
+    parses and has this configuration; a block whose BLISS run fails is
+    recorded as failed, with the error, and the run goes on. Crowded blocks
+    run first. Step 4's records are only read."""
+    import subprocess
     db = store.connect_readonly()
     session, urls = store.cadence_files(db, target)
     db.close()
     base, out = folder(target, session), bliss_folder(target, session)
     out.mkdir(parents=True, exist_ok=True)
+    config = bliss_config()
     block_list = seti.blocks(seti.reading.prepare(urls[:1])[0])
     recs = sorted(base.glob("block_*.json"))
-    todo = [p for i, p in enumerate(recs) if i % shard[1] == shard[0] and not (out / p.name).exists()]
+    classes = json.loads((base / "blocks.json").read_text(encoding="utf-8"))["chosen"]
+    # crowded blocks first: the slowest and most likely to fail, found early
+    recs.sort(key=lambda p: (classes.get(str(int(p.stem.split("_")[1]))) != "crowded", p.name))
+    todo = [p for i, p in enumerate(recs) if i % shard[1] == shard[0] and not bliss_done(out / p.name, config)]
     todo = todo if count is None else todo[:count]
     say(f"{target} {session}: BLISS on {len(todo)} of the {len(recs)} recorded blocks in this share", flush=True)
     work = ROOT / f"work_bliss_{shard[0]}"
@@ -718,6 +762,11 @@ def add_bliss(target, say=print, shard=(0, 1), count=None):
         rec = json.loads(p.read_text(encoding="utf-8"))
         started = time.monotonic()
         return rec, seti.read_looks(urls, *block_list[rec["block"]]), round(time.monotonic() - started, 1)
+
+    def log(line):
+        say("  " + line, flush=True)
+        with open(out / "progress.log", "a", encoding="utf-8") as f:
+            f.write(time.strftime("%Y-%m-%dT%H:%M:%S ", time.gmtime()) + line + "\n")
 
     with ThreadPoolExecutor(max_workers=1) as ahead:
         coming = ahead.submit(fetch, todo[0]) if todo else None
@@ -743,7 +792,17 @@ def add_bliss(target, say=print, shard=(0, 1), count=None):
                 planted_paths = [seti.save(dict(x["s"], spectra=x["spectra"]), work / "planted" / f"{j}.h5")
                                  for j, x in enumerate(planted)]
                 del planted
-                bp = _bliss_tool(work / "bliss_planted.json", "true", planted_paths)
+                # each signal's channel at each ON look's start, for the flags along its track
+                tracks = {str(j): [[where(cad, t, j)[0], t["drift"]] for t in rec["tones"]] for j in TRUE}
+                (work / "tones.json").write_text(json.dumps(tracks), encoding="utf-8")
+                bp = _bliss_tool(work / "bliss_planted.json", "true", planted_paths, tones=work / "tones.json")
+            except (yoke.Refusal, subprocess.TimeoutExpired, OSError, ValueError) as e:
+                yoke.write(out / p.name, {"format": FORMAT, "block": rec["block"], "class": rec["class"],
+                                          "config": config, "failed": str(e)[-600:],
+                                          "finished_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())},
+                           indent=None)
+                log(f"block {rec['block']} ({rec['class']}): BLISS FAILED, recorded as failed: {str(e)[-200:]}")
+                continue
             finally:
                 shutil.rmtree(work, ignore_errors=True)
 
@@ -751,39 +810,59 @@ def add_bliss(target, say=print, shard=(0, 1), count=None):
                 return next(e["rows"] for e in r["events"] if tuple(e["as_on"]) == tuple(ons) and e["cut"] == cut)
 
             tones_out = []
-            for t in rec["tones"]:
+            for n_t, t in enumerate(rec["tones"]):
                 t_f = {j: where(cad, t, j)[1] for j in TRUE}
                 tones_out.append({"f_mhz": t["f_mhz"], "drift": t["drift"], "s_in": t["s_in"], "bin": t["bin"],
                                   "bliss": {str(c): _status(t_f, t["drift"], _bliss_kept(at(bp, TRUE, float(c))),
                                                             _bliss_kept(at(plain, TRUE, float(c))))
                                             for c in CUTS_BLISS},
-                                  "bliss_on_hits": {str(c): _bliss_on_hits(bp, t_f, t["drift"], c) for c in CUTS_BLISS}})
+                                  "bliss_on_hits": {str(c): _bliss_on_hits(bp, t_f, t["drift"], c) for c in CUTS_BLISS},
+                                  "bliss_on_hits_unfiltered": {str(c): _bliss_on_hits(bp, t_f, t["drift"], c,
+                                                                                      "hits_unfiltered")
+                                                               for c in CUTS_BLISS},
+                                  "bliss_flagged": [bp["tones_flagged"][str(j)][n_t] for j in TRUE]})
             false = {}
             for e in plain["events"]:
                 if tuple(e["as_on"]) != TRUE:
                     false.setdefault(ck(e["cut"]), {})[str(tuple(e["as_on"]))] = _bliss_kept(e["rows"])
-            res = {"format": FORMAT, "block": rec["block"], "class": rec["class"], "bliss_commit": BLISS_COMMIT,
-                   "device": plain["device"], "false": false,
+            # the same, with each look's hits in seeded random orders (BLISS's own order changes from run to run)
+            shuffled = {}
+            for k, evs in plain.get("events_shuffled", {}).items():
+                fk = {}
+                for e in evs:
+                    if tuple(e["as_on"]) != TRUE:
+                        fk.setdefault(ck(e["cut"]), {})[str(tuple(e["as_on"]))] = _bliss_kept(e["rows"])
+                tp = {ck(e["cut"]): _bliss_kept(e["rows"]) for e in evs if tuple(e["as_on"]) == TRUE}
+                pp = {ck(e["cut"]): _bliss_kept(e["rows"]) for e in bp["events_shuffled"][k]}
+                shuffled[k] = {"false": fk, "tones": [
+                    {str(c): {x: s[x] for x in ("three_looks", "strict")}
+                     for c in CUTS_BLISS for s in [_status({j: where(cad, t, j)[1] for j in TRUE}, t["drift"],
+                                                           pp[ck(c)], tp[ck(c)])]}
+                    for t in rec["tones"]]}
+            res = {"format": FORMAT, "block": rec["block"], "class": rec["class"], "config": config,
+                   "provenance": {"plain": plain["provenance"], "planted": bp["provenance"]},
+                   "false": false,
                    "true_plain": {ck(e["cut"]): _bliss_kept(e["rows"]) for e in plain["events"]
                                   if tuple(e["as_on"]) == TRUE},
                    "hits_plain": {c: [len(x) for x in v] for c, v in plain["hits"].items()},
                    "hits_planted": {c: [len(x) for x in v] for c, v in bp["hits"].items()},
-                   "tones": tones_out,
+                   "tones": tones_out, "shuffled": shuffled,
                    "times": {"fetch_s": fetch_s, "plain_s": plain["search_s"] + plain["event_s"],
                              "planted_s": bp["search_s"] + bp["event_s"],
                              "block_s": round(time.monotonic() - started, 1)},
+                   "peak_mb": {"plain": plain["peak_mb"], "planted": bp["peak_mb"]},
                    "finished_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
-            (out / p.name).write_text(json.dumps(res), encoding="utf-8")
+            yoke.write(out / p.name, res, indent=None)
             n, pub = len(tones_out), ck(PUBLISHED["turboseti"])
-            line = (f"block {rec['block']} ({rec['class']}): at SNR 10, BLISS recovered "
-                    f"{sum(x['bliss'][pub]['three_looks'] == 'recovered' for x in tones_out)}/{n} in all three ON "
-                    f"looks; wrong-ON candidates {len(shared_hits(false.get(pub, {})))} (by shared hits); "
-                    f"{res['times']['block_s']} s")
-            say("  " + line, flush=True)
-            with open(out / "progress.log", "a", encoding="utf-8") as f:
-                f.write(time.strftime("%Y-%m-%dT%H:%M:%S ", time.gmtime()) + line + "\n")
+            log(f"block {rec['block']} ({rec['class']}): at SNR 10, BLISS recovered "
+                f"{sum(x['bliss'][pub]['three_looks'] == 'recovered' for x in tones_out)}/{n} in all three ON "
+                f"looks; wrong-ON candidates {len(shared_hits(false.get(pub, {})))} (by shared hits); "
+                f"{res['times']['block_s']} s, peak {max(res['peak_mb'].values())} MB")
     shutil.rmtree(work, ignore_errors=True)
-    say(f"{target} {session}: BLISS on {len(list(out.glob('block_*.json')))} of {len(recs)} blocks", flush=True)
+    done = [x for x in out.glob("block_*.json") if bliss_done(x, config)]
+    failed = [x.stem for x in done if "failed" in json.loads(x.read_text(encoding="utf-8"))]
+    say(f"{target} {session}: BLISS on {len(done)} of {len(recs)} blocks"
+        + (f" ({len(failed)} failed: {', '.join(failed)})" if failed else ""), flush=True)
 
 
 def main(argv=None):
