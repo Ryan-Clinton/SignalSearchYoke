@@ -1110,6 +1110,12 @@ docs/results/HIP17147-AGBT16A_999_192-step10.md. At SNR 30:
     (2,841 to 2,838 at SNR 10, 1,737 to 1,735 at SNR 30), the recurrence
     from the second session now in the store. The run took 12.7 hours of
     blocks against the first's 61.8 (check 8 looks hits up by index).
+    That change was checked against check 8's code before it
+    (`tools/check8_equivalence.py`, the old code copied verbatim): on both
+    sessions' records, 4,164 cases (edge cases with few hits, candidates'
+    frequencies, random frequencies, at two drift steps, with and without
+    the chance rate) give the same relations and chances, 0 differ
+    (data/logs/check8-equivalence.log), so the checks' version stays.
   - The pass adds 1 to 3 false candidates on step 4's blocks, none left
     unexplained by the full checks; on both sessions the pass's rows
     follow production's (data/logs/vet-step10-tables.log,

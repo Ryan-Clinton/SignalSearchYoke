@@ -657,9 +657,10 @@ which is not used here (hits are read through its Python module).
     CPU backend, whose order is fixed, so both see the hits in the same
     order; every event's member hits compared): four 65,535-channel
     segments across block 34 at SNR 5, 10 and 20, 12 of 12 identical, but
-    only 9 events among them, so the same with step 4's 110 signals
-    planted in block 34, over eight segments, is run next for a test with
-    events in it. A whole block cannot be compared: BLISS's own stage
+    only 9 events among them. With step 4's 110 signals planted in block
+    34, eight segments at SNR 10 and 20: 16 of 16 identical, 59 events,
+    OFF hits present in four of the cases
+    (data/measurements/bliss-port-vs-own-block034-planted.json). A whole block cannot be compared: BLISS's own stage
     keeps every pair of hits it compares, which on a whole block exceeded
     WSL's 35 GB.
   - **Its array version against the line-for-line one:** identical events
