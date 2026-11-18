@@ -73,7 +73,7 @@ Looked at afterwards, not one of the criteria: nearly all of this search's false
 - Steady drifts within ±4 Hz/s, plus one experiment with curved tracks; no pulsed or broadband signals.
 - The 2017 session's cuts were chosen on the same blocks they were judged on. Only the 2016 session was fixed in advance, and there both false rates failed.
 - BLISS's hits through this search's test, and the same-hit control, are combinations of two pipelines, designed after the main result was seen.
-- Open: the signals BLISS finds that this search misses are being traced one by one.
+- Of the planted signals BLISS finds at S/N 10 and this search raises no candidate for, 28 were traced stage by stage. 17 are found strongly in all three ON looks and then called interference because one OFF look reaches S/N 6 along the track on noise: the OFF test's measured cost (0.66% of 10,000 random tracks reach it). 2 meet something real in an OFF look, 7 are missed by the detector (mostly in crowded blocks) and 2 are too faint. The threshold was set beforehand and is not moved for this.
 
 ## Data and code availability
 
@@ -94,3 +94,5 @@ The observations are from the Breakthrough Listen Open Data Archive (Lebofsky et
 - data/measurements/step10.json: written 2026-11-14T09:41:25Z, commit de48e39
 - bliss_control/block_035.json: finished 2026-11-18T15:20:01Z
 - bliss_control/block_129.json: finished 2026-11-18T15:37:02Z
+- data/analysis/bliss_only/trace_summary.json: written 2026-11-18T23:31:54Z, commit c8d4cef
+- data/measurements/off_null.json: written 2026-11-11T02:41:54Z, commit e5f6c77

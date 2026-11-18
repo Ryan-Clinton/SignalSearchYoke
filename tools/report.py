@@ -105,6 +105,9 @@ def main():
     s10 = load("measurements/step10.json")
     control_dir = DATA / "matched" / f"{b['target']}-{b['session']}" / "bliss_control"
     control = [json.loads(p.read_text(encoding="utf-8")) for p in sorted(control_dir.glob("block_*.json"))]
+    trace_path = DATA / "analysis" / "bliss_only" / "trace_summary.json"
+    trace = json.loads(trace_path.read_text(encoding="utf-8")) if trace_path.exists() else None
+    off_null = load("measurements/off_null.json")
 
     fc, tot = b["false_curves"], b["totals_matched"]
     at = {p: f"{float(c):g}" for p, c in b["matched_at"].items()}
@@ -253,7 +256,17 @@ def main():
       "was fixed in advance, and there both false rates failed.")
     w("- BLISS's hits through this search's test, and the same-hit control, are combinations of two "
       "pipelines, designed after the main result was seen.")
-    w("- Open: the signals BLISS finds that this search misses are being traced one by one.")
+    if trace:
+        tc = trace["counts"]
+        null_share = sum(v >= trace["off_max"] for v in off_null["values"]) / len(off_null["values"])
+        w(f"- Of the planted signals BLISS finds at S/N 10 and this search raises no candidate for, "
+          f"{trace['signals']} were traced stage by stage. {tc['off_noise'] + tc['off_noise_and_shadow']} are "
+          f"found strongly in all three ON looks and then called interference because one OFF look reaches "
+          f"S/N {trace['off_max']:g} along the track on noise: the OFF test's measured cost "
+          f"({100 * null_share:.2g}% of {n(len(off_null['values']))} random tracks reach it). "
+          f"{tc['off_signal']} meet something real in an OFF look, "
+          f"{tc['one_on_look'] + tc['no_on_hits']} are missed by the detector (mostly in crowded blocks) and "
+          f"{tc['faint']} are too faint. The threshold was set beforehand and is not moved for this.")
     w("")
     w("## Data and code availability")
     w("")
@@ -281,6 +294,11 @@ def main():
           f"{str(pv.get('git_commit', ''))[:7]}")
     for c in control:
         w(f"- bliss_control/block_{c['block']:03d}.json: finished {c['finished_utc']}")
+    for name, r in (("data/analysis/bliss_only/trace_summary.json", trace),
+                    ("data/measurements/off_null.json", off_null)):
+        if r:
+            pv = r.get("provenance", {})
+            w(f"- {name}: written {pv.get('created_utc')}, commit {str(pv.get('git_commit', ''))[:7]}")
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text("\n".join(L) + "\n", encoding="utf-8")
     print(f"{OUT}: version {VERSION}, {len(L)} lines")

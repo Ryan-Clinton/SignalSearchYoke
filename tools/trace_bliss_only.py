@@ -121,7 +121,52 @@ def trace_block(b, tones_here, urls, block_list, base):
     return out
 
 
+CAUSES = (
+    ("off_noise", "the OFF test: one OFF look's S/N along the track just over OFF_MAX, no OFF hit"),
+    ("off_noise_and_shadow", "the OFF test: S/N just over OFF_MAX with a shadow hit there"),
+    ("off_signal", "the OFF test: something real in an OFF look (S/N 8 or more)"),
+    ("one_on_look", "the detector, in one ON look (the others' event then vetoed as above)"),
+    ("no_on_hits", "the detector: no hit in any ON look, though the track is bright"),
+    ("faint", "too faint: hits only under the cut, or none with the track near the noise"),
+)
+
+
+def cause(r):
+    """One cause for a traced signal, from its trace record."""
+    if r["stage"].startswith("cadence test"):
+        offs = [lk for e in r["events"] for lk in e["looks"] if not lk["on"] and lk["off_evidence"]]
+        best = max(max(x for x in (lk["track_snr"], lk.get("track_snr_fixed")) if x is not None) for lk in offs)
+        if best >= 8:
+            return "off_signal"
+        return "off_noise_and_shadow" if any(lk.get("hit_snr") for lk in offs) else "off_noise"
+    found = [lk["best_matching_hit"] for lk in r["looks"]]
+    if r["stage"].startswith("detector: no matching hit") and any(found):
+        return "one_on_look"
+    tracks = [lk["track_snr"] or 0 for lk in r["looks"]]
+    if r["stage"].startswith("detector: no matching hit") and min(tracks) >= 10:
+        return "no_on_hits"
+    return "faint"
+
+
+def summarise():
+    """trace_summary.json: each traced signal's cause, and the counts."""
+    rows = []
+    for path in sorted(OUT.glob("trace_block_*.json")):
+        for r in json.loads(path.read_text(encoding="utf-8")):
+            rows.append({"block": r["block"], "tone": r["tone"], "s_in": r["s_in"], "drift": r["drift"],
+                         "stage": r["stage"], "cause": cause(r)})
+    counts = {k: sum(r["cause"] == k for r in rows) for k, _ in CAUSES}
+    rec = {"signals": len(rows), "causes": dict(CAUSES), "counts": counts, "rows": rows,
+           "off_max": matched.onoff.OFF_MAX}
+    yoke.write(OUT / "trace_summary.json", rec, indent=1, stamp=True)
+    for k, text in CAUSES:
+        print(f"{counts[k]:3d}  {text}")
+    return rec
+
+
 def main():
+    if sys.argv[1:] == ["summary"]:
+        return summarise()
     lst = json.loads((OUT / "list.json").read_text(encoding="utf-8"))
     none = [x for x in lst if x["ours_10"]["lenient"] is None]
     by_block = {}
@@ -141,6 +186,7 @@ def main():
         for r in res:
             print(f"block {b} tone {r['tone']} S_in {r['s_in']} drift {r['drift']:.3f}: {r['stage']}", flush=True)
     print(f"traced {sum(len(v) for v in by_block.values())} signals in {len(by_block)} blocks", flush=True)
+    summarise()
 
 
 if __name__ == "__main__":

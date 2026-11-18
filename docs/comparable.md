@@ -864,9 +864,31 @@ docs/results/KIC8462852-AGBT17A_999_68-bliss.md):**
   has hits in all three ON looks and two of them match (the third off in
   frequency or drift), in the rest one of three, or two or one of fewer,
   so the three-look standard does not count it. 28 have no candidate from this search at all, mostly in
-  crowded blocks (35, 36, 48, 50), where the nearest is kHz away; these
-  are still to be looked at one by one. This search finds 3,863 that BLISS
+  crowded blocks (35, 36, 48, 50), where the nearest is kHz away. This search finds 3,863 that BLISS
   misses; both find 4,843.
+- **The 28, traced one by one** (`tools/trace_bliss_only.py`: each block
+  read and planted again, searched unchanged, judged at SNR 10 with the
+  true ON looks; `data/analysis/bliss_only/trace_summary.json`):
+  - 15: this search finds the signal strongly in all three ON looks, and
+    the OFF test calls it interference because one OFF look's S/N along
+    the track is just over OFF_MAX (6.0 to 7.3) with no hit there: noise.
+    Random tracks reach 6 in 0.66% of 10,000 (`off_null.json`), so this
+    is the OFF test's known cost, falling here on signals BLISS's event
+    stage keeps.
+  - 2 more the same, with a shadow hit (S/N 5.1, 5.2) in that OFF look.
+  - 2 lost to something real in an OFF look (S/N 10.1 along the drift;
+    24.2 at a fixed frequency beside interference in the unplanted data).
+  - 2 missed by the detector in one ON look (fast drifts, 0.98 and 1.59
+    Hz/s); the other looks' event was vetoed on noise as above.
+  - 5 with no hit in any ON look though the track is bright (S/N 12 to
+    66): block 35's three, block 96 (-2.04 Hz/s) and block 129: the
+    detector, in crowded blocks.
+  - 2 too faint: hits 8.8 to 9.6, just under the cut, and one at S_in 20
+    beside strong interference 560 Hz away.
+
+  OFF_MAX is not changed for this: it was set before, from planted
+  signals, and moving it after seeing which signals it costs would be
+  tuning on the test.
 
 **Done when:** BLISS's false curve, matched cut and recovery by drift and
 strength are on step 4's page beside the other two, with the signals
