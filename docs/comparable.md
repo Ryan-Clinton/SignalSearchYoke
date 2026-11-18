@@ -807,7 +807,10 @@ docs/results/KIC8462852-AGBT17A_999_68-bliss.md):**
   the event stage. The control (`matched.py bliss-control`, 18 November)
   takes one hit list, BLISS's own at SNR 30 (one GPU run on both cuts),
   through each logic, on the two blocks that carry most of the false
-  candidates. Distinct false candidates at SNR 30 over the 19 wrong
+  candidates. Both logics run in that one run on the same in-memory hit
+  lists: BLISS's event stage is the port, given the hits in its
+  documented order (channel, then drift). A fingerprint of each cut's
+  hit lists is in the record (bliss_control/). Distinct false candidates at SNR 30 over the 19 wrong
   choices, shared hits:
 
   | block | BLISS's event stage | this search's test | the same, with shadow hits from SNR 5 | this search's test on the SNR 5 hits |
@@ -822,6 +825,8 @@ docs/results/KIC8462852-AGBT17A_999_68-bliss.md):**
   blocks). Grouped at SNR 5, with the cut applied afterwards, it is 1 and
   0.
 
+  BLISS's event stage on the same hits gives exactly the counts of
+  add_bliss's earlier run (1,610 and 2,627).
   The run repeats bliss-judge's count on the SNR 5 hits exactly (1 and 0
   again). So both stages count, the event stage far more, and the
   combination that works is BLISS's hits grouped at a low cut with a test

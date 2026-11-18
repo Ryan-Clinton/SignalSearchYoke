@@ -12,8 +12,11 @@ announcement that this search is better. Nothing is put on the server until the 
   service, database or upload. On the server that means one directory and one nginx server block
   with a certificate, beside the live sites and without touching them. The owner sets up the server
   or gives the go for it. Until then brokerblitzer stays read-only for this project.
-- **Updates:** a new version is the same directory replaced whole. Each version's footer gives the
-  commit it was built from.
+- **Updates:**
+  - Each version goes into its own directory, named by its commit.
+  - It is checked there, then made live by switching one symlink that nginx serves.
+  - A half-copied version is never visible, and going back is switching the link back.
+  - Each version's footer gives the commit it was built from.
 
 ## How it is built
 
@@ -35,16 +38,36 @@ announcement that this search is better. Nothing is put on the server until the 
 - `site.py check` re-reads the built page and confirms that every number on it matches the records
   it names. The build runs the check, so a page cannot leave the build with a number its records do
   not give.
+- **Each comparison has its own template, and the build checks what the comparison needs:**
+  - **A paired comparison** (both, either alone, neither, the bootstrap) is built only when both
+    pipelines' records cover the same blocks, the same planted signals (frequency, drift and S_in
+    per block) and the same scoring standard. Otherwise the build refuses.
+  - **A comparison at the matched rule** says what it is: "both met the 0.1-a-block target at
+    the tested cut, with different measured false rates", followed by both rates and their
+    intervals. Equal cuts are never written up as equal rates.
+  - **Inference:** each bootstrap interval is said to hold for this session, these cuts and this
+    signal grid, not for sensitivity in general.
+- **What the checks cannot do:** they keep the numbers, provenance and pairing honest, but not
+  whether a comparison means what the sentence says. That is the owner's read before it goes up
+  (Done when).
 
 ## What it says, in order
 
 Every finding carries one of three labels. The page keeps them apart and never merges them in a
-summary:
+summary. A label is given only with its evidence, a commit, and `site.py` reads the label from a
+table in the script, not from the prose:
 
-- **fixed beforehand:** step 10's criteria, frozen before the data was read;
-- **measured:** a measurement whose method was set before its result was seen, but not frozen;
-- **after the fact:** chosen after seeing a result, such as the satellite-band breakdown of step
-  10's false candidates or the full checks on its blocks.
+- **fixed beforehand:** frozen before the data was read, with a fingerprint checked when it ran.
+  Only step 10 has this: config/step10.json, its fingerprint and its logged deviation.
+- **method set beforehand:** the method and the comparison were committed before the run whose
+  records the page reads, and the evidence is the method's commit dated before those records.
+  Step 11's BLISS run at step 4's matched rule qualifies: the rule and the signal grid were
+  committed before BLISS was run. Step 4's own cuts do not: they were chosen on the blocks they
+  were judged on (comparable.md step 10).
+- **exploratory:** designed or chosen after seeing a result. This covers step 4's matched cuts,
+  BLISS's hits through this search's test, the same-hit control, the curved second pass, the
+  satellite-band breakdown of step 10's false candidates and the full checks on its blocks. A
+  measurement whose order cannot be shown from the commits is exploratory.
 
 1. **What this is.** An experimental search for narrowband radio signals, tested against
    turboSETI and BLISS on recorded Breakthrough Listen observations from Green Bank, with
@@ -57,7 +80,8 @@ summary:
      ±0.05 Hz/s.
    - False candidates are counted on the 19 wrong ON/OFF choices.
    - Pipelines are compared at the cut where each gives at most 0.1 false candidates a block.
-3. **The first session** (KIC8462852, AGBT17A_999_68, 2017; measured). One table: each pipeline's
+3. **The first session** (KIC8462852, AGBT17A_999_68, 2017; exploratory for this search's and
+   turboSETI's cuts, method set beforehand for BLISS as published). One table: each pipeline's
    cut, its false rate with its interval, and the signals it recovers.
    - This search: cut 30, 0.068 a block, 4,520 recovered.
    - turboSETI: cut 30, 0.049 a block, 442 recovered.
@@ -66,8 +90,8 @@ summary:
 
    The paired difference against that last row goes under the table: +0.036 of the 13,310 by a
    block bootstrap (0.026 to 0.046); 691 recovered by this search alone, 219 by BLISS's hits alone.
-   The text calls the operating points "comparable": both meet the same target, at rates that are
-   close but not equal.
+   The text says that both met the 0.1-a-block target at the tested cut, with different measured
+   false rates (0.068 and 0.052). The interval holds for this session, cut and signal grid.
 4. **The second session** (HIP17147, AGBT16A_999_192, 2016, L band; fixed beforehand). This section
    gets the same weight on the page as section 3, and comes straight after it.
    - **Recovery held:** 4,337 against turboSETI's 417.
@@ -75,7 +99,7 @@ summary:
      turboSETI 1.27.
    - The step's verdict is quoted as generated, with its logged deviation.
    - The satellite-band breakdown follows, labelled after the fact.
-5. **BLISS** (measured). Why BLISS as published has no matched cut:
+5. **BLISS** (exploratory, apart from BLISS as published in section 3). Why BLISS as published has no matched cut:
    - It groups hits differently as the cut changes.
    - Its event stage keeps making false candidates from interference hits that this search's test
      rejects.
@@ -86,7 +110,7 @@ summary:
 
    It also says that the BLISS row with this search's test is a combination of the two pipelines,
    not BLISS as published.
-6. **Curved tracks** (measured, experimental). The curved second pass is kept apart from the
+6. **Curved tracks** (exploratory on step 4's blocks; its run on step 10's session was fixed beforehand: its recovery held, 2,769 against production's 389 of 7,260 with none of production's lost, and its false rate failed with production's). The curved second pass is kept apart from the
    search. Give its recovery at |a| ≥ 10⁻⁴ Hz/s² against production's at the same cut, and state
    that no change to `onoff.py` is made on it.
 7. **What this does not show.**

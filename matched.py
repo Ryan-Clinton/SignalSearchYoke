@@ -1085,10 +1085,14 @@ def bliss_control(target, blocks, say=print):
     hits are found at both cuts in one run (the GPU, shuffles=0), and the
     distinct false candidates of the 19 wrong choices at CONTROL_CUT
     (shared hits) are counted for: BLISS's event stage on the CONTROL_CUT
-    hits (its own run, as add_bliss); this search's cadence test on the same
-    hits with no shadow hits; on them with the BLISS_HIT_CUT hits under the
-    cut added as shadow hits; and on the BLISS_HIT_CUT hits alone (as
-    bliss-judge, run again). One record a block under bliss_control/."""
+    hits (the port, in the same run, on the same in-memory hit lists in its
+    documented order); this search's cadence test on those hits with no
+    shadow hits; on them with the BLISS_HIT_CUT hits under the cut added as
+    shadow hits; and on the BLISS_HIT_CUT hits alone (as bliss-judge, run
+    again). The earlier runs' counts (add_bliss, bliss-judge) are recorded
+    beside them, not used in their place. A fingerprint of each cut's hit
+    lists, as both logics were given them, is in the record. One record a
+    block under bliss_control/."""
     db = store.connect_readonly()
     session, urls = store.cadence_files(db, target)
     db.close()
@@ -1107,7 +1111,7 @@ def bliss_control(target, blocks, say=print):
         shutil.rmtree(work, ignore_errors=True)
         try:
             paths = [seti.save(c["s"], work / f"{j}.h5") for j, c in enumerate(cad)]
-            h = _bliss_tool(work / "plain.json", "true", paths, cuts=(BLISS_HIT_CUT, CONTROL_CUT), shuffles=0)
+            h = _bliss_tool(work / "plain.json", "all", paths, cuts=(BLISS_HIT_CUT, CONTROL_CUT), shuffles=0)
         finally:
             shutil.rmtree(work, ignore_errors=True)
         arrangements = {"hits at 30, no shadow hits": _bliss_searched(cad, h, CONTROL_CUT),
@@ -1125,13 +1129,21 @@ def bliss_control(target, blocks, say=print):
                 for lk in looks:
                     lk.flat = None
             counts[name] = len(shared_hits(false))
+        import hashlib
+        same_run = {str(tuple(e["as_on"])): _bliss_kept(e["rows"]) for e in h["events"]
+                    if tuple(e["as_on"]) != TRUE and e["cut"] == CONTROL_CUT}
+        if len(same_run) != 19:
+            raise yoke.Refusal("INTERNAL_ERROR", f"block {b}: BLISS's events for {len(same_run)} wrong choices, not 19")
+        fingerprint = {k: hashlib.sha256(json.dumps(v, sort_keys=True).encode()).hexdigest()[:16]
+                       for k, v in h["hits"].items()}
         native = json.loads((bliss_folder(target, session) / f"block_{b:03d}.json").read_text(encoding="utf-8"))
         judged = json.loads((judge_folder(target, session) / f"block_{b:03d}.json").read_text(encoding="utf-8"))
         res = {"block": b, "class": rec["class"], "cut": CONTROL_CUT, "config": bliss_judge_config(),
-               "provenance": h["provenance"],
+               "provenance": h["provenance"], "hits_fingerprint": fingerprint,
                "hits": {k: [len(x) for x in v] for k, v in h["hits"].items()},
-               "false_distinct": {"BLISS's event stage, its own run": len(shared_hits(native["false"][cut])),
+               "false_distinct": {"BLISS's event stage, same hits": len(shared_hits(same_run)),
                                   **counts,
+                                  "BLISS's event stage, add_bliss's run": len(shared_hits(native["false"][cut])),
                                   "hits at 5, bliss-judge's record": len(shared_hits(judged["false"][cut]))},
                "s": round(time.monotonic() - started, 1),
                "finished_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
