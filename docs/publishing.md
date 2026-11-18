@@ -8,15 +8,22 @@ publishing.
 
 ## What SignalSearchYoke would send
 
-A report, the way scientific results are usually written up, not a series
-of posts. Its title: "Comparing radio-signal searches on Breakthrough Listen
-data". It has a short summary, the method, the results with their tables,
-and the limitations, including the second session's failed false-candidate
-limit, stated plainly.
+Ryan would rather have a report than a series of posts, the way scientific
+results are usually written up. How the site holds a report and its
+revisions is the site's decision.
 
-The report is dated and versioned. When a result changes, the report is
-revised, with a dated note of what changed, instead of a new entry going
-up. A later separate study would be a second report on the same page.
+Its title: "Comparing radio-signal searches on Breakthrough Listen data". Its
+sections are the usual ones:
+- the question;
+- the method;
+- the results with their tables and intervals;
+- what they suggest;
+- the limitations, including the second session's failed false-candidate
+  limit, stated plainly;
+- the data, the code and the configurations behind it;
+- references, and the dates of its revisions.
+
+When a result changes, the report is revised with a note of what changed.
 
 The first version would cover:
 - the comparison with turboSETI and BLISS on the 2017 KIC8462852 session;
@@ -27,7 +34,7 @@ In every version:
   against them before sending;
 - Breakthrough Listen is credited for the data, with no use of their logo
   or name as an endorsement;
-- nothing links into the repository, which is private.
+- nothing links into the repository while it is private.
 
 ## What SignalSearchYoke needs from the site
 
