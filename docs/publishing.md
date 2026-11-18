@@ -1,50 +1,54 @@
-# Publishing findings on ryanclinton.uk
+# Publishing the findings
 
-Ryan wants SignalSearchYoke's findings at
-ryanclinton.uk/astrophotography/signalsearch/. This is a request to put them
-there through the site's existing inbox, the one telescopeyoke uses for the
-diary. SignalSearchYoke builds nothing of its own for hosting or
-publishing.
+Ryan's first publication: one report, citable, with a readable home on his
+site. When a second comes along, this gets revisited then.
 
-## What SignalSearchYoke would send
+## The pieces
 
-Ryan would rather have a report than a series of posts, the way scientific
-results are usually written up. How the site holds a report and its
-revisions is the site's decision.
+- **The report.** "Comparing radio-signal searches on Breakthrough Listen
+  data". It has a plain summary at the top, then:
+  - the question and the method;
+  - the results, with their tables, intervals and figures;
+  - what they suggest;
+  - the limitations, including the 2016 session's failed false-candidate
+    limit, stated plainly;
+  - data and code availability;
+  - references and revisions.
 
-Its title: "Comparing radio-signal searches on Breakthrough Listen data". Its
-sections are the usual ones:
-- the question;
-- the method;
-- the results with their tables and intervals;
-- what they suggest;
-- the limitations, including the second session's failed false-candidate
-  limit, stated plainly;
-- the data, the code and the configurations behind it;
-- references, and the dates of its revisions.
+  Every number is read from the committed records and checked against them.
+  The report is written as Markdown and a PDF. Each version has a number and
+  a date, and a revision note says what changed.
+- **Zenodo holds each version.** The PDF of each version is deposited on
+  Zenodo, which gives it a permanent DOI (and a concept DOI for all
+  versions). This is what people cite.
+- **The code.** Once the repository is public: a tagged release archived on
+  Zenodo with its own DOI, and a CITATION.cff in the repository. The report
+  cites both.
+- **The data.** Credited as papers using it do:
+  - a data availability statement pointing to the Breakthrough Listen Open
+    Data Archive;
+  - a citation of its data release paper (Lebofsky et al. 2019, PASP 131,
+    124505);
+  - a code availability statement for the tools used (turboSETI, BLISS,
+    blimpy).
 
-When a result changes, the report is revised with a note of what changed.
+  No use of their logo or name as an endorsement.
+- **Ryan's accounts.** Zenodo and ORCID are in Ryan's name. Each version goes
+  to Zenodo only on his go, because a DOI is permanent.
 
-The first version would cover:
-- the comparison with turboSETI and BLISS on the 2017 KIC8462852 session;
-- the 2016 HIP17147 session, which failed its false-candidate limit.
+## The request to ryanclinton.uk
 
-In every version:
-- every number is read from the project's committed records and checked
-  against them before sending;
-- Breakthrough Listen is credited for the data as papers using it do: a
-  data availability statement pointing to the Open Data Archive, a citation
-  of its data release paper (Lebofsky et al. 2019, PASP 131, 124505), and a
-  code availability statement for the tools used (turboSETI, BLISS, blimpy);
-  no use of their logo or name as an endorsement;
-- nothing links into the repository while it is private.
+One page at /astrophotography/signalsearch/, through the site's existing
+setup, holding:
 
-## What SignalSearchYoke needs from the site
+- the report, with its version number and date;
+- a "how to cite" line with the DOI;
+- the PDF to download, the same file as on Zenodo;
+- the list of revisions;
+- citation meta tags in the page head (citation_title, citation_author,
+  citation_publication_date, citation_doi, citation_pdf_url), which Google
+  Scholar reads.
 
-- whether the inbox can take a report like this and its revisions, and in
-  what format;
-- anything the site's checks need from it;
-- how the voice should go, if it differs from the diary's.
-
-SignalSearchYoke writes to that format. Everything about the site itself,
-its pages, checks, build and server, stays as the site already does it.
+How that fits the site is the site's decision. SignalSearchYoke supplies
+the Markdown, the PDF, the figures and the citation details in whatever
+format the site's inbox takes, and needs to know that format.
