@@ -434,7 +434,7 @@ mostly shadow hits), accepted science data alone would be about 19 GB for
 100 cadences, 194 GB for 1,000 and 1.9 TB for 10,000; real sizes depend on
 each session's interference, the schema, indexes and compression. Kept
 submissions (at least two a block, more in disputes) roughly double to
-triple that, and backups add more. Brokerblitzer has 217 GB free, shared
+triple that, and backups add more. The pilot's server has about 200 GB free, shared
 with its other services. So:
 
 - **Separate budgets** for the science store, kept submissions, the
@@ -454,7 +454,7 @@ with its other services. So:
 - **Admission by disk:** the server stops handing out work before free
   disk falls below a floor that protects the other services.
 - **Before the survey outgrows the box:** the science store moves to
-  storage of its own; brokerblitzer's disk is for the pilot.
+  storage of its own; the pilot server's disk is for the pilot.
 
 ## Security and isolation
 
@@ -505,16 +505,13 @@ rate limit. What the project can do:
 
 ## Where it runs
 
-The work server goes on the project owner's existing server
-("brokerblitzer") for the pilot: nothing to buy. Looked at (read only) on
-11 November 2026: Ubuntu 24.04, 6 cores, 7.7 GB of memory (about 5 GB
-free), 217 GB of disk free. It already runs nginx with HTTPS on 443 for the
-ryanclinton.uk sites (each a service on a local port behind nginx),
-PostgreSQL 16, Redis, earlyoom, and other services and customers'
-workloads. So:
+The work server goes on an existing server of the project owner's for the
+pilot: nothing to buy. It is shared: it already serves websites behind
+nginx with HTTPS, a database and other services, with a few gigabytes of
+memory and a couple of hundred gigabytes of disk free. So:
 
 - **The service** is one more local-port service behind nginx, on a
-  subdomain of ryanclinton.uk, under its own unprivileged user, in a
+  subdomain of the owner's site, under its own unprivileged user, in a
   systemd slice with memory, CPU and task limits (earlyoom kills the
   largest process when memory runs short: it must be this service, not a
   site), with the bounds above.
@@ -524,7 +521,7 @@ workloads. So:
 - **The checks** (about 5 s and little memory a candidate) and the ranking
   run there, in the same slice.
 - **Load tests on it are gentle:** stage 3's load and failure tests run on
-  the project's own machines; on brokerblitzer only a light check that
+  the project's own machines; on the pilot server only a light check that
   the limits hold, never saturating what other services share.
 
 ## The volunteer's program
@@ -600,7 +597,7 @@ and pickles are not part of it.
    shows the audit works as designed, not that omission is prevented).
    A restore from backup has been done.
 4. **A pilot with a few known people** (stage 1's), through the server on
-   brokerblitzer. *Done when:* they have searched the whole KIC 8462852
+   the pilot server. *Done when:* they have searched the whole KIC 8462852
    cadence through it, and the accepted store matches this computer's
    sweep (every hit, event, candidate and check); and measured: request
    rates and bytes (estimated, as above), time per block, the project's
@@ -615,7 +612,7 @@ and pickles are not part of it.
 
 ## What is open
 
-- The subdomain, and the service's limits on brokerblitzer (stage 3).
+- The subdomain, and the service's limits on the pilot server (stage 3).
 - Breakthrough Listen's answer on load (before stage 3).
 - Who the first few people are.
 - How cadences are chosen once KIC 8462852's is done.

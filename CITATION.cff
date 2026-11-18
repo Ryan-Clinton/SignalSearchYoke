@@ -1,0 +1,29 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "SignalSearchYoke"
+abstract: >-
+  A search for narrowband radio signals in Breakthrough Listen's open data,
+  with the ON-OFF cadence test, and a comparison against turboSETI and BLISS
+  at matched false-candidate rates.
+type: software
+authors:
+  - given-names: Ryan
+    family-names: Clinton
+version: 0.1.0
+repository-code: "https://github.com/Ryan-Clinton/SignalSearchYoke"
+keywords:
+  - SETI
+  - technosignatures
+  - radio astronomy
+  - Breakthrough Listen
+references:
+  - type: article
+    title: "The Breakthrough Listen search for intelligent life: public data, formats, reduction and archiving"
+    authors:
+      - family-names: Lebofsky
+        given-names: Matthew
+        name-suffix: "et al."
+    journal: "Publications of the Astronomical Society of the Pacific"
+    volume: 131
+    start: 124505
+    year: 2019

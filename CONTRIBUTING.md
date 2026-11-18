@@ -1,0 +1,42 @@
+# Contributing
+
+Issues and pull requests are welcome. This is one person's research
+project, so replies may be slow.
+
+## Before a pull request
+
+```
+python -m pip install -r requirements-dev.txt
+python -m ruff check .
+python -m unittest discover -s tests -v
+```
+
+The tests are offline and take about ten seconds; GitHub runs the same on
+every push and pull request (Python 3.11 and 3.12). They need no archive
+access, no turboSETI or BLISS, and nothing in `data/`.
+
+## What a change must not move without saying so
+
+The published results rest on the search, the cadence test, the checks,
+the planting and the thresholds. A change to any of them changes what was
+measured, so it comes with:
+
+- a new search or checks version (`SEARCH_VERSION` in `seti.py`, `VERSION` in
+  `vetting.py`), so older
+  results are marked superseded and searched again rather than mixed in;
+- the measurement it affects run again, and the result pages regenerated
+  from the records, not edited by hand;
+- a note in docs/seti.md or docs/comparable.md of what changed and what it
+  moved.
+
+Step 10's verdict (config/step10.json) is final; it is not re-run to a
+different end.
+
+Tidying, error messages, documentation and new tests need none of this.
+
+## The long checks
+
+The experiments in docs/reproducing-results.md (sweeps, matched runs,
+BLISS) take hours and read gigabytes from Breakthrough Listen's archive.
+They are not part of a pull request's checks. Keep requests to the archive
+modest: `reading.py` holds at most 8 at a time.

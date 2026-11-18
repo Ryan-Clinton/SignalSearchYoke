@@ -1781,7 +1781,9 @@ recovered by three looks, and "left" is how many of them survive the checks
 | 10, store | 991 / 3 | 994 / 3 | 6,749 / 2,841 | 7,646 / 3,190 | 9,469 / 3,914 | 10,998 / 4,573 |
 
 (The pass at 10⁻⁴ and 3×10⁻⁴ keeps 992 wrong choices at cut 10 and 21 at
-cut 30, with the same number left.) What this says:
+cut 30, with the same number left.) The pass at 10⁻³ recovers 6,555 here
+and 6,557 in the recheck above (`curved-pass.json`): the two runs differ by
+two of the 14,520 signals, not yet traced; production's 4,078 is the same in both. What this says:
 
 - **The pass adds no unexplained false candidate.** Across the 121 blocks
   it keeps 3 more wrong-choice signals than production at cut 10 and 1

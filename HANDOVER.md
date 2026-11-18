@@ -1,5 +1,11 @@
 # SignalSearchYoke: handover, 9 November 2026
 
+> **Historical.** Written for whoever took the project over, and kept as a
+> record of its state then, with later results appended to "The state".
+> It is not kept current. For the project now: [README.md](README.md);
+> for setting up the comparison tools:
+> [docs/reproducing-results.md](docs/reproducing-results.md).
+
 How this project works and where it stands. It was split out of the
 telescopeyoke repository on 8 November 2026; the git history here is the
 SETI search's own 12 commits from there, then the split.
@@ -252,7 +258,9 @@ the default place.
   marked by the checks; none unexplained. The 95 share five real
   cadences' looks: counted per real cadence, 0.2 a block (95% 0.005 to
   1.1), a wide bound the sweep itself will narrow.
-- Nothing runs on a timer.
+- Nothing ran on a timer then. Since 16 November `tools/jobs.ps1 -Install`
+  can start the job queue at each logon on Windows (optional; the search
+  never needs it).
 - SETI has been taken out of telescopeyoke; nothing in this repository
   reads or imports anything from it.
 
