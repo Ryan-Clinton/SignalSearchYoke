@@ -21,6 +21,9 @@ SCHEMA_VERSION = "1.0"
 ERRORS = {
     "INVALID_REQUEST": (False, "Check the command's arguments."),
     "INTERNAL_ERROR": (False, "Unexpected failure; see the message."),
+    "NOT_FOUND": (False, "Run the step it names first."),
+    "NOT_CHECKED": (False, "Run check.py on the store's candidates first."),
+    "NOT_MEASURED": (False, "Run the measurement it names first."),
 }
 
 

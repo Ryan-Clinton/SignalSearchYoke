@@ -61,6 +61,7 @@ def pickles_source():
 
 
 def _tool(script, *args):
+    seti.need_turboseti()
     done = subprocess.run([str(seti.TURBOSETI_PYTHON), "-I", str(yoke.ROOT / "tools" / script), *map(str, args)],
                           capture_output=True, text=True, timeout=7200)
     if done.returncode:
@@ -81,6 +82,7 @@ def run(target, count=None, say=print):
     todo_all = [k for k in range(len(block_list)) if not (base / f"block_{k:03d}" / "block.json").exists()]
     todo = todo_all if count is None else todo_all[:count]
     say(f"{target} {session}: {len(block_list) - len(todo_all)} block(s) done before, {len(todo)} to run")
+    seti.need_turboseti()
     source, source_sha = pickles_source()
     turbo_version = subprocess.run([str(seti.TURBOSETI_PYTHON), "-c",
                                     "import turbo_seti; print(turbo_seti.__version__)"],

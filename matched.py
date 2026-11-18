@@ -658,13 +658,41 @@ BLISS_COMMIT = "2b98afe960f13ee7e467aca499576d87ee7502f5"
 BLISS_FORMAT = 2                # 2: configuration and provenance kept; flags and the hit filter on planted tracks
 CUTS_BLISS = CUTS_TURBO
 BLISS_TOOLS = ("tools/bliss_curves.py", "tools/bliss/bliss_events.py", "tools/bliss/event_search_off_hits_once.patch")
-# ... and where it runs on this machine (settings, not part of the comparison): the WSL distribution, the
-# Python with BLISS's module, and the libraries it needs. bliss_curves.py takes BLISS_PYTHON_DIR,
-# BLISS_RESPONSE and BLISS_DEVICE from the same environment.
+# ... and where it runs (settings, not part of the comparison): the WSL distribution, the Python with
+# BLISS's module, and the libraries it needs. Unset, the last two are under ~/ssy in the distribution
+# (docs/reproducing-results.md). bliss_curves.py takes BLISS_PYTHON_DIR, BLISS_RESPONSE and BLISS_DEVICE
+# from the same environment.
 BLISS_DISTRO = __import__("os").environ.get("SSY_BLISS_DISTRO", "Ubuntu")
-BLISS_PYTHON = __import__("os").environ.get("SSY_BLISS_PYTHON", "/home/facepipe/ssy/blissenv/bin/python")
-BLISS_LD_PATH = __import__("os").environ.get("SSY_BLISS_LD_PATH", "/home/facepipe/ssy/cuda126/lib:/usr/lib/wsl/lib")
+BLISS_PYTHON = __import__("os").environ.get("SSY_BLISS_PYTHON")
+BLISS_LD_PATH = __import__("os").environ.get("SSY_BLISS_LD_PATH")
 BLISS_TIMEOUT_S = 4 * 3600
+_bliss_where = None
+
+
+def bliss_where():
+    """(python, LD_LIBRARY_PATH) for BLISS in WSL, checked once: refused, saying
+    what is missing, when WSL, the distribution or BLISS's Python is not there."""
+    global _bliss_where
+    if _bliss_where:
+        return _bliss_where
+    import subprocess
+    how = "BLISS runs only for the comparison (step 11); docs/reproducing-results.md says how to build it"
+    try:
+        home = subprocess.run(["wsl", "-d", BLISS_DISTRO, "--", "sh", "-c", 'printf %s "$HOME"'],
+                              capture_output=True, text=True, timeout=120)
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        raise yoke.Refusal("INVALID_REQUEST", f"WSL is not available here. {how}.")
+    if home.returncode or not home.stdout.strip():
+        raise yoke.Refusal("INVALID_REQUEST", f"WSL has no distribution {BLISS_DISTRO!r} (SSY_BLISS_DISTRO names "
+                                              f"another). {how}.")
+    home = home.stdout.strip()
+    python = BLISS_PYTHON or f"{home}/ssy/blissenv/bin/python"
+    ld = BLISS_LD_PATH or f"{home}/ssy/cuda126/lib:/usr/lib/wsl/lib"
+    if subprocess.run(["wsl", "-d", BLISS_DISTRO, "--", "test", "-x", python], timeout=120).returncode:
+        raise yoke.Refusal("INVALID_REQUEST", f"No Python for BLISS at {python} in WSL's {BLISS_DISTRO} "
+                                              f"(SSY_BLISS_PYTHON names another). {how}.")
+    _bliss_where = python, ld
+    return _bliss_where
 
 
 def bliss_config():
@@ -683,7 +711,8 @@ def _bliss_tool(out, which, paths, tones=None, cuts=CUTS_BLISS, shuffles=None):
     import subprocess
     extra = ["--tones", _wsl_path(tones)] if tones else []
     env = [] if shuffles is None else [f"BLISS_SHUFFLES={shuffles}"]
-    done = subprocess.run(["wsl", "-d", BLISS_DISTRO, "--", "env", f"LD_LIBRARY_PATH={BLISS_LD_PATH}", *env, BLISS_PYTHON,
+    python, ld = bliss_where()
+    done = subprocess.run(["wsl", "-d", BLISS_DISTRO, "--", "env", f"LD_LIBRARY_PATH={ld}", *env, python,
                            _wsl_path(yoke.ROOT / "tools" / "bliss_curves.py"), *extra, _wsl_path(out),
                            ",".join(map(str, cuts)), which, *map(_wsl_path, paths)],
                           capture_output=True, text=True, timeout=BLISS_TIMEOUT_S)

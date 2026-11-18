@@ -624,7 +624,9 @@ def markdown_bliss(r):
 
 if __name__ == "__main__":
     import sys
-    if len(sys.argv) > 1 and sys.argv[1] == "bliss":
+    if len(sys.argv) > 1 and sys.argv[1] in ("-h", "--help"):
+        print(__doc__)
+    elif len(sys.argv) > 1 and sys.argv[1] == "bliss":
         write_bliss(sys.argv[2] if len(sys.argv) > 2 else "KIC8462852")
     else:
         write(sys.argv[1] if len(sys.argv) > 1 else "KIC8462852")

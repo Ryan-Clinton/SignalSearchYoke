@@ -835,13 +835,21 @@ def read_dat(text):
     return out
 
 
-def turboseti(path, run_it=subprocess.run):
-    """turboSETI's hits on a slice file, at the same limits as ours."""
+def need_turboseti():
+    """Refuse, saying how to install it, when turboSETI's environment is not
+    there. turboSETI is needed only for the comparisons, never the search."""
     if not TURBOSETI_PYTHON.exists():
         python = "py -3" if os.name == "nt" else "python3"
-        raise yoke.Refusal("INVALID_REQUEST", f"turboSETI is not installed: {python} -m venv "
-                                f"{TURBOSETI_PYTHON.parent.parent} && {TURBOSETI_PYTHON} -m pip install turbo_seti "
-                                + TURBOSETI_PINS + " (HANDOVER.md says why the pins)")
+        raise yoke.Refusal("INVALID_REQUEST", f"turboSETI's environment is not at {TURBOSETI_PYTHON} (only the "
+                                "comparisons need it; SSY_TURBOSETI_PYTHON names another). To install it: "
+                                f"{python} -m venv {TURBOSETI_PYTHON.parent.parent} && {TURBOSETI_PYTHON} -m pip "
+                                "install turbo_seti " + TURBOSETI_PINS +
+                                " (docs/reproducing-results.md says why the pins)")
+
+
+def turboseti(path, run_it=subprocess.run):
+    """turboSETI's hits on a slice file, at the same limits as ours."""
+    need_turboseti()
     path = Path(path).resolve()
     with tempfile.TemporaryDirectory() as out:
         # Run from the file's folder with its bare name: turboSETI joins its

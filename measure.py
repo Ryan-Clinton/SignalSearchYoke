@@ -460,7 +460,7 @@ def scale(paths, count=30, seed=5, say=print):
               "turboseti_known_bugs": ["#296: top-hit suppression drops hits beside a stronger one",
                                        "#319: level-3 de-duplication in find_event"],
               "turboseti_note": "a reference with known flaws, not the truth; run on Windows from the file's folder "
-                                "with pinned dependencies (HANDOVER.md)",
+                                "with pinned dependencies (docs/reproducing-results.md)",
               "kind": "measured"}
     _keep("scale", record)
     say(f"\nturboSETI's SNR over this search's: {record['median_of_files']} at the median of files, "
@@ -606,6 +606,7 @@ def setigen_check(say=print):
     upward in frequency, Green Bank's downward, so its channels are turned
     round first."""
     import re
+    seti.need_turboseti()
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp) / "setigen.npz"
         done = subprocess.run([str(seti.TURBOSETI_PYTHON), "-I", str(yoke.ROOT / "tools" / "setigen_frame.py"),
@@ -778,6 +779,7 @@ def price(say=print):
         # Price et al.'s pipeline on the same six slices.
         saved = sorted(keep.glob("*.h5"))
         out = yoke.DATA / "validation" / f"turbo_{PRICE_TARGET['name']}_{sess['session']}"
+        seti.need_turboseti()
         done = subprocess.run([str(seti.TURBOSETI_PYTHON), "-I", str(yoke.ROOT / "tools" / "turbo_events.py"),
                                str(out), *map(str, saved)], capture_output=True, text=True, timeout=3600)
         if done.returncode:
