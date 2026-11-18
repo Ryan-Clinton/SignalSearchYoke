@@ -766,7 +766,8 @@ which is not used here (hits are read through its Python module).
   the run. Still to do: its hits through this search's cadence test as
   well as its own event stage.
 
-**Result on KIC8462852 (17 November; 121 of 121 blocks, none failed;
+**Result on KIC8462852 (17 November, the cadence test of BLISS's hits 18
+November; 121 of 121 blocks, none failed;
 docs/results/KIC8462852-AGBT17A_999_68-bliss.md):**
 
 - **BLISS has no matched cut.** Its false candidates a block (shared hits,
@@ -789,6 +790,25 @@ docs/results/KIC8462852-AGBT17A_999_68-bliss.md):**
   an event. The CPU backend, which floods each region whole, makes the
   regions wider still (1.2 MHz at SNR 5, 0.75 MHz at 10), and its hit
   filter then removes every hit on that look at both cuts.
+- **The false candidates come from BLISS's event stage, not its
+  detector.** BLISS's own hits (found once a look at SNR 5, with
+  hits under the cut kept as shadow hits, as this search's are) put
+  through this search's cadence test give 12.4 false a block at SNR 10,
+  0.37 at 20 and 0.052 at 30. That is a matched cut of 30 (interval 20 to
+  100), the same as this search's. Its crowded blocks fall from 62.4 at 10
+  to 0.26 at 30, and its clean blocks are 0 from 12. The same split hits
+  that BLISS's event stage keeps turning into events at every cut are
+  rejected by a test that needs matching hits in all three ON looks and
+  none in the OFF looks, counting the shadow hits.
+- **What BLISS's detector costs, at that matched cut (30):** BLISS's hits
+  through this search's test recover 4,048 of 13,310, this search 4,520.
+  Both recover 3,829, this search alone 691, BLISS's hits alone 219. The
+  gap is mostly at fast drifts (2 to 4 Hz/s at S_in 200: 57 against 131;
+  1 to 2 Hz/s at S_in 120: 120 against 167) and at the faintest slow
+  signals (S_in 40 under 0.15 Hz/s: 55 against 88). At 0.5 to 1 Hz/s and
+  S_in 80 BLISS's hits do better (175 against 158). At SNR 10, not at a
+  matched rate, this test recovers 5,726 from BLISS's hits against BLISS's
+  own event stage's 4,978.
 - **Recovery at each pipeline's published SNR 10** (not at matched rates),
   in all three ON looks, of 13,310: this search 8,706, BLISS 4,978,
   turboSETI 1,709. BLISS at SNR 100, still far above 0.1 false a block,
