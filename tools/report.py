@@ -30,6 +30,75 @@ def n(x):
     return f"{x:,}"
 
 
+SERIES = (("ours", "this search", "#2a78d6", "circle"),
+          ("bliss_ours", "BLISS's hits, this search's test", "#eb6834", "square"),
+          ("turboseti", "turboSETI", "#1baf7a", "triangle"))
+
+
+def figure(rows, path):
+    """Share of planted signals found in all three ON looks at each matched
+    cut, against S_in, one panel a drift bin: an SVG with no dependencies."""
+    bins = []
+    for r in rows:
+        if tuple(r["drift_hz_s"]) not in bins:
+            bins.append(tuple(r["drift_hz_s"]))
+    s_ins = sorted({r["s_in"] for r in rows})
+    pw, ph, ml, mt, gap = 168, 150, 46, 34, 14
+    W, H = ml + len(bins) * (pw + gap), mt + ph + 92
+    x = lambda i: i * (pw - 12) / (len(s_ins) - 1) + 6  # noqa: E731
+    y = lambda v: ph - v * ph  # noqa: E731
+    o = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" width="{W}" height="{H}" '
+         'font-family="Helvetica, Arial, sans-serif" font-size="11">',
+         f'<rect width="{W}" height="{H}" fill="#fcfcfb"/>']
+    for b, rng in enumerate(bins):
+        ox = ml + b * (pw + gap)
+        o.append(f'<g transform="translate({ox},{mt})">')
+        o.append(f'<text x="{pw / 2}" y="-12" text-anchor="middle" fill="#1f1f1e">drift {rng[0]:g} to {rng[1]:g} '
+                 'Hz/s</text>')
+        for v in (0, 0.5, 1):
+            o.append(f'<line x1="0" x2="{pw}" y1="{y(v)}" y2="{y(v)}" stroke="#e4e3df" stroke-width="1"/>')
+            if b == 0:
+                o.append(f'<text x="-6" y="{y(v) + 4}" text-anchor="end" fill="#5f5e5a">{v:.0%}</text>')
+        for i, si in enumerate(s_ins):
+            if si in (10, 40, 120, 400):
+                o.append(f'<text x="{x(i)}" y="{ph + 16}" text-anchor="middle" fill="#5f5e5a">{si}</text>')
+        for key, _, col, mark in SERIES:
+            pts = []
+            for i, si in enumerate(s_ins):
+                r = next(r for r in rows if tuple(r["drift_hz_s"]) == rng and r["s_in"] == si)
+                pts.append((x(i), y(r[key]["recovered"] / r[key]["planted"])))
+            o.append('<polyline fill="none" stroke="{}" stroke-width="2" points="{}"/>'.format(
+                col, " ".join(f"{a:.1f},{c:.1f}" for a, c in pts)))
+            for a, c in pts:
+                if mark == "circle":
+                    o.append(f'<circle cx="{a:.1f}" cy="{c:.1f}" r="4" fill="{col}" stroke="#fcfcfb" stroke-width="2"/>')
+                elif mark == "square":
+                    o.append(f'<rect x="{a - 4:.1f}" y="{c - 4:.1f}" width="8" height="8" rx="1" fill="{col}" '
+                             'stroke="#fcfcfb" stroke-width="2"/>')
+                else:
+                    o.append(f'<path d="M{a:.1f},{c - 5:.1f} L{a + 5:.1f},{c + 4:.1f} L{a - 5:.1f},{c + 4:.1f} Z" '
+                             f'fill="{col}" stroke="#fcfcfb" stroke-width="2"/>')
+        o.append("</g>")
+    o.append(f'<text x="{ml + (W - ml) / 2}" y="{mt + ph + 36}" text-anchor="middle" fill="#5f5e5a">'
+             'signal strength S_in</text>')
+    lx = ml
+    for _, label, col, mark in SERIES:
+        o.append(f'<line x1="{lx}" x2="{lx + 22}" y1="{H - 22}" y2="{H - 22}" stroke="{col}" stroke-width="2"/>')
+        cx, cy = lx + 11, H - 22
+        if mark == "circle":
+            o.append(f'<circle cx="{cx}" cy="{cy}" r="4" fill="{col}" stroke="#fcfcfb" stroke-width="2"/>')
+        elif mark == "square":
+            o.append(f'<rect x="{cx - 4}" y="{cy - 4}" width="8" height="8" rx="1" fill="{col}" stroke="#fcfcfb" '
+                     'stroke-width="2"/>')
+        else:
+            o.append(f'<path d="M{cx},{cy - 5} L{cx + 5},{cy + 4} L{cx - 5},{cy + 4} Z" fill="{col}" '
+                     'stroke="#fcfcfb" stroke-width="2"/>')
+        o.append(f'<text x="{lx + 28}" y="{H - 18}" fill="#1f1f1e">{label}</text>')
+        lx += 28 + 7 * len(label) + 30
+    o.append("</svg>")
+    path.write_text("\n".join(o) + "\n", encoding="utf-8")
+
+
 def main():
     b = load("measurements/matched-bliss.json")
     s10 = load("measurements/step10.json")
@@ -127,6 +196,13 @@ def main():
       f"both found {n(pair['both'])}; this search alone {n(pair['ours_only'])}, BLISS's hits alone "
       f"{n(pair['bliss_ours_only'])}. The difference, {pair['difference in share']:+.3f} of the signals "
       f"({iv(pair['interval'])}, {pair['how']}), holds for this session, these cuts and this signal grid.")
+    w("")
+    figure(b["recovery_matched"]["three_looks"]["all"], OUT.parent / "recovery.svg")
+    w("![Share of planted signals found in all three ON looks, at each pipeline's matched cut, against signal "
+      "strength, for each drift range.](recovery.svg)")
+    w("")
+    w("*Figure 1. Share of the planted signals found in all three ON looks at each pipeline's matched cut, "
+      "against signal strength (the eleven steps of the grid, evenly spaced), one panel per drift range (242 signals at each point).*")
     w("")
     if control:
         w("**Why BLISS as published has no matched cut.** On the two blocks that carry most of its false "
