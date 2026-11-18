@@ -4,6 +4,14 @@ version = "0.1.0"
 description = "Narrowband radio signals in Breakthrough Listen's open data, with the ON-OFF cadence test"
 requires-python = ">=3.11"
 dependencies = ["numpy", "requests", "h5py>=3.8", "hdf5plugin>=4.0"]
+authors = [{name = "Ryan Clinton"}]
+readme = "README.md"
+
+[project.optional-dependencies]
+dev = ["ruff"]
+
+[project.urls]
+Repository = "https://github.com/Ryan-Clinton/SignalSearchYoke"
 
 [tool.ruff]
 line-length = 120
