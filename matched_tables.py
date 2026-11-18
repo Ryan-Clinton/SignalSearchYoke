@@ -472,7 +472,7 @@ def write_bliss(target, say=print, name="matched-bliss.json"):
     jrecs = {}
     for p in sorted(matched.judge_folder(target, session).glob("block_*.json")):
         r = json.loads(p.read_text(encoding="utf-8"))
-        if r.get("config") == jconfig:
+        if matched.judge_whole(r, jconfig):
             jrecs[r["block"]] = r
     judged = all(r["block"] in jrecs for r in recs)
     if judged:
@@ -508,10 +508,16 @@ def write_bliss(target, say=print, name="matched-bliss.json"):
     def pair(a, b, how="three_looks"):
         if a not in at or b not in at:
             return None
+        import independent  # its paired block bootstrap, as step 10's verdict reports it
         ga = [_got(t, a, at[a], how) for t in tones]
         gb = [_got(t, b, at[b], how) for t in tones]
+        by_block = {}
+        for t, x, y in zip(tones, ga, gb):
+            by_block.setdefault(t["block"], []).append((bool(x), bool(y)))
+        pb = independent._paired(list(by_block.values()))
         return {"both": sum(x and y for x, y in zip(ga, gb)), f"{a}_only": sum(x and not y for x, y in zip(ga, gb)),
-                f"{b}_only": sum(y and not x for x, y in zip(ga, gb)), "neither": sum(not x and not y for x, y in zip(ga, gb))}
+                f"{b}_only": sum(y and not x for x, y in zip(ga, gb)), "neither": sum(not x and not y for x, y in zip(ga, gb)),
+                "difference in share": pb["difference"], "interval": pb["interval"], "how": pb["how"]}
     shuffled_recovery = {}
     if "bliss" in at:
         c = matched.ck(at["bliss"])

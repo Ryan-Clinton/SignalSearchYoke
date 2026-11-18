@@ -698,7 +698,10 @@ which is not used here (hits are read through its Python module).
     (`data/jobs.txt`) one after another, takes a job off only when it exits
     cleanly, tries a failing one three times, and runs only once at a
     time; with `-Install` it also starts at every logon, so after a power
-    cut it picks up at the next logon. Where it runs (the WSL
+    cut it picks up at the next logon. bliss-judge skips a block only
+    when its record is whole (`matched.judge_whole`: this configuration,
+    110 signals each judged at every cut, the 19 wrong choices and the
+    true one at every cut), and the tables use only such records. Where it runs (the WSL
     distribution, BLISS's Python, the CUDA libraries) are settings
     (`SSY_BLISS_DISTRO`, `SSY_BLISS_PYTHON`, `SSY_BLISS_LD_PATH`; and
     `BLISS_PYTHON_DIR`, `BLISS_RESPONSE`, `BLISS_DEVICE` for the adapter),
@@ -790,20 +793,45 @@ docs/results/KIC8462852-AGBT17A_999_68-bliss.md):**
   an event. The CPU backend, which floods each region whole, makes the
   regions wider still (1.2 MHz at SNR 5, 0.75 MHz at 10), and its hit
   filter then removes every hit on that look at both cuts.
-- **The false candidates come from BLISS's event stage, not its
-  detector.** BLISS's own hits (found once a look at SNR 5, with
-  hits under the cut kept as shadow hits, as this search's are) put
-  through this search's cadence test give 12.4 false a block at SNR 10,
-  0.37 at 20 and 0.052 at 30. That is a matched cut of 30 (interval 20 to
-  100), the same as this search's. Its crowded blocks fall from 62.4 at 10
-  to 0.26 at 30, and its clean blocks are 0 from 12. The same split hits
-  that BLISS's event stage keeps turning into events at every cut are
-  rejected by a test that needs matching hits in all three ON looks and
-  none in the OFF looks, counting the shadow hits.
+- **BLISS's hits found at SNR 5, through this search's cadence test,
+  reach the target.** This is `matched.py bliss-judge`: the hits are found
+  once a look at SNR 5, and those under the cut are kept as shadow hits,
+  as this search's are. They give 12.4 false a block at SNR 10, 0.37 at 20
+  and 0.052 at 30. That is a matched cut of 30 (interval 20 to 100), the
+  same cut as this search's (0.068 there): comparable operating points,
+  both under 0.1, not equal rates. The crowded blocks fall from 62.4 at
+  10 to 0.26 at 30; the clean blocks are 0 from 12.
+- **Most of BLISS's false candidates come from its event stage, but its
+  hit grouping at the higher cut adds some.** bliss-judge's hits are
+  BLISS's grouping at SNR 5, not its grouping at 30, so it did not isolate
+  the event stage. The control (`matched.py bliss-control`, 18 November)
+  takes one hit list, BLISS's own at SNR 30 (one GPU run on both cuts),
+  through each logic, on the two blocks that carry most of the false
+  candidates. Distinct false candidates at SNR 30 over the 19 wrong
+  choices, shared hits:
+
+  | block | BLISS's event stage | this search's test | the same, with shadow hits from SNR 5 | this search's test on the SNR 5 hits |
+  |---|---|---|---|---|
+  | 35 | 1,610 | 85 | 85 | 1 |
+  | 129 | 2,627 | 205 | 130 | 0 |
+
+  With the hit list held the same, this search's test removes 95% of
+  them on block 35 and 92 to 95% on block 129. What is left comes from
+  the hits being grouped at SNR 30: on these two blocks alone it is
+  215, about 18 times step 4's whole budget (0.1 a block, about 12 over 121
+  blocks). Grouped at SNR 5, with the cut applied afterwards, it is 1 and
+  0.
+
+  The run repeats bliss-judge's count on the SNR 5 hits exactly (1 and 0
+  again). So both stages count, the event stage far more, and the
+  combination that works is BLISS's hits grouped at a low cut with a test
+  that needs every ON look and no OFF look, as this search's does. Only
+  these two blocks were run.
 - **What BLISS's detector costs, at that matched cut (30):** BLISS's hits
   through this search's test recover 4,048 of 13,310, this search 4,520.
-  Both recover 3,829, this search alone 691, BLISS's hits alone 219. The
-  gap is mostly at fast drifts (2 to 4 Hz/s at S_in 200: 57 against 131;
+  Both recover 3,829, this search alone 691, BLISS's hits alone 219: a
+  difference of 0.036 of the planted signals (0.026 to 0.046, a block
+  bootstrap as step 10's, the blocks the unit). The gap is mostly at fast drifts (2 to 4 Hz/s at S_in 200: 57 against 131;
   1 to 2 Hz/s at S_in 120: 120 against 167) and at the faintest slow
   signals (S_in 40 under 0.15 Hz/s: 55 against 88). At 0.5 to 1 Hz/s and
   S_in 80 BLISS's hits do better (175 against 158). At SNR 10, not at a

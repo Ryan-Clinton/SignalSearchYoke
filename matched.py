@@ -924,18 +924,23 @@ def bliss_judge_config():
                 onoff=hashlib.sha256((yoke.ROOT / "onoff.py").read_bytes().replace(b"\r\n", b"\n")).hexdigest()[:16])
 
 
-def _bliss_searched(cad, rec):
-    """BLISS's hits (a bliss_curves.py record, at BLISS_HIT_CUT) as this
+def _bliss_searched(cad, rec, cut=BLISS_HIT_CUT, shadows_from=None):
+    """BLISS's hits (a bliss_curves.py record, found at `cut`) as this
     search's would be for onoff.judge: (hits, flattened spectra, complete) a
     look. A hit's frequency is at the look's start, as this search's; its box
-    is the one this search's would have at its drift."""
+    is the one this search's would have at its drift. With shadows_from (a
+    lower cut in the same record), that cut's hits under `cut` are added as
+    the shadow hits."""
     out = []
     for j, c in enumerate(cad):
         s = c["s"]
         n_t = c["spectra"].shape[0]
         span = max(n_t - 1, 1) * s["tsamp"]
         hits = []
-        for h in rec["hits"][str(BLISS_HIT_CUT)][j]:
+        found = list(rec["hits"][str(float(cut))][j])
+        if shadows_from is not None:
+            found += [h for h in rec["hits"][str(float(shadows_from))][j] if h["snr"] < cut]
+        for h in found:
             k = h["drift_hz_s"] * span / (s["foff"] * 1e6)
             hits.append({"frequency_mhz": h["freq_mhz"], "drift_hz_s": h["drift_hz_s"], "snr": h["snr"],
                          "box_channels": max(1, math.ceil(abs(k) / max(n_t - 1, 1) - 1e-9))})
@@ -946,6 +951,20 @@ def _bliss_searched(cad, rec):
 
 def judge_folder(target, session):
     return folder(target, session) / "bliss_judge"
+
+
+def judge_whole(r, config):
+    """A bliss-judge record made with this configuration and with every field
+    the tables read: TONES signals, each judged at every cut, and the 19
+    wrong choices and the true one at every cut."""
+    cuts = [ck(c) for c in CUTS_OURS]
+    wrong = {str(o) for o in itertools.combinations(range(6), 3) if o != TRUE}
+    try:
+        return (r.get("config") == config and len(r["tones"]) == TONES
+                and all(c in t["judged"] and "three_looks" in t["judged"][c] for t in r["tones"] for c in cuts)
+                and all(set(r["false"].get(c, {})) == wrong and c in r["true_plain"] for c in cuts))
+    except (KeyError, TypeError, AttributeError):
+        return False
 
 
 def add_bliss_judge(target, say=print):
@@ -974,7 +993,7 @@ def add_bliss_judge(target, say=print):
 
     def done(p):
         try:
-            return json.loads(p.read_text(encoding="utf-8")).get("config") == config
+            return judge_whole(json.loads(p.read_text(encoding="utf-8")), config)
         except (OSError, ValueError):
             return False
     todo = [p for p in recs if not done(out / p.name)]
@@ -1054,6 +1073,74 @@ def add_bliss_judge(target, say=print):
         flush=True)
 
 
+CONTROL_CUT = 30.0     # the matched cut of this search and of BLISS's hits through its cadence test
+
+
+def bliss_control(target, blocks, say=print):
+    """The same BLISS hit list under each ON/OFF logic (comparable.md step
+    11's control). bliss-judge finds BLISS's hits once at BLISS_HIT_CUT and
+    cuts them afterwards; BLISS's own run at CONTROL_CUT groups its hits at
+    that cut, and the grouping changes with the cut, so the two are not the
+    same input. Here, on the unplanted looks of the named blocks, BLISS's
+    hits are found at both cuts in one run (the GPU, shuffles=0), and the
+    distinct false candidates of the 19 wrong choices at CONTROL_CUT
+    (shared hits) are counted for: BLISS's event stage on the CONTROL_CUT
+    hits (its own run, as add_bliss); this search's cadence test on the same
+    hits with no shadow hits; on them with the BLISS_HIT_CUT hits under the
+    cut added as shadow hits; and on the BLISS_HIT_CUT hits alone (as
+    bliss-judge, run again). One record a block under bliss_control/."""
+    db = store.connect_readonly()
+    session, urls = store.cadence_files(db, target)
+    db.close()
+    base, out = folder(target, session), folder(target, session) / "bliss_control"
+    out.mkdir(parents=True, exist_ok=True)
+    lock = _run_lock(out / "run.lock")  # noqa: F841 -- held until the process ends
+    block_list = seti.blocks(seti.reading.prepare(urls[:1])[0])
+    work = ROOT / "work_bliss_control"
+    cut = ck(CONTROL_CUT)
+    for b in blocks:
+        rec = json.loads((base / f"block_{b:03d}.json").read_text(encoding="utf-8"))
+        started = time.monotonic()
+        cad = _cadence(seti.read_looks(urls, *block_list[rec["block"]]), urls)
+        if [c["s"]["tstart"] for c in cad] != rec["tstarts"]:
+            raise yoke.Refusal("INVALID_REQUEST", f"block {b} read again is not the one recorded")
+        shutil.rmtree(work, ignore_errors=True)
+        try:
+            paths = [seti.save(c["s"], work / f"{j}.h5") for j, c in enumerate(cad)]
+            h = _bliss_tool(work / "plain.json", "true", paths, cuts=(BLISS_HIT_CUT, CONTROL_CUT), shuffles=0)
+        finally:
+            shutil.rmtree(work, ignore_errors=True)
+        arrangements = {"hits at 30, no shadow hits": _bliss_searched(cad, h, CONTROL_CUT),
+                        "hits at 30, shadow hits from 5": _bliss_searched(cad, h, CONTROL_CUT, BLISS_HIT_CUT),
+                        "hits at 5 (as bliss-judge)": _bliss_searched(cad, h, BLISS_HIT_CUT)}
+        counts = {}
+        for name, searched in arrangements.items():
+            false = {}
+            caches = [{} for _ in range(6)]
+            for ons in itertools.combinations(range(6), 3):
+                if ons == TRUE:
+                    continue
+                looks, events, order = our_events(cad, searched, ons, CONTROL_CUT, caches)
+                false[str(ons)] = _our_kept(looks, events, order)
+                for lk in looks:
+                    lk.flat = None
+            counts[name] = len(shared_hits(false))
+        native = json.loads((bliss_folder(target, session) / f"block_{b:03d}.json").read_text(encoding="utf-8"))
+        judged = json.loads((judge_folder(target, session) / f"block_{b:03d}.json").read_text(encoding="utf-8"))
+        res = {"block": b, "class": rec["class"], "cut": CONTROL_CUT, "config": bliss_judge_config(),
+               "provenance": h["provenance"],
+               "hits": {k: [len(x) for x in v] for k, v in h["hits"].items()},
+               "false_distinct": {"BLISS's event stage, its own run": len(shared_hits(native["false"][cut])),
+                                  **counts,
+                                  "hits at 5, bliss-judge's record": len(shared_hits(judged["false"][cut]))},
+               "s": round(time.monotonic() - started, 1),
+               "finished_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+        yoke.write(out / f"block_{b:03d}.json", res, indent=None)
+        say(f"  block {b} ({rec['class']}): distinct false candidates at SNR {CONTROL_CUT:g}: "
+            + "; ".join(f"{k} {v}" for k, v in res["false_distinct"].items()) + f"; hits {res['hits']}; {res['s']} s",
+            flush=True)
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = p.add_subparsers(dest="command", required=True)
@@ -1071,6 +1158,9 @@ def main(argv=None):
     b.add_argument("--shard", default="0/1")
     j = sub.add_parser("bliss-judge", help="BLISS's hits through this search's cadence test (step 11)")
     j.add_argument("target")
+    c = sub.add_parser("bliss-control", help="the same BLISS hits under each ON/OFF logic, on named blocks (step 11)")
+    c.add_argument("target")
+    c.add_argument("--blocks", default="35,129", help="comma-separated block numbers")
     a = p.parse_args(argv)
     try:
         if a.command == "run":
@@ -1081,6 +1171,8 @@ def main(argv=None):
             add_bliss(a.target, shard=tuple(int(x) for x in a.shard.split("/")), count=a.blocks)
         elif a.command == "bliss-judge":
             add_bliss_judge(a.target)
+        elif a.command == "bliss-control":
+            bliss_control(a.target, [int(x) for x in a.blocks.split(",")])
         else:
             import matched_tables
             matched_tables.write(a.target)
