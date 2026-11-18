@@ -766,6 +766,54 @@ which is not used here (hits are read through its Python module).
   the run. Still to do: its hits through this search's cadence test as
   well as its own event stage.
 
+**Result on KIC8462852 (17 November; 121 of 121 blocks, none failed;
+docs/results/KIC8462852-AGBT17A_999_68-bliss.md):**
+
+- **BLISS has no matched cut.** Its false candidates a block (shared hits,
+  step 4's weights) are 20.8 at SNR 10, 19.7 at 30 and still 4.5 at 100,
+  against 0.1 for the other two at 30 (this search 3.3 at 10, turboSETI
+  0.29). On the clean blocks it is low (0.1 a block at SNR 10, 0.017 at
+  100); the crowded blocks carry it (105 a block at SNR 10, 22.9 at 100),
+  and two most of all: block 35 still gives 1,031 at SNR 100, block 129
+  275. In the three random hit orders no cut reaches 0.1 either.
+- **Its false count does not fall with the cut:** 5,228 over all blocks at
+  SNR 5, 6,482 at 8, 4,408 at 20, 6,059 at 30. Its hit count does not
+  either: block 129's first look has 3,800 hits at SNR 5, 13,519 at 10 and
+  15,995 at 15 (before its filter, the GPU backend), its other looks
+  falling as the cut rises. It is BLISS's own grouping: run on that look
+  alone, outside the comparison, the GPU gives the record's counts
+  exactly, and its widest hit narrows from 15.9 kHz at SNR 5 to 1.5 kHz at
+  15 and 75 Hz at 100. A hit grows through every neighbouring cell above
+  half the cut, so at a low cut a stretch of interference is one wide hit,
+  and at a higher one it breaks into many narrow ones, each free to make
+  an event. The CPU backend, which floods each region whole, makes the
+  regions wider still (1.2 MHz at SNR 5, 0.75 MHz at 10), and its hit
+  filter then removes every hit on that look at both cuts.
+- **Recovery at each pipeline's published SNR 10** (not at matched rates),
+  in all three ON looks, of 13,310: this search 8,706, BLISS 4,978,
+  turboSETI 1,709. BLISS at SNR 100, still far above 0.1 false a block,
+  recovers 1,175. At the matched cut (30) this search recovers 4,520 and
+  turboSETI 442.
+- **Where BLISS loses them at SNR 10:** of 8,332 not recovered, 4,827 have
+  no matching hit in all three ON looks even before its hit filter (its
+  search), 2,859 have them before its filter and not after, 482 have them
+  in all three and no event (its event stage), 164 are flagged (more than
+  half their track under its flags in some ON look). None is a false
+  association.
+- **What BLISS finds that this search misses (SNR 10 each):** 135 planted
+  signals: 102 strong and fast (S_in 120 or more, drift 1 Hz/s or more),
+  where this search's own recovery falls off (step 4's table: 175 of 242
+  at 2 to 4 Hz/s and S_in 400), 20 strong and slower, 13 weaker (S_in
+  under 120, drift under 1 Hz/s). For 107 of them this search does raise a
+  candidate on the signal (recovered by the lenient standard), but not
+  within ±6 Hz and ±0.05 Hz/s in every ON look: in 94 its best candidate
+  has hits in all three ON looks and two of them match (the third off in
+  frequency or drift), in the rest one of three, or two or one of fewer,
+  so the three-look standard does not count it. 28 have no candidate from this search at all, mostly in
+  crowded blocks (35, 36, 48, 50), where the nearest is kHz away; these
+  are still to be looked at one by one. This search finds 3,863 that BLISS
+  misses; both find 4,843.
+
 **Done when:** BLISS's false curve, matched cut and recovery by drift and
 strength are on step 4's page beside the other two, with the signals
 BLISS finds that this search misses listed and explained.

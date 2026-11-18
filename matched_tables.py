@@ -467,10 +467,27 @@ def write_bliss(target, say=print, name="matched-bliss.json"):
         r["bliss"] = {"false": b["false"]}
         for t, bt in zip(r["tones"], b["tones"]):
             t.update({k: bt[k] for k in ("bliss", "bliss_on_hits", "bliss_on_hits_unfiltered", "bliss_flagged")})
+    # BLISS's hits through this search's cadence test (matched.py bliss-judge), when every block has one
+    jconfig = matched.bliss_judge_config()
+    jrecs = {}
+    for p in sorted(matched.judge_folder(target, session).glob("block_*.json")):
+        r = json.loads(p.read_text(encoding="utf-8"))
+        if r.get("config") == jconfig:
+            jrecs[r["block"]] = r
+    judged = all(r["block"] in jrecs for r in recs)
+    if judged:
+        for r in recs:
+            j = jrecs[r["block"]]
+            assert [t["f_mhz"] for t in j["tones"]] == [t["f_mhz"] for t in r["tones"]], r["block"]
+            r["bliss_ours"] = {"false": j["false"]}
+            for t, jt in zip(r["tones"], j["tones"]):
+                t["bliss_ours"] = jt["judged"]
     rng = np.random.default_rng(1)
     total = meta["of"]["clean"] + meta["of"]["crowded"]
     weights = {c: meta["of"][c] / total for c in ("clean", "crowded")}
     grids = {"ours": matched.CUTS_OURS, "turboseti": matched.CUTS_TURBO, "bliss": matched.CUTS_BLISS}
+    if judged:
+        grids["bliss_ours"] = matched.CUTS_OURS
 
     def curve(p, false_of):
         return {matched.ck(c): _rate(recs, lambda r: distinct(r, false_of(r).get(matched.ck(c), {}), "shared hits"),
@@ -517,7 +534,9 @@ def write_bliss(target, say=print, name="matched-bliss.json"):
                                 if at else None),
            "totals_matched": {p: total_got(p, at[p]) for p in at},
            "totals_published": {p: total_got(p, 10) for p in grids},
-           "pairs_matched": {f"{a}/{b}": pair(a, b) for a, b in (("ours", "bliss"), ("turboseti", "bliss"))},
+           "pairs_matched": {f"{a}/{b}": pair(a, b) for a, b in (("ours", "bliss"), ("turboseti", "bliss"),
+                                                                ("ours", "bliss_ours"), ("bliss", "bliss_ours"))},
+           "judged_blocks": len(jrecs),
            "bliss_shuffled": {k: dict(v, recovery_at_sorted_matched_cut=shuffled_recovery.get(k))
                               for k, v in shuffled.items()},
            "bliss_losses": losses,
@@ -530,13 +549,19 @@ def write_bliss(target, say=print, name="matched-bliss.json"):
 
 
 def markdown_bliss(r):
-    nm = dict(NAME, bliss="BLISS")
+    nm = dict(NAME, bliss="BLISS", bliss_ours="BLISS's hits, this search's cadence test")
     out = [f"# {r['target']} {r['session']}: BLISS beside this search and turboSETI", "",
            f"Written by `python matched_tables.py bliss {r['target']}` from `matched.py bliss` (comparable.md step "
            f"11); the record is data/measurements/matched-bliss.json. BLISS at commit "
            f"{r['config']['bliss_commit'][:7]}, its GPU backend, through `bliss_find_hits`'s steps, its event stage "
            "run on its hits in a fixed order (channel, then drift; `tools/bliss/bliss_events.py`). Its CPU backend "
-           "groups hits differently and is not what is compared here.", "",
+           "groups hits differently and is not what is compared here."
+           + (" BLISS's hits are also put through this search's cadence test (`matched.py bliss-judge`: its hits "
+              "found once a look at SNR 5, a cut making those under it shadow hits, as this search's own), so a "
+              "difference can be laid to the detector or to the event stage."
+              if "bliss_ours" in r["false_curves"] else
+              f" BLISS's hits through this search's cadence test: {r['judged_blocks']} of {r['blocks']} blocks so "
+              "far, not shown until all are done."), "",
            f"{r['blocks']} blocks ({r['classes']['crowded']} crowded, {r['classes']['clean']} clean), the same as "
            "step 4's, weighted as there."
            + (f" BLISS failed on {len(r['bliss_failed'])}, left out: "
@@ -544,7 +569,7 @@ def markdown_bliss(r):
            + (f" Blocks with a record of another configuration, left out: {r['bliss_other_config']}."
               if r["bliss_other_config"] else ""), "",
            "## False candidates against the cut (shared hits, as step 4's)", ""]
-    for p in ("ours", "turboseti", "bliss"):
+    for p in r["false_curves"]:
         out += [f"**{nm[p]}**", "", "| cut | all blocks | clean | crowded |", "|---|---|---|---|"]
         for c, v in sorted(r["false_curves"][p].items(), key=lambda x: float(x[0])):
             out.append(f"| {c} | {v['per_block']:.3g} ({_iv(v['interval'])}) | {v['clean']['per_block']:.3g} | "
@@ -569,7 +594,7 @@ def markdown_bliss(r):
         for k, v in r["pairs_matched"].items():
             if v:
                 out.append(f"- {k}: " + ", ".join(f"{a} {b}" for a, b in v.items()))
-        ps = [p for p in ("ours", "turboseti", "bliss") if p in r["matched_at"]]
+        ps = [p for p in r["false_curves"] if p in r["matched_at"]]
         out += [""] + ["| drift (Hz/s) | S_in | " + " | ".join(nm[p] for p in ps) + " |",
                        "|---" * (2 + len(ps)) + "|"]
         for row in r["recovery_matched"]["three_looks"]["all"]:

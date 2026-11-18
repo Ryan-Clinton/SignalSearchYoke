@@ -679,12 +679,13 @@ def _wsl_path(p):
     return f"/mnt/{p[0].lower()}{p[2:]}" if len(p) > 1 and p[1] == ":" else p
 
 
-def _bliss_tool(out, which, paths, tones=None):
+def _bliss_tool(out, which, paths, tones=None, cuts=CUTS_BLISS, shuffles=None):
     import subprocess
     extra = ["--tones", _wsl_path(tones)] if tones else []
-    done = subprocess.run(["wsl", "-d", BLISS_DISTRO, "--", "env", f"LD_LIBRARY_PATH={BLISS_LD_PATH}", BLISS_PYTHON,
+    env = [] if shuffles is None else [f"BLISS_SHUFFLES={shuffles}"]
+    done = subprocess.run(["wsl", "-d", BLISS_DISTRO, "--", "env", f"LD_LIBRARY_PATH={BLISS_LD_PATH}", *env, BLISS_PYTHON,
                            _wsl_path(yoke.ROOT / "tools" / "bliss_curves.py"), *extra, _wsl_path(out),
-                           ",".join(map(str, CUTS_BLISS)), which, *map(_wsl_path, paths)],
+                           ",".join(map(str, cuts)), which, *map(_wsl_path, paths)],
                           capture_output=True, text=True, timeout=BLISS_TIMEOUT_S)
     if done.returncode:
         raise yoke.Refusal("INTERNAL_ERROR", f"bliss_curves.py failed: {done.stderr.strip()[-400:]}")
@@ -910,6 +911,149 @@ def add_bliss(target, say=print, shard=(0, 1), count=None):
         + (f" ({len(failed)} failed: {', '.join(failed)})" if failed else ""), flush=True)
 
 
+# --- BLISS's hits through this search's cadence test ---------------------------
+
+BLISS_HIT_CUT = 5.0     # its hits found once, at the lowest cut, as this search's are (SHADOW_MIN)
+JUDGE_FORMAT = 1
+
+
+def bliss_judge_config():
+    """bliss_config, with the hit cut and the cadence test's code (onoff.py)."""
+    import hashlib
+    return dict(bliss_config(), judge_format=JUDGE_FORMAT, hit_cut=BLISS_HIT_CUT, cuts=list(CUTS_OURS),
+                onoff=hashlib.sha256((yoke.ROOT / "onoff.py").read_bytes().replace(b"\r\n", b"\n")).hexdigest()[:16])
+
+
+def _bliss_searched(cad, rec):
+    """BLISS's hits (a bliss_curves.py record, at BLISS_HIT_CUT) as this
+    search's would be for onoff.judge: (hits, flattened spectra, complete) a
+    look. A hit's frequency is at the look's start, as this search's; its box
+    is the one this search's would have at its drift."""
+    out = []
+    for j, c in enumerate(cad):
+        s = c["s"]
+        n_t = c["spectra"].shape[0]
+        span = max(n_t - 1, 1) * s["tsamp"]
+        hits = []
+        for h in rec["hits"][str(BLISS_HIT_CUT)][j]:
+            k = h["drift_hz_s"] * span / (s["foff"] * 1e6)
+            hits.append({"frequency_mhz": h["freq_mhz"], "drift_hz_s": h["drift_hz_s"], "snr": h["snr"],
+                         "box_channels": max(1, math.ceil(abs(k) / max(n_t - 1, 1) - 1e-9))})
+        hits.sort(key=lambda h: -h["snr"])
+        out.append((hits, searching.flatten(c["spectra"]).astype(np.float32), True))
+    return out
+
+
+def judge_folder(target, session):
+    return folder(target, session) / "bliss_judge"
+
+
+def add_bliss_judge(target, say=print):
+    """BLISS's hits through this search's cadence test (comparable.md step
+    11), so a difference from BLISS's own event stage can be laid to the
+    detector or to the cadence logic. Each of step 4's blocks read again
+    (checked as add_bliss checks it); BLISS's hits found once a look at
+    BLISS_HIT_CUT (bliss_curves.py, the GPU, its authors' pipeline), on the
+    unplanted looks and on the record's signals planted again; onoff.judge
+    on them as on this search's own hits (a cut X makes BLISS's hits under X
+    shadow hits), every choice at CUTS_OURS unplanted and the true choice
+    planted; scored as the others. One record a block under bliss_judge/,
+    written whole, done when it parses with this configuration; a lock, as
+    add_bliss."""
+    db = store.connect_readonly()
+    session, urls = store.cadence_files(db, target)
+    db.close()
+    base, out = folder(target, session), judge_folder(target, session)
+    out.mkdir(parents=True, exist_ok=True)
+    lock = _run_lock(out / "run.lock")  # noqa: F841 -- held until the process ends
+    config = bliss_judge_config()
+    block_list = seti.blocks(seti.reading.prepare(urls[:1])[0])
+    recs = sorted(base.glob("block_*.json"))
+    classes = json.loads((base / "blocks.json").read_text(encoding="utf-8"))["chosen"]
+    recs.sort(key=lambda p: (classes.get(str(int(p.stem.split("_")[1]))) != "crowded", p.name))
+
+    def done(p):
+        try:
+            return json.loads(p.read_text(encoding="utf-8")).get("config") == config
+        except (OSError, ValueError):
+            return False
+    todo = [p for p in recs if not done(out / p.name)]
+    say(f"{target} {session}: BLISS's hits through this search's cadence test on {len(todo)} of {len(recs)} blocks",
+        flush=True)
+    work = ROOT / "work_bliss_judge"
+
+    def log(line):
+        say("  " + line, flush=True)
+        with open(out / "progress.log", "a", encoding="utf-8") as f:
+            f.write(time.strftime("%Y-%m-%dT%H:%M:%S ", time.gmtime()) + line + "\n")
+
+    for p in todo:
+        started = time.monotonic()
+        rec = json.loads(p.read_text(encoding="utf-8"))
+        cad = _cadence(seti.read_looks(urls, *block_list[rec["block"]]), urls)
+        if [c["s"]["tstart"] for c in cad] != rec["tstarts"]:
+            raise yoke.Refusal("INVALID_REQUEST", f"block {rec['block']} read again is not the one recorded")
+        moved = [t["f_mhz"] for t in rec["tones"] if round(where(cad, t, 0)[1], 6) != t["f_mhz"]]
+        if moved:
+            raise yoke.Refusal("INVALID_REQUEST", f"block {rec['block']}: signals not where recorded: {moved[:3]}")
+        shutil.rmtree(work, ignore_errors=True)
+        times = {}
+        try:
+            t = time.monotonic()
+            paths = [seti.save(c["s"], work / "plain" / f"{j}.h5") for j, c in enumerate(cad)]
+            hp = _bliss_tool(work / "plain.json", "true", paths, cuts=(BLISS_HIT_CUT,), shuffles=0)
+            planted = plant(cad, rec["tones"])
+            cad_p = [dict(c, spectra=x["spectra"]) for c, x in zip(cad, planted)]
+            del planted
+            paths = [seti.save(dict(c["s"], spectra=c["spectra"]), work / "planted" / f"{j}.h5")
+                     for j, c in enumerate(cad_p)]
+            hb = _bliss_tool(work / "planted.json", "true", paths, cuts=(BLISS_HIT_CUT,), shuffles=0)
+            times["bliss_s"] = round(time.monotonic() - t, 1)
+        finally:
+            shutil.rmtree(work, ignore_errors=True)
+        t = time.monotonic()
+        searched = _bliss_searched(cad, hp)
+        false, true_plain = {}, {}
+        caches = [{} for _ in range(6)]
+        for ons in itertools.combinations(range(6), 3):
+            for cut in CUTS_OURS:
+                looks, events, order = our_events(cad, searched, ons, cut, caches)
+                kept = _our_kept(looks, events, order)
+                if ons == TRUE:
+                    true_plain[ck(cut)] = kept
+                else:
+                    false.setdefault(ck(cut), {})[str(ons)] = kept
+                for lk in looks:
+                    lk.flat = None
+        del searched, caches
+        times["judge_plain_s"] = round(time.monotonic() - t, 1)
+        t = time.monotonic()
+        true_planted = _ours_true(cad_p, _bliss_searched(cad_p, hb))
+        times["judge_planted_s"] = round(time.monotonic() - t, 1)
+        tones_out = []
+        for tn in rec["tones"]:
+            t_f = {j: where(cad, tn, j)[1] for j in TRUE}
+            tones_out.append({"f_mhz": tn["f_mhz"], "drift": tn["drift"], "s_in": tn["s_in"],
+                              "judged": {ck(c): _status(t_f, tn["drift"], true_planted[str(c)], true_plain[ck(c)])
+                                         for c in CUTS_OURS}})
+        times["block_s"] = round(time.monotonic() - started, 1)
+        res = {"format": FORMAT, "block": rec["block"], "class": rec["class"], "config": config,
+               "provenance": {"plain": hp["provenance"], "planted": hb["provenance"]},
+               "hits": {"plain": [len(x) for x in hp["hits"][str(BLISS_HIT_CUT)]],
+                        "planted": [len(x) for x in hb["hits"][str(BLISS_HIT_CUT)]]},
+               "false": false, "true_plain": true_plain, "tones": tones_out, "times": times,
+               "finished_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+        yoke.write(out / p.name, res, indent=None)
+        pub = ck(PUBLISHED["ours"])
+        log(f"block {rec['block']} ({rec['class']}): at SNR 10 recovered "
+            f"{sum(x['judged'][pub]['three_looks'] == 'recovered' for x in tones_out)}/{len(tones_out)}; "
+            f"wrong-ON candidates {len(shared_hits(false.get(pub, {})))}; hits {res['hits']['plain']}; "
+            f"{times['block_s']} s")
+    n = sum(done(out / p.name) for p in recs)
+    say(f"{target} {session}: BLISS's hits through this search's cadence test on {n} of {len(recs)} blocks",
+        flush=True)
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = p.add_subparsers(dest="command", required=True)
@@ -925,6 +1069,8 @@ def main(argv=None):
     b.add_argument("target")
     b.add_argument("--blocks", type=int)
     b.add_argument("--shard", default="0/1")
+    j = sub.add_parser("bliss-judge", help="BLISS's hits through this search's cadence test (step 11)")
+    j.add_argument("target")
     a = p.parse_args(argv)
     try:
         if a.command == "run":
@@ -933,6 +1079,8 @@ def main(argv=None):
             add_tracks(a.target)
         elif a.command == "bliss":
             add_bliss(a.target, shard=tuple(int(x) for x in a.shard.split("/")), count=a.blocks)
+        elif a.command == "bliss-judge":
+            add_bliss_judge(a.target)
         else:
             import matched_tables
             matched_tables.write(a.target)
