@@ -15,7 +15,12 @@ site. When a second comes along, this gets revisited then.
   - data and code availability;
   - references and revisions.
 
-  Every number is read from the committed records and checked against them.
+  Every number is read from the project's result records and checked
+  against them. The records are not in git (data/ is ignored): the summary
+  records (data/measurements, step 10's verdict and deviations, about 12 MB)
+  and the per-block records (data/matched, about 281 MB) are deposited on
+  Zenodo with each version, so anyone can check a number against its
+  source.
   The report is written as Markdown and a PDF. Each version has a number and
   a date, and a revision note says what changed.
 - **Zenodo holds each version.** The PDF of each version is deposited on
