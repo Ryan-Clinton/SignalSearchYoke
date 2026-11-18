@@ -868,18 +868,28 @@ docs/results/KIC8462852-AGBT17A_999_68-bliss.md):**
   misses; both find 4,843.
 - **The 28, traced one by one** (`tools/trace_bliss_only.py`: each block
   read and planted again, searched unchanged, judged at SNR 10 with the
-  true ON looks; `data/analysis/bliss_only/trace_summary.json`):
+  true ON looks; `data/analysis/bliss_only/trace_summary.json`, one
+  cause each, with flags beside it for the evidence, which overlaps; the
+  summary refuses unless it holds each of the 28 exactly once, and a
+  block's saved trace is reused only if it is of that block's signals;
+  searching.py, onoff.py and matched.py are unchanged from the commit
+  the trace was started at, b426740, to this one):
   - 15: this search finds the signal strongly in all three ON looks, and
     the OFF test calls it interference because one OFF look's S/N along
-    the track is just over OFF_MAX (6.0 to 7.3) with no hit there: noise.
-    Random tracks reach 6 in 0.66% of 10,000 (`off_null.json`), so this
-    is the OFF test's known cost, falling here on signals BLISS's event
-    stage keeps.
+    the track is just over OFF_MAX (6.0 to 7.3), with no hit there and
+    no OFF transmission identified: low-level OFF evidence consistent
+    with noise, not proved to be noise. Random tracks reach 6 in 0.66% of
+    10,000 (`off_null.json`): a measured rate for the OFF test on
+    unplanted tracks, not the chance that any one of these was noise,
+    and not a loss rate for these 28, which were picked because BLISS
+    found them and this search did not.
   - 2 more the same, with a shadow hit (S/N 5.1, 5.2) in that OFF look.
   - 2 lost to something real in an OFF look (S/N 10.1 along the drift;
     24.2 at a fixed frequency beside interference in the unplanted data).
-  - 2 missed by the detector in one ON look (fast drifts, 0.98 and 1.59
-    Hz/s); the other looks' event was vetoed on noise as above.
+  - 2 missed by the detector in one or two ON looks (fast drifts, 0.98
+    and 1.59 Hz/s); the event the other looks make has the same low-level
+    OFF evidence as above, so a detector that found them would still
+    leave them vetoed.
   - 5 with no hit in any ON look though the track is bright (S/N 12 to
     66): block 35's three, block 96 (-2.04 Hz/s) and block 129: the
     detector, in crowded blocks.
@@ -888,7 +898,14 @@ docs/results/KIC8462852-AGBT17A_999_68-bliss.md):**
 
   OFF_MAX is not changed for this: it was set before, from planted
   signals, and moving it after seeing which signals it costs would be
-  tuning on the test.
+  tuning on the test. The veto's other side is already in the numbers:
+  every false rate this search is matched on is measured with it, and
+  what it keeps out (step 10's frozen false rates failed even with it)
+  would have to be measured again at any other threshold.
+  The 7 detector misses are being measured stage by stage
+  (`tools/detector_misses.py`: the hit cap per look, the noise of the
+  summed lines in the signal's block, the best line before picking, the
+  hits whose blanking reaches it), the detector unchanged.
 
 **Done when:** BLISS's false curve, matched cut and recovery by drift and
 strength are on step 4's page beside the other two, with the signals
@@ -902,6 +919,68 @@ the same way, on a third session: another telescope if the archive's
 listing has a whole ON-OFF cadence of one (Parkes, MeerKAT), otherwise a
 markedly different interference environment, chosen from the listing alone
 before any of its spectra are read.
+
+**The protocol, proposed 19 November 2026 for review; not frozen, no
+session chosen, nothing read.** Four stages, each committed before the
+next: this protocol reviewed; the session chosen by the rule below from
+the archive's listing alone, the choice and its reasons written down; the
+config frozen and committed with the code's fingerprints; then the run.
+No spectra of a candidate session are read before the freeze is committed.
+
+- **Choosing the session, from metadata alone** (`seti.py find`, the
+  archive's listing; at most the first file's header or HDF5 index, no
+  spectra, as step 10 read its index to count blocks):
+  1. Another telescope if the listing has a whole cadence of one: three
+     ON looks of one target alternating with three OFF looks, about five
+     minutes each, in a high-resolution product (channels of a few Hz,
+     spectra some tens of seconds apart) that the search reads unchanged.
+     The search takes the channel width and spectrum time from each file,
+     and the signal grid is in units of each channel's noise, so a
+     different channel width is not by itself a reason to pass a session
+     over; a product the reader cannot read is.
+  2. Otherwise Green Bank in a markedly different interference
+     environment: a receiver band neither session has used (step 4's is
+     S band, step 10's L band), so C band first, then X band.
+  3. Passed over: any session this project has read spectra from before,
+     and any target whose looks it has read (as HIP91699 was for step 10).
+  4. Among those left, the first in the listing's order of the targets
+     looked up, the list of targets written down before the first is
+     looked up. Nothing about a session's contents is used.
+- **Unchanged from step 10** (config/step10.json): SNR 30 for both
+  pipelines, no cut chosen on the new session; 121 blocks, up to 61
+  crowded (more than 20 hits at the sweep's cut in the six looks) and
+  clean to make the rest, the rates weighted by each class's share of the
+  session; the 19 wrong choices; 110 signals a block on the same S_in and
+  drift grid; recovery in all three ON looks at ±6 Hz and ±0.05 Hz/s;
+  turboSETI from its own hit tables; the curved second pass with it.
+  Only the block seed is new, fixed at the freeze (12). If the band's
+  coarse channels are fewer than 121 blocks, every block is taken.
+- **What counts as holding,** as step 10: both rates at SNR 30 at most
+  0.1 a block, with their intervals; this search's recovery in all three
+  ON looks above turboSETI's with the intervals apart; for the curved
+  pass, its rate by the same rule, its recovery of the curved signals
+  above production's with the intervals apart, none of production's lost.
+  A failure is the result and is published as generated, as step 10's
+  was; no cut, mask or threshold is changed after the session is read.
+- **The code:** as it is at the freeze, fingerprinted as step 10's was,
+  and run under the same refusals (`--deviation` logged and printed with
+  the verdict). The search and the cadence test are the ones step 10 ran:
+  of step 10's 86 fingerprints, those that differ now are independent.py,
+  matched.py, matched_tables.py, measure.py, pipelines.py, store.py,
+  vetting.py and yoke.py (records, tables, the store, the BLISS
+  comparison, refusal messages); searching.py, onoff.py and the functions
+  of seti.py and curved_pass.py it fingerprints are unchanged. The freeze
+  lists each difference with its commit. `independent.py` reads
+  config/step10.json and writes data/step10/ by name; before the freeze it will take
+  the step's config, step 10's results unchanged.
+- **Beside the criteria, not one of them:** the same signals paired, with
+  the difference in share and a bootstrap over blocks, as step 10. For
+  review: BLISS's hits through this search's test at its matched cut from
+  step 11 (SNR 30, hits found once at S/N 5), fixed now, measured the same
+  way. It is a combination designed after step 11's result was seen, so
+  it is proposed as supplementary only.
+- **Not done in it:** no investigation of the session's candidates beyond
+  the verdict's own records before the verdict is written.
 
 **Done when:** its verdict is published beside step 10's, as generated.
 

@@ -1,12 +1,19 @@
 """Write the report (docs/publishing.md) from the result records:
 docs/report/report.md. Every number comes from a record; the prose around
-the numbers is fixed here. The records it reads are listed at the end of the
-report with their creation times and the commit that made them.
+the numbers is fixed here. The experiment's definition (signals a block,
+the strength grid, the drift bins, the tolerances, the wrong choices, the
+pipelines' versions) is read from the per-block records, the summary
+record and the environment as run (method()), and the report is refused if
+the records disagree with one another. The records it reads are listed at
+the end of the report with their creation times and the commit that made
+them.
 
     python tools/report.py
 """
 import json
+import math
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -23,8 +30,45 @@ def load(path):
     return json.loads((DATA / path).read_text(encoding="utf-8"))
 
 
+def refuse(why):
+    sys.exit(f"report.py: the records disagree, no report written: {why}")
+
+
+def method(b):
+    """The experiment as the records define it, checked across all of them:
+    every judged block planted the same number of signals on the same grid
+    and was judged under the same wrong choices, and the summary record's
+    signal count and tolerances agree."""
+    folder = DATA / "matched" / f"{b['target']}-{b['session']}"
+    blocks = [json.loads(p.read_text(encoding="utf-8")) for p in sorted(folder.glob("block_*.json"))]
+    if not len(blocks) == b["blocks"] == b["judged_blocks"]:
+        refuse(f"{len(blocks)} block records, the summary gives {b['blocks']} blocks, {b['judged_blocks']} judged")
+    per_block = {len(r["tones"]) for r in blocks}
+    strengths = {tuple(sorted({t["s_in"] for t in r["tones"]})) for r in blocks}
+    bins = {tuple(sorted({t["bin"] for t in r["tones"]})) for r in blocks}
+    wrong = {len(v) for r in blocks for v in r["ours"]["false"].values()}
+    if len(per_block) != 1 or len(strengths) != 1 or len(bins) != 1 or len(wrong) != 1:
+        refuse(f"blocks differ: signals a block {per_block}, grids {len(strengths)}, drift bins {len(bins)}, "
+               f"wrong choices {wrong}")
+    (per_block,), (strengths,), (bins,), (wrong,) = per_block, strengths, bins, wrong
+    if per_block * len(blocks) != b["tones"]:
+        refuse(f"{len(blocks)} blocks of {per_block} signals is not the {b['tones']} the summary gives")
+    if wrong != 19:
+        refuse(f"{wrong} wrong choices a block, not the 19 other ways of choosing three of six looks")
+    tol = load("measurements/matched.json")["tolerances"]
+    turbo = re.search(r"^turbo-seti==(\S+)", (ROOT / "docs" / "environments" / "turboseti-windows.txt")
+                      .read_text(encoding="utf-8"), re.M)
+    return {"per_block": per_block, "strengths": strengths, "bins": len(bins),
+            "max_drift": max(abs(t["drift"]) for r in blocks for t in r["tones"]),
+            "at_each_point": b["tones"] // (len(strengths) * len(bins)), "tol_hz": tol[0], "tol_drift": tol[1],
+            "wrong": wrong, "turboseti": turbo.group(1) if turbo else refuse("no turboSETI version recorded")}
+
+
 def iv(x, digits=3):
     return f"{x[0]:.{digits}g} to {x[1]:.{digits}g}"
+
+
+WORDS = {5: "five", 11: "eleven"}
 
 
 def n(x):
@@ -123,6 +167,8 @@ def main():
     p10 = s10["supplementary"]["paired_ours_turboseti"]
     curved = s10["supplementary"]["paired_pass_production_curved"]
     rate = b["rate_matched"]
+    m = method(b)
+    grid = m["strengths"]
 
     L = []
     w = L.append
@@ -166,17 +212,17 @@ def main():
       f"of frequency per session: {b['classes']['crowded']} crowded with interference and "
       f"{b['classes']['clean']} clean, chosen at random within each class and weighted by each class's share "
       f"of the session.")
-    w("- **Planted signals.** 110 a block, in the ON looks only, across 11 strengths (S_in 10 to 400, the "
-      "signal-to-noise a search would give collecting all its power in ideal noise) and five drift bins up "
-      "to 4 Hz/s.")
-    w("- **Found** means detected in all three ON looks within ±6 Hz and ±0.05 Hz/s of the planted signal "
-      "(the tolerances of Margot et al. 2023).")
-    w("- **False candidates** are counted by running each pipeline with the wrong looks called ON: the 19 "
+    w(f"- **Planted signals.** {m['per_block']} a block, in the ON looks only, across {len(grid)} strengths "
+      f"(S_in {grid[0]:g} to {grid[-1]:g}, the signal-to-noise a search would give collecting all its power in "
+      f"ideal noise) and {WORDS.get(m['bins'], m['bins'])} drift bins up to {math.ceil(m['max_drift']):g} Hz/s.")
+    w(f"- **Found** means detected in all three ON looks within ±{m['tol_hz']:g} Hz and ±{m['tol_drift']:g} Hz/s "
+      "of the planted signal (the tolerances of Margot et al. 2023).")
+    w(f"- **False candidates** are counted by running each pipeline with the wrong looks called ON: the {m['wrong']} "
       "other ways of choosing three of the six looks. Anything a pipeline keeps under a wrong choice is "
       "interference or noise. Candidates sharing a hit count once.")
     w(f"- **Matched comparison.** Each pipeline's cut (its signal-to-noise threshold) is set where it "
       f"gives at most {rate} false candidates a block, and recovery is compared there.")
-    w(f"- **Pipelines.** turboSETI 2.3.2; BLISS at commit {b['config']['bliss_commit'][:7]} with its GPU "
+    w(f"- **Pipelines.** turboSETI {m['turboseti']}; BLISS at commit {b['config']['bliss_commit'][:7]} with its GPU "
       "backend and its own event stage; this search, which sums along every drift up to ±4 Hz/s with the "
       "smear removed, keeps hits from S/N 5 as shadow hits, and calls a candidate only when every ON look "
       "shows the signal and no OFF look does.")
@@ -206,7 +252,9 @@ def main():
       "strength, for each drift range.](recovery.svg)")
     w("")
     w("*Figure 1. Share of the planted signals found in all three ON looks at each pipeline's matched cut, "
-      "against signal strength (the eleven steps of the grid, evenly spaced), one panel per drift range (242 signals at each point).*")
+      f"against signal strength (the {WORDS.get(len(grid), len(grid))} steps of the grid, evenly spaced), one "
+      f"panel per drift range ({m['at_each_point']} signals at each point). Each pipeline's cut meets the "
+      f"{rate}-a-block target; their measured false rates differ (the table above).*")
     w("")
     if control:
         w("**Why BLISS as published has no matched cut.** On the two blocks that carry most of its false "
@@ -262,8 +310,10 @@ def main():
         w(f"- Of the planted signals BLISS finds at S/N 10 and this search raises no candidate for, "
           f"{trace['signals']} were traced stage by stage. {tc['off_noise'] + tc['off_noise_and_shadow']} are "
           f"found strongly in all three ON looks and then called interference because one OFF look reaches "
-          f"S/N {trace['off_max']:g} along the track on noise: the OFF test's measured cost "
-          f"({100 * null_share:.2g}% of {n(len(off_null['values']))} random tracks reach it). "
+          f"S/N {trace['off_max']:g} to 8 along the track with no OFF transmission identified: low-level OFF "
+          f"evidence consistent with noise ({100 * null_share:.2g}% of {n(len(off_null['values']))} random "
+          f"unplanted tracks reach {trace['off_max']:g}; that is the test's rate on noise, not a loss rate for "
+          f"these signals, which were chosen because BLISS found them). "
           f"{tc['off_signal']} meet something real in an OFF look, "
           f"{tc['one_on_look'] + tc['no_on_hits']} are missed by the detector (mostly in crowded blocks) and "
           f"{tc['faint']} are too faint. The threshold was set beforehand and is not moved for this.")

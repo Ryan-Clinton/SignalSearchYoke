@@ -122,10 +122,11 @@ def trace_block(b, tones_here, urls, block_list, base):
 
 
 CAUSES = (
-    ("off_noise", "the OFF test: one OFF look's S/N along the track just over OFF_MAX, no OFF hit"),
-    ("off_noise_and_shadow", "the OFF test: S/N just over OFF_MAX with a shadow hit there"),
+    ("off_noise", "the OFF test: one OFF look's S/N along the track just over OFF_MAX (under 8), no OFF hit:"
+                  " low-level OFF evidence consistent with noise, no OFF transmission identified"),
+    ("off_noise_and_shadow", "the OFF test: S/N just over OFF_MAX (under 8) with a shadow hit there"),
     ("off_signal", "the OFF test: something real in an OFF look (S/N 8 or more)"),
-    ("one_on_look", "the detector, in one ON look (the others' event then vetoed as above)"),
+    ("one_on_look", "the detector, in one or two ON looks (the event the others make then vetoed as above)"),
     ("no_on_hits", "the detector: no hit in any ON look, though the track is bright"),
     ("faint", "too faint: hits only under the cut, or none with the track near the noise"),
 )
@@ -148,16 +149,50 @@ def cause(r):
     return "faint"
 
 
+def flags(r):
+    """What the trace shows, independent of the one cause it is counted
+    under: the stages are not exclusive (a signal the detector misses in
+    one ON look can also have OFF evidence in the event the others make)."""
+    offs = [lk for e in r["events"] for lk in e["looks"] if not lk["on"]]
+    return {"matching_hit_in_on_look": [lk["best_matching_hit"] is not None for lk in r["looks"]],
+            "matching_hit_at_cut_in_on_look": [lk["best_matching_hit"] is not None
+                                               and lk["best_matching_hit"]["snr"] >= CUT for lk in r["looks"]],
+            "event_built": bool(r["events"]),
+            "off_over_off_max": any(max((x for x in (lk["track_snr"], lk.get("track_snr_fixed")) if x is not None),
+                                        default=0) >= matched.onoff.OFF_MAX for lk in offs),
+            "off_hit": any(bool(lk.get("hit_snr")) for lk in offs),
+            "labels": sorted({e["label"] for e in r["events"]})}
+
+
+def _wanted():
+    """The signals the trace is of: (block, tone) with no candidate from
+    this search at SNR 10, from list.json."""
+    lst = json.loads((OUT / "list.json").read_text(encoding="utf-8"))
+    return [(x["block"], x["tone"]) for x in lst if x["ours_10"]["lenient"] is None]
+
+
 def summarise():
-    """trace_summary.json: each traced signal's cause, and the counts."""
+    """trace_summary.json: each traced signal's cause, its flags, and the
+    counts. Refuses unless every listed signal is traced exactly once and
+    nothing else is."""
     rows = []
     for path in sorted(OUT.glob("trace_block_*.json")):
+        b = int(path.stem.rsplit("_", 1)[1])
         for r in json.loads(path.read_text(encoding="utf-8")):
+            if r["block"] != b:
+                raise yoke.Refusal("INVALID_REQUEST", f"{path.name} holds block {r['block']}")
             rows.append({"block": r["block"], "tone": r["tone"], "s_in": r["s_in"], "drift": r["drift"],
-                         "stage": r["stage"], "cause": cause(r)})
+                         "stage": r["stage"], "cause": cause(r), "flags": flags(r)})
+    got = [(r["block"], r["tone"]) for r in rows]
+    want = _wanted()
+    if len(set(got)) != len(got) or sorted(got) != sorted(want):
+        raise yoke.Refusal("INVALID_REQUEST", f"the traces hold {len(got)} signals ({len(set(got))} distinct), "
+                                              f"the list {len(want)}: missing {sorted(set(want) - set(got))}, "
+                                              f"extra {sorted(set(got) - set(want))}")
     counts = {k: sum(r["cause"] == k for r in rows) for k, _ in CAUSES}
     rec = {"signals": len(rows), "causes": dict(CAUSES), "counts": counts, "rows": rows,
-           "off_max": matched.onoff.OFF_MAX}
+           "off_max": matched.onoff.OFF_MAX,
+           "note": "one cause each, counted once; the flags show the evidence beside it, which overlaps"}
     yoke.write(OUT / "trace_summary.json", rec, indent=1, stamp=True)
     for k, text in CAUSES:
         print(f"{counts[k]:3d}  {text}")
@@ -167,11 +202,9 @@ def summarise():
 def main():
     if sys.argv[1:] == ["summary"]:
         return summarise()
-    lst = json.loads((OUT / "list.json").read_text(encoding="utf-8"))
-    none = [x for x in lst if x["ours_10"]["lenient"] is None]
     by_block = {}
-    for x in none:
-        by_block.setdefault(x["block"], []).append(x["tone"])
+    for b, n in _wanted():
+        by_block.setdefault(b, []).append(n)
     db = store.connect_readonly()
     session, urls = store.cadence_files(db, "KIC8462852")
     db.close()
@@ -180,6 +213,11 @@ def main():
     for b, ts in sorted(by_block.items()):
         path = OUT / f"trace_block_{b:03d}.json"
         if path.exists():
+            # Reused only when it is this block's trace of these signals.
+            old = json.loads(path.read_text(encoding="utf-8"))
+            if sorted((r["block"], r["tone"]) for r in old) != sorted((b, n) for n in ts):
+                raise yoke.Refusal("INVALID_REQUEST", f"{path.name} is not the trace of block {b}'s "
+                                                      f"signals {sorted(ts)}; move it aside to trace again")
             continue
         res = trace_block(b, ts, urls, block_list, base)
         yoke.write(path, res, indent=1)
