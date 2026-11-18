@@ -16,11 +16,13 @@ site. When a second comes along, this gets revisited then.
   - references and revisions.
 
   Every number is read from the project's result records and checked
-  against them. The records are not in git (data/ is ignored): the summary
-  records (data/measurements, step 10's verdict and deviations, about 12 MB)
-  and the per-block records (data/matched, about 281 MB) are deposited on
-  Zenodo with each version, so anyone can check a number against its
-  source.
+  against them. The records are not in git (data/ is ignored):
+  `tools/evidence.py build` packs the summary records (data/measurements,
+  step 10's choice and deviations), the per-block records (data/matched,
+  data/curved_pass) and a copy of the hit store, with a manifest of
+  hashes, about 240 MB zipped; it is deposited on Zenodo with each version,
+  so anyone can check a number against its source or make the tables again
+  (docs/reproducing-results.md).
   The report is written as Markdown and a PDF. Each version has a number and
   a date, and a revision note says what changed.
 - **Zenodo holds each version.** The PDF of each version is deposited on

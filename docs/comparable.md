@@ -705,7 +705,8 @@ which is not used here (hits are read through its Python module).
     distribution, BLISS's Python, the CUDA libraries) are settings
     (`SSY_BLISS_DISTRO`, `SSY_BLISS_PYTHON`, `SSY_BLISS_LD_PATH`; and
     `BLISS_PYTHON_DIR`, `BLISS_RESPONSE`, `BLISS_DEVICE` for the adapter),
-    with this machine's as the defaults; they are not part of the
+    defaulting to places under `~/ssy` in the distribution, checked before
+    a run (docs/reproducing-results.md); they are not part of the
     comparison.
   - **Where BLISS loses a planted signal:** for each, the share of its
     track under BLISS's flags in each ON look, and its matching hits before

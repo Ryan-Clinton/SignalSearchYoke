@@ -1,0 +1,12 @@
+# Core environment that produced the published results (Windows 11, Python 3.12.10), pip freeze, 18 Nov 2026.
+# Use as a constraints file: pip install -r requirements.txt -c docs/environments/core-windows.txt
+certifi==2026.10.23
+charset-normalizer==3.5.2
+h5py==3.16.0
+hdf5plugin==7.1.0
+idna==3.20
+numpy==2.5.4
+py-spy==0.4.3
+requests==2.34.2
+ruff==0.17.4
+urllib3==2.8.0
