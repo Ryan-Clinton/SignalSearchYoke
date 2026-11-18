@@ -32,8 +32,11 @@ The first version would cover:
 In every version:
 - every number is read from the project's committed records and checked
   against them before sending;
-- Breakthrough Listen is credited for the data, with no use of their logo
-  or name as an endorsement;
+- Breakthrough Listen is credited for the data as papers using it do: a
+  data availability statement pointing to the Open Data Archive, a citation
+  of its data release paper (Lebofsky et al. 2019, PASP 131, 124505), and a
+  code availability statement for the tools used (turboSETI, BLISS, blimpy);
+  no use of their logo or name as an endorsement;
 - nothing links into the repository while it is private.
 
 ## What SignalSearchYoke needs from the site
