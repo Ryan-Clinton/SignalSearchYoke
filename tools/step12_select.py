@@ -7,6 +7,8 @@ SHA-256 under data/step12/selection/, and the choice record names them, so
 the same listing gives the same session.
 
     python tools/step12_select.py          choose, write data/step12/selection/choice.json
+    python tools/step12_select.py second   the second selection (choice_2.json): the target list
+                                           extended by Isaacson et al. 2017's catalogue
     python tools/step12_select.py gate     only the compatibility gate at Green Bank's geometry
 
 The compatibility gate plants step 10's grid (110 signals a block, the same
@@ -18,6 +20,7 @@ at least 0.9 of the same measurement at Green Bank's geometry, and the
 search's reach in drift fits the block. No spectra of any session are read.
 """
 import hashlib
+import re
 import json
 import math
 import sys
@@ -44,6 +47,13 @@ PRODUCTS = (".0000.h5", ".0000.fil")
 READ_TARGETS = {"KIC8462852", "HIP17147", "HIP91699"}
 READ_SESSIONS = {"AGBT17A_999_68", "AGBT16A_999_192"}
 TARGETS = ("HIP39826", "HIP99427", "HIP66704", "HIP65352", "HIP4436")
+# The second selection (after the first found nothing eligible): the same five, then every star of
+# Breakthrough Listen's target list (Isaacson et al. 2017, PASP 129, 054501; VizieR J/PASP/129/E4501,
+# table1) in the catalogue's own order (recno), fetched once and kept with its hash.
+CATALOGUE = yoke.ROOT / "config" / "isaacson2017_table1.tsv"
+CATALOGUE_URL = ("https://vizier.cfa.harvard.edu/viz-bin/asu-tsv?-source=J/PASP/129/E4501/table1"
+                 "&-out.max=unlimited&-out.all&-oc.form=dec")
+LOOK_ANY = re.compile(r'href="([^"]*guppi_(\d+)_(\d+)_(.+?)_(\d{4})\.(?:gpuspec\.)?0000\.(?:h5|fil))"')
 MIN_BLOCKS = 61
 GATE_BLOCKS = 10
 GATE_SEED = 12
@@ -92,7 +102,7 @@ def _folder(replies, url):
     if r.status_code != 200:
         return []
     out = []
-    for name, mjd, seconds, target, _ in seti._LOOK.findall(r.text):
+    for name, mjd, seconds, target, _ in LOOK_ANY.findall(r.text):
         out.append({"url": base + name, "target": target, "mjd": int(mjd) + int(seconds) / 86400,
                     "center_freq": None, "size": None, "telescope": None})
     return out
@@ -303,7 +313,7 @@ def candidates(replies, say=print):
     return order
 
 
-def choose(say=print):
+def choose(say=print, name="choice.json"):
     replies, tried = [], []
     chosen = None
     for tel, band, session, rows, by_target in candidates(replies, say):
@@ -326,7 +336,7 @@ def choose(say=print):
     rec = {"rule": "comparable.md step 12, 'Choosing the session, from metadata alone'",
            "chosen": chosen, "passed_over": tried, "replies": replies,
            "finished_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
-    yoke.write(OUT / "choice.json", rec, indent=1, stamp=True)
+    yoke.write(OUT / name, rec, indent=1, stamp=True)
     if chosen:
         say(f"chosen: {chosen['telescope']} {chosen['band'] or ''} {chosen['session']}, "
             f"target {chosen['looks'][0]['target']}", flush=True)
@@ -335,9 +345,32 @@ def choose(say=print):
     return rec
 
 
+def catalogue_targets():
+    """The catalogue's stars in its order, and the file's SHA-256."""
+    raw = CATALOGUE.read_bytes()
+    names = []
+    for line in raw.decode("utf-8").splitlines():
+        parts = line.split("	")
+        if len(parts) > 2 and parts[0].strip().isdigit():
+            names.append(parts[1].strip())
+    return names, hashlib.sha256(raw).hexdigest()
+
+
 def main():
     if sys.argv[1:] == ["gate"]:
         return gate(GREEN_BANK_GEOMETRY)
+    if sys.argv[1:] == ["second"]:
+        global TARGETS
+        names, sha = catalogue_targets()
+        TARGETS = tuple(dict.fromkeys(TARGETS + tuple(names)))
+        out = OUT / "choice_2.json"
+        if out.exists():
+            raise yoke.Refusal("INVALID_REQUEST", f"{out} exists: the choice is made once")
+        rec = choose(name="choice_2.json")
+        rec["catalogue"] = {"file": "config/isaacson2017_table1.tsv", "url": CATALOGUE_URL, "sha256": sha,
+                            "stars": len(names), "targets_queried_in_order": len(TARGETS)}
+        yoke.write(out, rec, indent=1, stamp=True)
+        return
     if (OUT / "choice.json").exists():
         raise yoke.Refusal("INVALID_REQUEST", f"{OUT / 'choice.json'} exists: the choice is made once")
     choose()

@@ -1064,10 +1064,20 @@ telescope for the files'. It was stopped while computing the gate's
 reference and before writing a choice; the fix takes each file's own
 listed telescope (5b3a66b). The run above is the fixed one.
 
-A new rule (a longer target list fixed from a published catalogue before
-any query) would be a second selection, made after the first came up
-empty on metadata alone; it is Ryan's decision and would be reviewed
-before it ran.
+**The second selection, 19 November 2026** (`tools/step12_select.py
+second`, `data/step12/selection/choice_2.json`). The first found nothing
+on metadata alone, so the target list is extended, once, by a list fixed
+before any query: the same five targets, then every star of Breakthrough
+Listen's own target list (Isaacson et al. 2017, PASP 129, 054501, table 1
+from VizieR J/PASP/129/E4501, 1,709 stars, committed as
+config/isaacson2017_table1.tsv with its hash in the record) in the
+catalogue's order. Everything else in the rule is unchanged. The session
+folder's files are now read by any Breakthrough Listen name with a
+`.0000` product (`guppi_MJD_SECONDS_TARGET_SCAN.0000.h5` or `.fil`), not
+only Green Bank's `gpuspec` names, so a Parkes cadence is not passed over
+for its file names. This is a second selection made after the first came
+up empty; no spectra had been read, and nothing about any session's
+contents was known.
 
 **Done when:** its verdict is published beside step 10's, as generated.
 
