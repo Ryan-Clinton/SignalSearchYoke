@@ -510,8 +510,8 @@ pilot: nothing to buy. It is shared: it already serves websites behind
 nginx with HTTPS, a database and other services, with a few gigabytes of
 memory and a couple of hundred gigabytes of disk free. So:
 
-- **The service** is one more local-port service behind nginx, on a
-  subdomain of the owner's site, under its own unprivileged user, in a
+- **The service** is one more local-port service behind nginx, at an
+  address Ryan chooses (no subdomain is approved), under its own unprivileged user, in a
   systemd slice with memory, CPU and task limits (earlyoom kills the
   largest process when memory runs short: it must be this service, not a
   site), with the bounds above.
@@ -612,7 +612,7 @@ and pickles are not part of it.
 
 ## What is open
 
-- The subdomain, and the service's limits on the pilot server (stage 3).
+- The service's address (Ryan's choice; no subdomain is approved), and its limits on the pilot server (stage 3).
 - Breakthrough Listen's answer on load (before stage 3).
 - Who the first few people are.
 - How cadences are chosen once KIC 8462852's is done.
