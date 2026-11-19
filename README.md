@@ -138,4 +138,5 @@ installed separately, not included. Two files are derived from BLISS's
 source under its BSD 3-Clause licence:
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-To cite this software: [CITATION.cff](CITATION.cff).
+The code is under the MIT licence ([LICENSE](LICENSE)), apart from the two
+BLISS-derived files above. To cite this software: [CITATION.cff](CITATION.cff).
