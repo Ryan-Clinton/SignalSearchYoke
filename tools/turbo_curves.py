@@ -29,6 +29,21 @@ import time
 from pathlib import Path
 
 from turbo_seti.find_doppler.find_doppler import FindDoppler
+import blimpy.io.base_reader as _blimpy_reader  # noqa: E402
+
+# blimpy sizes what it loads by the memory free when a file is opened (less 1 GB); with another
+# program holding most of the RAM it keeps the data on disk and turboSETI then sees one spectrum
+# ("data shape = (1,)", 19 Nov 2026). A slice here is tens of MB, so a floor of 4 GB only stops that
+# refusal: what is read, and every hit, is unchanged.
+_reader_init = _blimpy_reader.Reader.__init__
+
+
+def _reader_init_with_floor(self):
+    _reader_init(self)
+    self.max_data_array_size = max(self.max_data_array_size, 4 * _blimpy_reader.GIGA)
+
+
+_blimpy_reader.Reader.__init__ = _reader_init_with_floor
 from turbo_seti.find_event import find_event
 
 out = Path(sys.argv[1]).resolve()

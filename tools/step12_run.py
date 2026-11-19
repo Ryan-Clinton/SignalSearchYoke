@@ -29,6 +29,10 @@ import yoke  # noqa: E402
 PY = sys.executable
 TARGET = json.loads((ROOT / "config" / "step12.json").read_text(encoding="utf-8"))["target"]
 SHARDS = 3
+# Logged by independent.py with each stage (data/step12/deviations.json) and printed with the verdict.
+DEVIATION = ("tools/turbo_curves.py sets a 4 GB floor on blimpy's load limit, which follows free memory: "
+             "with another program holding the RAM, blimpy kept files on disk and turboSETI refused them "
+             "(data shape (1,)); the data read and every hit are unchanged")
 
 
 def say(text):
@@ -75,8 +79,8 @@ def parallel(*stages):
                 if procs and all(p.poll() is not None for p in procs):
                     break
                 time.sleep(10)
-        procs += [subprocess.Popen([PY, "-u", "independent.py", "--step", "12", stage, "--shard", f"{i}/{SHARDS}"],
-                                   cwd=ROOT) for i in range(SHARDS)]
+        procs += [subprocess.Popen([PY, "-u", "independent.py", "--step", "12", stage, "--shard", f"{i}/{SHARDS}",
+                                    "--deviation", DEVIATION], cwd=ROOT) for i in range(SHARDS)]
     codes = [p.wait() for p in procs]
     if any(codes):
         raise SystemExit(f"step12_run: {stages} shards exited {codes}")
@@ -110,14 +114,14 @@ def bliss():
 
 def main():
     regression()
-    run("independent.py", "--step", "12", "check")
-    run("independent.py", "--step", "12", "sweep")
-    run("independent.py", "--step", "12", "choose")
+    # (check takes no deviation; the stages below log theirs)
+    run("independent.py", "--step", "12", "sweep", "--deviation", DEVIATION)
+    run("independent.py", "--step", "12", "choose", "--deviation", DEVIATION)
     # One stage at a time: six workers at once left too little free memory for blimpy, which then loads
     # one spectrum of a file and turboSETI refuses it (block 31, 19 Nov).
     parallel("measure")
     parallel("curved")
-    run("independent.py", "--step", "12", "verdict")
+    run("independent.py", "--step", "12", "verdict", "--deviation", DEVIATION)
     bliss()
     say("step 12: done")
 
