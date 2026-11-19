@@ -24,7 +24,7 @@ answered it.
 | # | Audit | Phase | Priority | Status |
 |---|---|---|---|---|
 | 1 | Scientific methodology | 1 | critical | **done** (19 Nov 2026), re-audited the same day; see below |
-| 2 | Signal injection accuracy | 1 | critical | to do |
+| 2 | Signal injection accuracy | 1 | critical | **in progress** (19 Nov 2026): findings judged, checks running; see below |
 | 3 | turboSETI comparison fairness | 1 | critical | to do |
 | 4 | False-positive methodology | 1 | critical | to do |
 | 5 | The 2016 interference failure | 1 | critical | to do |
@@ -173,4 +173,22 @@ anything was built:
 
 Effect on the conclusions: none. The frozen verdicts are unchanged; the
 weighted and window estimates agree with the sample's to within 0.009.
+
+## 2. Signal injection accuracy: 19 November 2026
+
+**Verdict:** no error that makes the planted-signal results unusable; the
+planting is a controlled signal-to-noise experiment in real spectra, not
+yet a validated model of what the telescope records from a transmitter.
+Every finding was checked in the code first; all seven stand.
+
+| Finding | Severity | Verdict and what was done |
+|---|---|---|
+| SI-01: power is added to the finished spectra, so there is no signal-noise cross term from squaring signal plus noise | high | **built; measurement running.** Confirmed in `measure.plant`. `tools/injection_checks.py voltage`: the same synthetic noise voltages (complex Gaussian, 51 FFTs a spectrum, as Green Bank's finest product) and the same 110-signal grid made three ways, power at 32 sub-steps (as in use), power at 51, and the tone added to the voltages before squaring; both pipelines, three-look recovery at SNR 10 and 30, 8 blocks of 1,048,576 channels. Result: *running*. |
+| SI-02: signals are planted after the DC bin is blanked, so one crossing it keeps power a real one would lose | high (for DC claims) | **built; measured in part.** Confirmed: `seti.blank_dc` runs when a slice is read, `matched.plant` after. Of the finished experiments' planted signals, **2 of 13,310 (2017), 4 of 13,310 (2016) and 2 of 7,040 (2019) cross a DC bin in any ON look** (`injection_checks.py dc`, census), so the order cannot have moved those results. The same tool plants signals made to cross the DC bin both ways (before blanking, as the sky would; after, as in use), both pipelines: *running*. docs/seti.md's 20 signals "near the DC bin" are near it, not across it. |
+| SI-03: the setigen comparison used setigen's default truncation (sidelobes cut at the first zero) against our 4 channels of sidelobes | medium | **built.** Confirmed (`sinc2_f_profile` defaults to `trunc=True`). `measure.py setigen` now runs both: untruncated, the profiles correlate at 0.998 to 0.9999 and **the 8.5% power gap is gone** (ours/setigen 0.980, ours/h 0.980: the gap was the truncation). Truncated stays as the control. Our planting carries 98% of h (the tails beyond 4 channels are dropped): both pipelines get the same spectra, so it weakens every signal by 2% alike. |
+| SI-04: 32 sub-steps a spectrum against the spectrometer's 51 FFTs; the profile differs at high drift | medium | **built; measurement running.** `tests/test_injection.py` checks power and convergence at 32, 51 and 128 against 256. `injection_checks.py substeps` gives the profile differences by drift and start, and the detector's S/N on the planted track near the cut at each: *running*. The production count is not changed. |
+| SI-05: a fixed S_in in each ON look is not a fixed received flux | medium | **built; measurement running.** Already stated in the report (1.3). `injection_checks.py flux`: 8 blocks of the 2017 session read again and planted both ways with their own recorded signals, both pipelines, and the spread of the looks' noise against each other: *running*. |
+| SI-06: flux in Jy Hz uses an SEFD of 10 Jy measured for L and S band, also on the C-band session | medium | **built.** The results pages' column now reads "Jy Hz (nominal: SEFD 10 Jy assumed)"; the report gives no flux. A C-band SEFD would need a calibrator observation at C band: **planned** in audit 13. |
+| SI-07: the grid keeps planted signals apart, so crowding and confusion between signals are not tested | medium | **planned** in audit 6 (the planted signals still sit in real interference; `measure.py pairs` covers close pairs). |
+| The tests check the planting only through the detector | — | **built**: `tests/test_injection.py` checks the planting itself (power, convergence, drift direction with the band running down, what blanking does to a signal on the DC bin). A voltage reference, constant-flux and crowding tests follow the measurements above. |
 
