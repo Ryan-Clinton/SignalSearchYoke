@@ -100,15 +100,20 @@ and the records name each file's URL), chunk indexes, caches, unfinished
 work, locks and logs. About 1.3 GB before compression. It is deposited on
 Zenodo with each version of the report (docs/publishing.md).
 
-The manifest gives each record's SHA-256 and size, and the store's SHA-256,
-size and tables (every column, every row count). It also says what in the
-package names the machine that made it, read from the package itself: the
-records that name a local path (BLISS's records name its module and
-response file under the home folder in WSL) and, in the store, the
-computer name in the runs table and any text that looks like a local path
-(none). Nothing else in the store is about the machine: the rest is the
-archive's file URLs, the blocks, hits, events, checks, planted signals and
-the search's parameters and library versions.
+The package's copies have the names of the machine that made them taken
+out, and nothing else changed: every home folder is written `~` (BLISS's
+records name its module and response file under one, in their provenance)
+and every computer name the store's runs give is written `COMPUTER`, in
+the records and in the store's copy, where the old values are wiped from
+the file, not just unlinked. The build is refused if anything packaged
+still names the machine. The records on the machine itself are not
+changed. The manifest gives each file's SHA-256 and size as packaged, and
+its original SHA-256 where the substitution changed it; the store's
+SHA-256 (packaged and original), size and tables (every column, every row
+count); and what was substituted, by count. Nothing else in the store is
+about the machine: the rest is the archive's file URLs, the blocks, hits,
+events, checks, planted signals and the search's parameters and library
+versions.
 
 - `python tools/evidence.py check ZIP` refuses a copy with a record missing
   or changed, an entry the manifest does not list, or a store that is
