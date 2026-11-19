@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DATA = Path(os.environ.get("SSY_DATA") or ROOT / "data")
 OUT = ROOT / "docs" / "report" / "report.md"
 
-VERSION = "1.3"
+VERSION = "1.4"
 DATE = "2026-11-19"
 REVISIONS = (("0.1", "2026-11-18", "first draft."),
              ("1.0", DATE, "first release: the signals BLISS finds and this search misses traced stage by "
@@ -32,7 +32,10 @@ REVISIONS = (("0.1", "2026-11-18", "first draft."),
              ("1.3", DATE, "recovery at every tested cut for all three sessions, with the paired difference "
                            "and blocks resampled in runs; step 12 described as meeting its criteria at the point "
                            "estimate; what the injections, the false-candidate control and the comparison of "
-                           "whole pipelines do and do not measure."))
+                           "whole pipelines do and do not measure."),
+             ("1.4", DATE, "recovery weighted to each session's share of crowded and clean blocks beside the "
+                           "sample's; the neighbouring-block check made over consecutive blocks of the session; "
+                           "the matched cut by one rule throughout; the blocks of each session stated."))
 
 
 def load(path):
@@ -299,11 +302,13 @@ def main():
     w("")
     w("## Method")
     w("")
-    w(f"- **Data.** Breakthrough Listen's high-resolution spectra (about 2.8 Hz channels) of a whole ON-OFF "
-      f"cadence: three ON looks at the target, each followed by an OFF look elsewhere. {b['blocks']} blocks "
-      f"of frequency per session: {b['classes']['crowded']} crowded with interference and "
-      f"{b['classes']['clean']} clean, chosen at random within each class and weighted by each class's share "
-      f"of the session.")
+    third = (f"; in 2019 all of the session's {s12['blocks']}" if s12 else "")
+    w("- **Data.** Breakthrough Listen's high-resolution spectra (about 2.8 Hz channels) of a whole ON-OFF "
+      "cadence: three ON looks at the target, each followed by an OFF look elsewhere. In 2017 and 2016, "
+      f"{b['blocks']} blocks of frequency of each session, {b['classes']['crowded']} crowded with interference "
+      f"and {b['classes']['clean']} clean, chosen at random within each class{third}. The false-candidate rates "
+      "weight each class by its share of the session's blocks; the recovery counts are of the blocks measured, "
+      "and are also given weighted to the session below.")
     w(f"- **Planted signals.** {m['per_block']} a block, in the ON looks only, across {len(grid)} strengths "
       f"(S_in {grid[0]:g} to {grid[-1]:g}, the signal-to-noise a search would give collecting all its power in "
       f"ideal noise) and {WORDS.get(m['bins'], m['bins'])} drift bins up to {math.ceil(m['max_drift']):g} Hz/s. "
@@ -446,29 +451,42 @@ def main():
         w("## Recovery at every operating point")
         w("")
         w("A single cut does not give one ratio between the pipelines. For each session, the same planted "
-          "signals at the frozen cut (30 each), the published one (10 each) and the lowest tested cut of each "
-          f"pipeline whose false-candidate rate is at most {ops['rate']:g} at its point estimate. The paired "
-          "difference is in the share of the signals both were given, with a bootstrap over blocks, and again "
-          "over runs of four adjacent blocks (neighbouring blocks may share interference). Supplementary and "
-          "exploratory: the frozen verdicts above are unchanged.")
+          "signals at the frozen cut (30 each), the published one (10 each) and each pipeline's matched cut "
+          "(step 4's rule: the lowest tested cut from which the false-candidate rate's point estimate stays at "
+          f"most {ops['rate']:g} at every higher cut). Supplementary and exploratory: the frozen verdicts above "
+          "are unchanged.")
         w("")
-        w("| session | operating point | cuts (this search, turboSETI) | found | false a block | paired "
-          "difference (blocks; runs of 4) |")
-        w("|---|---|---|---|---|---|")
+        w("| session | operating point | cuts (this search, turboSETI) | found in the sample | false a block | "
+          "paired difference in the sample | weighted to the session |")
+        w("|---|---|---|---|---|---|---|")
         for ss in ops["sessions"]:
             for name, pt in ss["points"].items():
                 if "found" not in pt:
-                    w(f"| {ss['target']} | {name} | — | {pt['note']} | | |")
+                    w(f"| {ss['target']} | {name} | — | {pt['note']} | | | |")
                     continue
-                pr = {x["runs_of"]: x for x in pt["paired"]}
+                pr = {x["windows_of"]: x for x in pt["sample"]}
+                wt = pt["weighted"]
                 w(f"| {ss['target']} | {name} | {pt['cuts'][0]}, {pt['cuts'][1]} | {n(pt['found'][0])} against "
                   f"{n(pt['found'][1])} of {n(ss['signals'])} | {pt['false_per_block'][0]:.3g}, "
-                  f"{pt['false_per_block'][1]:.3g} | {pr[1]['difference']:+.3f} ({iv(pr[1]['interval'])}; "
-                  f"{iv(pr[4]['interval'])}) |")
+                  f"{pt['false_per_block'][1]:.3g} | {pr[1]['difference']:+.3f} ({iv(pr[1]['interval'])}) | "
+                  f"{100 * wt['share'][0]:.1f}% against {100 * wt['share'][1]:.1f}%, {wt['difference']:+.3f} "
+                  f"({iv(wt['interval'])}) |")
+        w("")
+        samp = "; ".join(f"{ss['target']} {ss['sampled']['crowded']} of {ss['blocks']} against "
+                         f"{ss['of']['crowded']} of {ss['of']['crowded'] + ss['of']['clean']}" for ss in ops["sessions"])
+        moved = max(abs(pt["weighted"]["difference"] - pt["sample"][0]["difference"])
+                    for ss in ops["sessions"] for pt in ss["points"].values() if "found" in pt)
+        w(f"The sample's crowded blocks against the session's: {samp}. Weighting each class by its share of the "
+          f"session (bootstrap over blocks within each class) moves the difference by at most {moved:.3f}, so "
+          "no conclusion here rests on how the blocks were sampled. "
+          "The paired difference in the sample has a bootstrap over blocks; resampling instead whole "
+          "windows of four consecutive blocks of the session (block numbers, gaps of unmeasured blocks kept) "
+          "barely widens it, but that tests only correlation between neighbouring blocks, and windows of "
+          "sixteen leave too few windows (20 or fewer) for an interval (all in the record).")
         w("")
         w("At the lower cuts the ratio falls (about ten times as many found at 30 each, about three times at "
-          "the lowest qualifying cuts in 2019) while the difference in share grows. Resampling in runs of four "
-          "blocks barely widens the intervals. In 2016 no tested cut of this search reached the rate.")
+          "the matched cuts in 2019) while the difference in share grows. In 2016 no tested cut of this search "
+          "reached the rate.")
         w("")
     w("## Limitations")
     w("")

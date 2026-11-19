@@ -23,7 +23,7 @@ answered it.
 
 | # | Audit | Phase | Priority | Status |
 |---|---|---|---|---|
-| 1 | Scientific methodology | 1 | critical | **done** (19 Nov 2026), see below |
+| 1 | Scientific methodology | 1 | critical | **done** (19 Nov 2026), re-audited the same day; see below |
 | 2 | Signal injection accuracy | 1 | critical | to do |
 | 3 | turboSETI comparison fairness | 1 | critical | to do |
 | 4 | False-positive methodology | 1 | critical | to do |
@@ -155,3 +155,22 @@ calibrated false-alarm probability.
 | Step 12 "every criterion holds" says more than its false-rate intervals do | — | **built**: the report now says every criterion was met at its point estimate, with the false-rate intervals reaching above the limit. |
 
 Commit: see `git log -- docs/audits.md`.
+
+### 1, re-audited at 21a919e, 19 November 2026
+
+The first round's findings stood as: F1 addressed; F2, F3 and F5 in part
+(their remaining work is the planned experiments above); F4 acknowledged;
+F6 satisfactory for its scope. Three new findings, each checked before
+anything was built:
+
+| Finding | Severity | Verdict and what was done |
+|---|---|---|
+| R1: the false rates are weighted by each class's share of the session, the recovery counts and paired differences are not, though the 2017 sample is 61 crowded of 121 against 61 of 308 in the session (2016: 61 of 121 against 184 of 304) | high | **built.** Confirmed in `matched_tables.py` and `tools/operating_points.py`. Every operating point now has the recovery and the paired difference weighted to the session (each class's share found, weighted by its share of the session's blocks; a bootstrap over blocks within each class), beside the sample's. The effect is at most 0.009 in the difference (2017 at 30 each: +0.306 in the sample, +0.309 weighted; 2016: +0.294, +0.290; 2019: the sample is the session). The report (1.4) gives both and says no conclusion rests on the sampling. |
+| R2: the runs of 4 and 16 were of measured blocks sorted by frequency, not consecutive blocks of the session, so they skipped unmeasured blocks | medium | **built.** Confirmed: the old grouping took the sorted sample four at a time. The windows are now of consecutive block numbers of the session, gaps kept (2017: 64 windows of 4, 20 of 16; 2016: 68 and 19; 2019: 16 and 4). An interval from fewer than 20 windows is marked in the record and left out of the report. The report now says this tests correlation between neighbouring blocks only, not robustness to frequency correlation in general. |
+| R3: the matched cut had two definitions (step 4's: the rate within the target at every higher cut; the new script's: the lowest single passing cut) | medium | **built.** The script now uses `matched_tables._matched_cut`, and the operating point is named "matched (step 4's rule)". No published cut changes: the two rules gave the same cuts on all three sessions. |
+| The method said 121 blocks per session and did not say the weighting is of the false rates only | low | **built**: the method gives each session's blocks (121, 121, 64) from the records and says which estimates are weighted. |
+| Focused tests for the calculations | — | **built**: `tests/test_operating_points.py` (the weighting against the sample, an absent class, windows by block number with gaps, few windows marked, the interval around the estimate). |
+
+Effect on the conclusions: none. The frozen verdicts are unchanged; the
+weighted and window estimates agree with the sample's to within 0.009.
+

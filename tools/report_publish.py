@@ -37,8 +37,11 @@ REVISIONS = (
     ("1.1", "2026-11-19", "The code's repository, now public, linked.", True),
     ("1.2", "2026-11-19", "The third session, chosen and fixed in advance (NGC 6946 at C band): every criterion "
                           "held.", True),
-    ("1.3", None, "Recovery at every tested cut for all three sessions; step 12 described as meeting its criteria "
-                  "at the point estimate; what the injections and the false-candidate control measure.", True),
+    ("1.3", "2026-11-19", "Recovery at every tested cut for all three sessions; step 12 described as meeting its "
+                          "criteria at the point estimate; what the injections and the false-candidate control "
+                          "measure.", True),
+    ("1.4", None, "Recovery weighted to each session's crowded and clean blocks beside the sample's; the "
+                  "neighbouring-block check over consecutive blocks; one rule for the matched cut.", True),
 )
 CHROME = (Path("C:/Program Files/Google/Chrome/Application/chrome.exe"),
           Path("C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"))

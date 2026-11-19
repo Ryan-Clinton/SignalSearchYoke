@@ -1,6 +1,6 @@
 # Comparing radio-signal searches on Breakthrough Listen data
 
-Ryan Clinton. Version 1.3, 2026-11-19.
+Ryan Clinton. Version 1.4, 2026-11-19.
 
 ## Summary
 
@@ -20,7 +20,7 @@ Searches for narrowband technosignatures look for a tone drifting steadily in fr
 
 ## Method
 
-- **Data.** Breakthrough Listen's high-resolution spectra (about 2.8 Hz channels) of a whole ON-OFF cadence: three ON looks at the target, each followed by an OFF look elsewhere. 121 blocks of frequency per session: 61 crowded with interference and 60 clean, chosen at random within each class and weighted by each class's share of the session.
+- **Data.** Breakthrough Listen's high-resolution spectra (about 2.8 Hz channels) of a whole ON-OFF cadence: three ON looks at the target, each followed by an OFF look elsewhere. In 2017 and 2016, 121 blocks of frequency of each session, 61 crowded with interference and 60 clean, chosen at random within each class; in 2019 all of the session's 64. The false-candidate rates weight each class by its share of the session's blocks; the recovery counts are of the blocks measured, and are also given weighted to the session below.
 - **Planted signals.** 110 a block, in the ON looks only, across 11 strengths (S_in 10 to 400, the signal-to-noise a search would give collecting all its power in ideal noise) and five drift bins up to 4 Hz/s. Each look's signal is scaled to that look's own measured noise, so a signal has the same S_in in every ON look: this measures recovery at a controlled signal-to-noise, not of a transmitter of fixed flux whose signal-to-noise would vary from look to look.
 - **Found** means detected in all three ON looks within ±6 Hz and ±0.05 Hz/s of the planted signal (the tolerances of Margot et al. 2023).
 - **False candidates** are counted by running each pipeline with the wrong looks called ON: the 19 other ways of choosing three of the six looks. Anything a pipeline keeps under a wrong choice is interference or noise. Candidates sharing a hit count once. This is a wrong-cadence control rate, not a calibrated false-alarm probability: the telescope's pointings were not assigned at random, the looks share their interference, and a wrong choice's looks are put in ON, OFF order, not in time order. How well it predicts false candidates in real cadences has not been measured.
@@ -90,21 +90,23 @@ At the frozen cut (30), both pipelines raised 0 false candidates a block (95% in
 
 ## Recovery at every operating point
 
-A single cut does not give one ratio between the pipelines. For each session, the same planted signals at the frozen cut (30 each), the published one (10 each) and the lowest tested cut of each pipeline whose false-candidate rate is at most 0.1 at its point estimate. The paired difference is in the share of the signals both were given, with a bootstrap over blocks, and again over runs of four adjacent blocks (neighbouring blocks may share interference). Supplementary and exploratory: the frozen verdicts above are unchanged.
+A single cut does not give one ratio between the pipelines. For each session, the same planted signals at the frozen cut (30 each), the published one (10 each) and each pipeline's matched cut (step 4's rule: the lowest tested cut from which the false-candidate rate's point estimate stays at most 0.1 at every higher cut). Supplementary and exploratory: the frozen verdicts above are unchanged.
 
-| session | operating point | cuts (this search, turboSETI) | found | false a block | paired difference (blocks; runs of 4) |
-|---|---|---|---|---|---|
-| KIC8462852 | frozen (30 each) | 30, 30 | 4,520 against 442 of 13,310 | 0.0682, 0.0487 | +0.306 (0.301 to 0.311; 0.3 to 0.312) |
-| KIC8462852 | published (10 each) | 10, 10 | 8,706 against 1,709 of 13,310 | 3.3, 0.286 | +0.526 (0.514 to 0.536; 0.511 to 0.538) |
-| KIC8462852 | lowest cut with point estimate at most 0.1 | 30, 30 | 4,520 against 442 of 13,310 | 0.0682, 0.0487 | +0.306 (0.301 to 0.311; 0.3 to 0.312) |
-| HIP17147 | frozen (30 each) | 30, 30 | 4,337 against 417 of 13,310 | 39.1, 1.27 | +0.294 (0.284 to 0.304; 0.281 to 0.308) |
-| HIP17147 | published (10 each) | 10, 10 | 8,258 against 1,550 of 13,310 | 107, 1.95 | +0.504 (0.485 to 0.521; 0.476 to 0.528) |
-| HIP17147 | lowest cut with point estimate at most 0.1 | — | no tested cut reaches 0.1 for this search | | |
-| NGC6946 | frozen (30 each) | 30, 30 | 2,404 against 247 of 7,040 | 0, 0 | +0.306 (0.302 to 0.311; 0.302 to 0.311) |
-| NGC6946 | published (10 each) | 10, 10 | 4,702 against 952 of 7,040 | 0, 0 | +0.533 (0.525 to 0.54; 0.525 to 0.54) |
-| NGC6946 | lowest cut with point estimate at most 0.1 | 8, 5 | 5,049 against 1,714 of 7,040 | 0.0156, 0 | +0.474 (0.466 to 0.481; 0.467 to 0.48) |
+| session | operating point | cuts (this search, turboSETI) | found in the sample | false a block | paired difference in the sample | weighted to the session |
+|---|---|---|---|---|---|---|
+| KIC8462852 | frozen (30 each) | 30, 30 | 4,520 against 442 of 13,310 | 0.0682, 0.0487 | +0.306 (0.301 to 0.311) | 34.4% against 3.5%, +0.309 (0.305 to 0.314) |
+| KIC8462852 | published (10 each) | 10, 10 | 8,706 against 1,709 of 13,310 | 3.3, 0.286 | +0.526 (0.514 to 0.536) | 66.5% against 13.0%, +0.535 (0.528 to 0.541) |
+| KIC8462852 | matched (step 4's rule) | 30, 30 | 4,520 against 442 of 13,310 | 0.0682, 0.0487 | +0.306 (0.301 to 0.311) | 34.4% against 3.5%, +0.309 (0.305 to 0.314) |
+| HIP17147 | frozen (30 each) | 30, 30 | 4,337 against 417 of 13,310 | 39.1, 1.27 | +0.294 (0.284 to 0.304) | 32.0% against 3.0%, +0.290 (0.278 to 0.301) |
+| HIP17147 | published (10 each) | 10, 10 | 8,258 against 1,550 of 13,310 | 107, 1.95 | +0.504 (0.485 to 0.521) | 60.9% against 11.3%, +0.496 (0.474 to 0.515) |
+| HIP17147 | matched (step 4's rule) | — | no matched cut for this search | | | |
+| NGC6946 | frozen (30 each) | 30, 30 | 2,404 against 247 of 7,040 | 0, 0 | +0.306 (0.302 to 0.311) | 34.2% against 3.5%, +0.306 (0.302 to 0.311) |
+| NGC6946 | published (10 each) | 10, 10 | 4,702 against 952 of 7,040 | 0, 0 | +0.533 (0.525 to 0.54) | 66.8% against 13.5%, +0.533 (0.525 to 0.541) |
+| NGC6946 | matched (step 4's rule) | 8, 5 | 5,049 against 1,714 of 7,040 | 0.0156, 0 | +0.474 (0.466 to 0.481) | 71.7% against 24.3%, +0.474 (0.466 to 0.482) |
 
-At the lower cuts the ratio falls (about ten times as many found at 30 each, about three times at the lowest qualifying cuts in 2019) while the difference in share grows. Resampling in runs of four blocks barely widens the intervals. In 2016 no tested cut of this search reached the rate.
+The sample's crowded blocks against the session's: KIC8462852 61 of 121 against 61 of 308; HIP17147 61 of 121 against 184 of 304; NGC6946 3 of 64 against 3 of 64. Weighting each class by its share of the session (bootstrap over blocks within each class) moves the difference by at most 0.009, so no conclusion here rests on how the blocks were sampled. The paired difference in the sample has a bootstrap over blocks; resampling instead whole windows of four consecutive blocks of the session (block numbers, gaps of unmeasured blocks kept) barely widens it, but that tests only correlation between neighbouring blocks, and windows of sixteen leave too few windows (20 or fewer) for an interval (all in the record).
+
+At the lower cuts the ratio falls (about ten times as many found at 30 each, about three times at the matched cuts in 2019) while the difference in share grows. In 2016 no tested cut of this search reached the rate.
 
 ## Limitations
 
@@ -133,6 +135,7 @@ The observations are from the Breakthrough Listen Open Data Archive (Lebofsky et
 - 1.1 (2026-11-19): the code's repository, now public, linked.
 - 1.2 (2026-11-19): the third session, chosen and fixed in advance (NGC 6946 at C band): every criterion held.
 - 1.3 (2026-11-19): recovery at every tested cut for all three sessions, with the paired difference and blocks resampled in runs; step 12 described as meeting its criteria at the point estimate; what the injections, the false-candidate control and the comparison of whole pipelines do and do not measure.
+- 1.4 (2026-11-19): recovery weighted to each session's share of crowded and clean blocks beside the sample's; the neighbouring-block check made over consecutive blocks of the session; the matched cut by one rule throughout; the blocks of each session stated.
 
 ## Records this version was written from
 
@@ -141,7 +144,7 @@ The observations are from the Breakthrough Listen Open Data Archive (Lebofsky et
 - data/measurements/step12.json: written 2026-11-19T09:20:07Z, commit f161e25
 - bliss_control/block_035.json: finished 2026-11-18T15:20:01Z
 - bliss_control/block_129.json: finished 2026-11-18T15:37:02Z
-- data/analysis/operating_points.json: written 2026-11-19T10:32:38Z, commit 5c3fd08
+- data/analysis/operating_points.json: written 2026-11-19T11:43:06Z, commit 21a919e
 - data/analysis/bliss_only/trace_summary.json: written 2026-11-19T00:54:45Z, commit 2b1b22b
 - data/analysis/bliss_only/detector_misses.json: written 2026-11-19T02:28:46Z, commit 3fd7837
 - data/measurements/off_null.json: written 2026-11-11T02:41:54Z, commit e5f6c77
