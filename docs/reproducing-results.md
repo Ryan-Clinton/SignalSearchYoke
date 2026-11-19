@@ -114,12 +114,20 @@ the search's parameters and library versions.
   or changed, an entry the manifest does not list, or a store that is
   missing or differs.
 - `python tools/evidence.py reproduce ZIP` is the level-2 test from the
-  package alone: the committed code (`git archive HEAD`) in a new folder,
-  the package unpacked as its data folder, so this checkout's `data/` is
-  out of reach; it runs the table commands below there and compares every
-  page and summary record they write with what was there before (the
-  committed pages, the packaged records), ignoring only when and by which
-  commit a record was written.
+  package alone: the code of the commit the package was built at (`git
+  archive`; a package built from a tree with changes is refused, as no
+  commit holds its code) in a new folder, the package unpacked as its data
+  folder, so this checkout's `data/` is out of reach. It runs the table
+  commands below there and compares every page and summary record they
+  write with what was there before (that commit's pages, the packaged
+  records). It fails on an output missing, new, or changed in anything but
+  a record's top-level `provenance` and `written_utc`, a page's UTC times,
+  and the commits the report names beside its records' times.
+
+Each record's provenance says whether any tracked file (code, config,
+patch or environment list) differed from its commit, and keeps a SHA-256
+of the difference when one did (`uncommitted_diff_sha256`, from 19
+November 2026; earlier records looked at the Python files only).
 
 ## Making the tables again (level 2)
 
