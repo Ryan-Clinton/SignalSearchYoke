@@ -65,8 +65,18 @@ def regression():
 
 def parallel(*stages):
     say("run: " + ", ".join(stages) + f", {SHARDS} shards each, at once")
-    procs = [subprocess.Popen([PY, "-u", "independent.py", "--step", "12", stage, "--shard", f"{i}/{SHARDS}"],
-                              cwd=ROOT) for stage in stages for i in range(SHARDS)]
+    procs = []
+    for stage in stages:
+        if stage == "curved":
+            # curved_pass.run reads the blocks matched.run writes when it starts (blocks.json)
+            cfg = json.loads((ROOT / "config" / "step12.json").read_text(encoding="utf-8"))
+            meta = yoke.DATA / "matched" / f"{cfg['target']}-{cfg['session']}" / "blocks.json"
+            while not meta.exists():
+                if procs and all(p.poll() is not None for p in procs):
+                    break
+                time.sleep(10)
+        procs += [subprocess.Popen([PY, "-u", "independent.py", "--step", "12", stage, "--shard", f"{i}/{SHARDS}"],
+                                   cwd=ROOT) for i in range(SHARDS)]
     codes = [p.wait() for p in procs]
     if any(codes):
         raise SystemExit(f"step12_run: {stages} shards exited {codes}")
