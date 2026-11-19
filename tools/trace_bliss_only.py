@@ -158,7 +158,7 @@ def flags(r):
             "matching_hit_at_cut_in_on_look": [lk["best_matching_hit"] is not None
                                                and lk["best_matching_hit"]["snr"] >= CUT for lk in r["looks"]],
             "event_built": bool(r["events"]),
-            "off_over_off_max": any(max((x for x in (lk["track_snr"], lk.get("track_snr_fixed")) if x is not None),
+            "off_over_off_max_in_events": any(max((x for x in (lk["track_snr"], lk.get("track_snr_fixed")) if x is not None),
                                         default=0) >= matched.onoff.OFF_MAX for lk in offs),
             "off_hit": any(bool(lk.get("hit_snr")) for lk in offs),
             "labels": sorted({e["label"] for e in r["events"]})}

@@ -94,5 +94,5 @@ The observations are from the Breakthrough Listen Open Data Archive (Lebofsky et
 - data/measurements/step10.json: written 2026-11-14T09:41:25Z, commit de48e39
 - bliss_control/block_035.json: finished 2026-11-18T15:20:01Z
 - bliss_control/block_129.json: finished 2026-11-18T15:37:02Z
-- data/analysis/bliss_only/trace_summary.json: written 2026-11-18T23:56:04Z, commit 0c31975
+- data/analysis/bliss_only/trace_summary.json: written 2026-11-19T00:54:45Z, commit 2b1b22b
 - data/measurements/off_null.json: written 2026-11-11T02:41:54Z, commit e5f6c77

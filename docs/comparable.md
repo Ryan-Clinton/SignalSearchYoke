@@ -902,10 +902,17 @@ docs/results/KIC8462852-AGBT17A_999_68-bliss.md):**
   every false rate this search is matched on is measured with it, and
   what it keeps out (step 10's frozen false rates failed even with it)
   would have to be measured again at any other threshold.
-  The 7 detector misses are being measured stage by stage
-  (`tools/detector_misses.py`: the hit cap per look, the noise of the
-  summed lines in the signal's block, the best line before picking, the
-  hits whose blanking reaches it), the detector unchanged.
+  The 8 signals whose stage is the detector (the 7 above and the faint
+  one beside interference) are being measured stage by stage
+  (`tools/detector_misses.py`), the detector unchanged and watched from
+  outside: before any pick, the S/N on the signal's exact track and the
+  noise of the summed lines in its block for that drift's width, apart
+  from the best S/N in the neighbourhood; the hit cap per look, raised in
+  steps (5,000, 10,000, 20,000) only where a look reached it; and the
+  pixels of the signal's own track that the detector blanked for other
+  hits, spectrum by spectrum. In the summary's flags, an OFF look over
+  OFF_MAX is counted only in the events built
+  (`off_over_off_max_in_events`), not along every planted track.
 
 **Done when:** BLISS's false curve, matched cut and recovery by drift and
 strength are on step 4's page beside the other two, with the signals
@@ -920,41 +927,84 @@ listing has a whole ON-OFF cadence of one (Parkes, MeerKAT), otherwise a
 markedly different interference environment, chosen from the listing alone
 before any of its spectra are read.
 
-**The protocol, proposed 19 November 2026 for review; not frozen, no
-session chosen, nothing read.** Four stages, each committed before the
+**The protocol, proposed 19 November 2026 for review and revised the same
+day (a deterministic selection, a compatibility gate, the block rule for
+short sessions, a regression against step 10); not frozen, no session
+chosen, no listing for it read.** Four stages, each committed before the
 next: this protocol reviewed; the session chosen by the rule below from
 the archive's listing alone, the choice and its reasons written down; the
 config frozen and committed with the code's fingerprints; then the run.
 No spectra of a candidate session are read before the freeze is committed.
 
-- **Choosing the session, from metadata alone** (`seti.py find`, the
-  archive's listing; at most the first file's header or HDF5 index, no
-  spectra, as step 10 read its index to count blocks):
-  1. Another telescope if the listing has a whole cadence of one: three
-     ON looks of one target alternating with three OFF looks, about five
-     minutes each, in a high-resolution product (channels of a few Hz,
-     spectra some tens of seconds apart) that the search reads unchanged.
-     The search takes the channel width and spectrum time from each file,
-     and the signal grid is in units of each channel's noise, so a
-     different channel width is not by itself a reason to pass a session
-     over; a product the reader cannot read is.
-  2. Otherwise Green Bank in a markedly different interference
-     environment: a receiver band neither session has used (step 4's is
-     S band, step 10's L band), so C band first, then X band.
-  3. Passed over: any session this project has read spectra from before,
-     and any target whose looks it has read (as HIP91699 was for step 10).
-  4. Among those left, the first in the listing's order of the targets
-     looked up, the list of targets written down before the first is
-     looked up. Nothing about a session's contents is used.
+- **Choosing the session, from metadata alone.** The rule below is
+  applied by a script (`tools/step12_select.py`, written and committed
+  after this protocol is reviewed and before it is run), so that the same
+  listing gives the same session. Every reply of the archive it uses is
+  saved with its SHA-256, and the choice record names them. Read: the
+  archive's listing (`seti.berkeley.edu/opendata/api/query-files`, its
+  fields target, url, mjd, size, center_freq, telescope) and the session
+  folder's own file list (as `seti.py find` reads it); for a candidate
+  that passes everything else, the first file's header (or HDF5 index),
+  never spectra.
+  1. **Telescopes, in order:** Parkes; then any other telescope named in
+     the listing other than Green Bank, in alphabetical order of its name;
+     then Green Bank. Each is queried by telescope alone. If the archive
+     will not answer a query without a target, it is queried by each
+     target of the list in 5, in that order.
+  2. **Bands at Green Bank,** in order: C (3,950 to 8,000 MHz centre), then
+     X (8,000 to 11,600 MHz), by the listed centre frequency. L and S
+     (steps 10 and 4) are not eligible.
+  3. **A session is eligible** when all of these hold, from the listing,
+     the folder and one header:
+     - six looks of the same high-resolution product (file name ending
+       `.0000.h5` or `.0000.fil`, Breakthrough Listen's finest frequency
+       product) in the order ON, OFF, ON, OFF, ON, OFF, the three ON
+       looks of one target (its name compared without a DIAG_ prefix,
+       any case), each OFF look of another, all within 0.06 days of the
+       ON looks (`find`'s rule); the first such run in the session;
+     - the six looks share one centre frequency (to 1 kHz) and size (to
+       1%);
+     - no look of the target, and nothing in the session, has had its
+       spectra read by this project (KIC8462852, HIP17147 and HIP91699,
+       and the sessions AGBT17A_999_68 and AGBT16A_999_192, are out);
+     - the reader opens the first file's header without a refusal, and
+       the header gives 61 or more blocks;
+     - **the compatibility gate:** from the header's geometry alone
+       (channel width and its sign, spectrum time, spectra a look,
+       channels a block), 110 signals of step 10's S_in and drift grid
+       are planted in synthetic noise of that shape (tests/synth.py's
+       generator, seed 12, ten blocks) and searched and judged by the
+       frozen code. The session passes if the share recovered in all
+       three ON looks is at least 0.9 of the share at Green Bank's
+       geometry measured the same way, and every drift of the grid fits
+       the look (|drift| x the look's length within the channels either
+       side the search keeps). This asks only whether the measurement
+       means the same on that layout; no spectra are involved.
+  4. **Order within a telescope and band:** sessions by their folder name
+     (the identifier after `pipeline/`), ascending, as text; within a
+     session, the first eligible run by the first ON look's MJD. The
+     first eligible session in this order, telescope by telescope, band
+     by band, is the one. Folder names are unique, so there are no ties.
+  5. **The target list,** used only if the archive needs a target: step
+     10's list as written then, less those already read: HIP39826,
+     HIP99427, HIP66704, HIP65352, HIP4436, in that order.
+  6. **No session eligible anywhere:** step 12 is not run, and that is
+     written down with the saved listings. Nothing is relaxed.
 - **Unchanged from step 10** (config/step10.json): SNR 30 for both
-  pipelines, no cut chosen on the new session; 121 blocks, up to 61
-  crowded (more than 20 hits at the sweep's cut in the six looks) and
-  clean to make the rest, the rates weighted by each class's share of the
-  session; the 19 wrong choices; 110 signals a block on the same S_in and
-  drift grid; recovery in all three ON looks at ±6 Hz and ±0.05 Hz/s;
-  turboSETI from its own hit tables; the curved second pass with it.
-  Only the block seed is new, fixed at the freeze (12). If the band's
-  coarse channels are fewer than 121 blocks, every block is taken.
+  pipelines, no cut chosen on the new session; the 19 wrong choices; 110
+  signals a block on the same S_in and drift grid; recovery in all three
+  ON looks at ±6 Hz and ±0.05 Hz/s; turboSETI from its own hit tables;
+  the curved second pass with it. Only the block seed is new: 12.
+- **The blocks:** crowded as before (more than 20 hits at the sweep's cut
+  in the six looks). Up to 61 crowded at random, all if fewer; clean at
+  random to make 121; if the clean are too few, all of them, and more
+  crowded at random to make 121 where there are any. A session of fewer
+  than 121 blocks (61 or more, by the gate) gives all its blocks. Rates
+  are weighted by each class's share of the session as before, the
+  intervals worked out from the blocks actually measured, and the
+  criteria are the same whatever the number. A session with no crowded
+  or no clean block is measured as it is, the missing class reported as
+  absent.
 - **What counts as holding,** as step 10: both rates at SNR 30 at most
   0.1 a block, with their intervals; this search's recovery in all three
   ON looks above turboSETI's with the intervals apart; for the curved
@@ -970,15 +1020,30 @@ No spectra of a candidate session are read before the freeze is committed.
   vetting.py and yoke.py (records, tables, the store, the BLISS
   comparison, refusal messages); searching.py, onoff.py and the functions
   of seti.py and curved_pass.py it fingerprints are unchanged. The freeze
-  lists each difference with its commit. `independent.py` reads
-  config/step10.json and writes data/step10/ by name; before the freeze it will take
-  the step's config, step 10's results unchanged.
-- **Beside the criteria, not one of them:** the same signals paired, with
-  the difference in share and a bootstrap over blocks, as step 10. For
-  review: BLISS's hits through this search's test at its matched cut from
-  step 11 (SNR 30, hits found once at S/N 5), fixed now, measured the same
-  way. It is a combination designed after step 11's result was seen, so
-  it is proposed as supplementary only.
+  lists each difference with its commit. File fingerprints do not prove
+  the measurement is the same, so the freeze also requires
+  `tools/regress_step10.py` to pass at the commit frozen: two of step
+  10's blocks (the first crowded and the first clean of its choice)
+  measured again, and every field of their records but the timings
+  identical to step 10's. `independent.py` reads config/step10.json and
+  writes data/step10/ by name; before the freeze it will take the step's
+  config, step 10's results unchanged.
+- **The detector stays as step 10 ran it.** Whatever the measurement of
+  the detector's misses (step 11) finds, step 12 tests the method of
+  steps 4 and 10. A fix to the detector would be a new version with its
+  own validation, not part of step 12.
+- **What each measurement is:**
+
+  | measurement | status |
+  |---|---|
+  | this search against turboSETI, SNR 30 | the criteria, fixed beforehand |
+  | the curved second pass against production | the criteria, fixed beforehand |
+  | BLISS's hits (found once at S/N 5) through this search's test, cut 30 | supplementary: fixed before step 12, designed after step 11's result |
+  | anything else looked at | exploratory, labelled so |
+
+  If BLISS does not read the session's files unchanged (it refuses, or
+  its first block fails), its measurement is recorded as not possible on
+  that session and left out; it is not adapted after the files are seen.
 - **Not done in it:** no investigation of the session's candidates beyond
   the verdict's own records before the verdict is written.
 
