@@ -1,0 +1,146 @@
+"""The evidence package's checks catch what they are for: a zip with an entry
+changed, added or missing, or no store, is refused; a reproduction with an
+output missing, new or changed in anything but its stamps fails; and a
+record's provenance notices a changed tracked file of any kind, not only
+code."""
+import json
+import shutil
+import sqlite3
+import subprocess
+import tempfile
+import unittest
+import zipfile
+from pathlib import Path
+from unittest import mock
+
+import synth  # noqa: F401  (sets SSY_DATA to a fresh folder)
+
+import evidence
+import yoke
+
+
+def rewrite(src, dst, drop=(), change=None, add=None):
+    with zipfile.ZipFile(src) as a, zipfile.ZipFile(dst, "w") as b:
+        for n in a.namelist():
+            if n in drop:
+                continue
+            raw = a.read(n)
+            if change and n == change[0]:
+                raw = change[1]
+            b.writestr(n, raw)
+        if add:
+            b.writestr(*add)
+
+
+class Package(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = Path(tempfile.mkdtemp(prefix="ssy-evidence-test-"))
+        data = yoke.DATA
+        (data / "measurements").mkdir(parents=True, exist_ok=True)
+        (data / "measurements" / "m.json").write_text('{"found": 4520}', encoding="utf-8")
+        db = sqlite3.connect(data / evidence.STORE)
+        db.execute("CREATE TABLE IF NOT EXISTS runs (run_id INTEGER PRIMARY KEY, host TEXT, command TEXT)")
+        db.execute("INSERT INTO runs (host, command) VALUES ('A-PC', 'sweep X')")
+        db.commit()
+        db.close()
+        cls.zip = evidence.build(cls.tmp / "out", say=lambda *a: None)
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def check(self, path):
+        return evidence.check(path, say=lambda *a: None)
+
+    def test_whole_package_passes(self):
+        self.assertTrue(self.check(self.zip))
+        man = json.loads(zipfile.ZipFile(self.zip).read("MANIFEST.json"))
+        self.assertEqual(man["store"]["computer_names"], ["A-PC"])
+        self.assertNotIn("ssy.sqlite", man["not_included"])
+
+    def test_changed_entry_refused(self):
+        bad = self.tmp / "changed.zip"
+        rewrite(self.zip, bad, change=("data/measurements/m.json", b'{"found": 4521}'))
+        self.assertFalse(self.check(bad))
+
+    def test_unlisted_entry_refused(self):
+        bad = self.tmp / "extra.zip"
+        rewrite(self.zip, bad, add=("data/measurements/extra.json", b"{}"))
+        self.assertFalse(self.check(bad))
+
+    def test_missing_store_refused(self):
+        bad = self.tmp / "nostore.zip"
+        rewrite(self.zip, bad, drop=("data/" + evidence.STORE,))
+        self.assertFalse(self.check(bad))
+
+    def test_missing_record_refused(self):
+        bad = self.tmp / "norecord.zip"
+        rewrite(self.zip, bad, drop=("data/measurements/m.json",))
+        self.assertFalse(self.check(bad))
+
+
+class Compare(unittest.TestCase):
+    def rec(self, **kw):
+        r = {"found": 4520, "record": "a", "provenance": {"git_commit": "abc"}, "written_utc": "2026-11-18T00:00:00Z"}
+        r.update(kw)
+        return json.dumps(r).encode()
+
+    def test_stamps_only_is_the_same(self):
+        res = evidence.compare({"m.json": self.rec()},
+                               {"m.json": self.rec(provenance={"git_commit": "def"}, written_utc="2027-01-01T00:00:00Z")})
+        self.assertEqual((res["same"], res["changed"], res["missing"], res["new"]), (1, [], [], []))
+
+    def test_changed_value_fails(self):
+        res = evidence.compare({"m.json": self.rec()}, {"m.json": self.rec(found=4521)})
+        self.assertEqual(len(res["changed"]), 1)
+
+    def test_a_field_named_record_is_compared(self):
+        res = evidence.compare({"m.json": self.rec()}, {"m.json": self.rec(record="b")})
+        self.assertEqual(len(res["changed"]), 1)
+
+    def test_added_field_fails(self):
+        res = evidence.compare({"m.json": self.rec()}, {"m.json": self.rec(extra=1)})
+        self.assertEqual(len(res["changed"]), 1)
+
+    def test_missing_and_new_outputs_fail(self):
+        res = evidence.compare({"a.md": b"x", "b.md": b"y"}, {"a.md": b"x", "c.md": b"z"})
+        self.assertEqual((res["missing"], res["new"]), (["b.md"], ["c.md"]))
+
+    def test_page_stamp_ignored_but_value_on_its_line_is_not(self):
+        old = b"- m.json: written 2026-11-18T13:42:14Z, commit 5fbaa17\n4,520 found (2026-11-11T06:28:53Z)\n"
+        new = b"- m.json: written 2027-01-01T00:00:00Z, commit None\n4,520 found (2027-01-01T00:00:00Z)\n"
+        self.assertEqual(evidence.compare({"r.md": old}, {"r.md": new})["same"], 1)
+        worse = new.replace(b"4,520", b"4,521")
+        self.assertEqual(len(evidence.compare({"r.md": old}, {"r.md": worse})["changed"]), 1)
+
+    def test_other_commits_on_a_page_are_compared(self):
+        res = evidence.compare({"p.md": b"BLISS at commit 2b98afe\n"}, {"p.md": b"BLISS at commit 1111111\n"})
+        self.assertEqual(len(res["changed"]), 1)
+
+
+class Provenance(unittest.TestCase):
+    def test_a_changed_config_file_is_noticed(self):
+        repo = Path(tempfile.mkdtemp(prefix="ssy-prov-test-"))
+        try:
+            git = ["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@example.invalid"]
+            subprocess.run(git + ["init", "-q"], check=True)
+            (repo / "step10.json").write_text('{"cut": 30}', encoding="utf-8")
+            subprocess.run(git + ["add", "."], check=True)
+            subprocess.run(git + ["commit", "-q", "-m", "x"], check=True)
+            with mock.patch.object(yoke, "ROOT", repo):
+                clean = yoke.provenance()
+                (repo / "step10.json").write_text('{"cut": 20}', encoding="utf-8")
+                one = yoke.provenance()
+                (repo / "step10.json").write_text('{"cut": 10}', encoding="utf-8")
+                two = yoke.provenance()
+            self.assertIs(clean["uncommitted_changes"], False)
+            self.assertIsNone(clean["uncommitted_diff_sha256"])
+            self.assertIs(one["uncommitted_changes"], True)
+            self.assertNotEqual(one["uncommitted_diff_sha256"], two["uncommitted_diff_sha256"])
+        finally:
+            shutil.rmtree(repo, ignore_errors=True)
+
+
+if __name__ == "__main__":
+    unittest.main()

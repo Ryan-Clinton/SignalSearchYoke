@@ -16,14 +16,16 @@ data](docs/report/report.md) (version 0.1, draft), has the method, tables
 and limits. In short:
 
 - **2017 session (KIC 8462852, AGBT17A_999_68), 121 blocks, 13,310 planted
-  signals.** At the cut where each pipeline gives at most 0.1 false
-  candidates a block, this search found 4,520 in all three ON looks,
-  turboSETI 442. BLISS as published reached that rate at no cut tested;
-  BLISS's own hits put through this search's ON/OFF test found 4,048. These
-  cuts were chosen on the same blocks they were judged on.
+  signals.** At the cut where each pipeline's measured false-candidate
+  rate is at most 0.1 a block, this search found 4,520 in all three ON
+  looks, turboSETI 442. BLISS as published reached that rate at no cut
+  tested; BLISS's own hits put through this search's ON/OFF test found
+  4,048. The rates are point estimates whose 95% intervals reach above 0.1,
+  and these cuts were chosen on the same blocks they were judged on.
 - **2016 session (HIP 17147, AGBT16A_999_192, L band), every choice fixed in
   advance** ([config/step10.json](config/step10.json), with a fingerprint
-  of the code). Recovery held (4,337 against turboSETI's 417), but **both
+  of the code; one change after the freeze, a fix to how a stage read the
+  store, is logged at each stage it touched). Recovery held (4,337 against turboSETI's 417), but **both
   pipelines failed the false-candidate limit set beforehand**: this search
   39.1 a block, turboSETI 1.27, against 0.1. Nearly all of this search's
   lie in blocks touching known satellite bands. No band has been masked
@@ -57,7 +59,9 @@ or data from other telescopes.
 
 Python 3.11 or later. The core needs only numpy, requests, h5py and
 hdf5plugin; turboSETI, BLISS and CUDA are needed only to repeat the
-comparisons.
+comparisons. The offline tests run on every push on Linux (Python 3.11,
+3.12, 3.13), Windows (3.12) and macOS (3.12); the published results were
+made on Windows with Python 3.12 (docs/reproducing-results.md).
 
 Linux or macOS:
 
@@ -77,9 +81,15 @@ py -3 -m venv .venv
 .venv\Scripts\python seti.py find KIC8462852
 ```
 
+Below, `python` is the environment's: activate it first
+(`source .venv/bin/activate`, or `.venv\Scripts\Activate.ps1` in
+PowerShell), or write its path as above.
+
 `find` lists the target's looks by session, from the archive's listing
 (`--json` gives each look's URL). One small search, on 3 MHz of the 2017
-session's first ON look (it reads only that slice; under a minute here):
+session's first ON look (it reads only that slice, about 100 MB; under a
+minute here, 10 hits, the strongest at 2250.146695 MHz;
+`tests/integration_quickstart.py` checks exactly this):
 
 ```
 python seti.py search https://bldata.berkeley.edu/pipeline/AGBT17A_999_68/holding/spliced_blc2021222324252627_guppi_57898_22410_DIAG_KIC8462852_0031.gpuspec.0000.h5 --from 2250 --to 2253

@@ -3,6 +3,9 @@ searched for what should not be public, before the repository is.
 
     python tools/history_scan.py            the findings by kind, values masked
     python tools/history_scan.py --json     the same, as JSON
+    python tools/history_scan.py --export DIR
+                                            every version of every file written to DIR
+                                            (BLOB_PATH), for another scanner to read
 
 It reads each object reachable from any ref once (git rev-list --all
 --objects, then git cat-file --batch) and the commits' author and committer
@@ -122,7 +125,26 @@ def scan():
                              for (w, v), ps in sorted(d.items())] for k, d in found.items()}}
 
 
+def export(out):
+    """Every version of every committed file, as a plain file in `out`
+    named by its object and path, so a scanner that reads files (not git
+    history) sees all of the history: detect-secrets scan --all-files DIR."""
+    out = Path(out)
+    out.mkdir(parents=True, exist_ok=True)
+    n = 0
+    for line in _git("rev-list", "--all", "--objects").decode(errors="replace").splitlines():
+        sha, _, path = line.partition(" ")
+        if not path or _git("cat-file", "-t", sha).strip() != b"blob":
+            continue
+        (out / f"{sha[:10]}_{path.replace('/', '_')}").write_bytes(_git("cat-file", "blob", sha))
+        n += 1
+    print(f"{n} file versions written to {out}")
+
+
 def main(argv):
+    if "--export" in argv:
+        export(argv[argv.index("--export") + 1])
+        return
     r = scan()
     if "--json" in argv:
         print(json.dumps(r, indent=1))

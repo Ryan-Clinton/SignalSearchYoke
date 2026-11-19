@@ -24,12 +24,14 @@ the store's runs, and any local path in the store's text. check refuses a
 zip with a file missing or changed, an entry the manifest does not list, or
 a store that is missing or differs.
 
-reproduce takes the zip alone: the committed code (git archive HEAD) in a
-new folder, the zip unpacked as its data folder, so nothing of this
-checkout's data/ is reachable; it runs the table commands there (TABLES)
-and compares every page and summary record they write with what was there
-before they ran (the committed pages, the packaged records), ignoring only
-when a record was written and by which commit.
+reproduce takes the zip alone: the code of the commit the package was
+built at (git archive; a package built from a tree with changes is
+refused) in a new folder, the zip unpacked as its data folder, so nothing
+of this checkout's data/ is reachable; it runs the table commands there
+(TABLES) and compares every page and summary record they write with what
+was there before they ran (that commit's pages, the packaged records). It
+fails on an output missing, new or changed in anything but its stamps
+(STAMP_KEYS, STAMP_TIME, STAMP_WRITTEN).
 """
 import difflib
 import hashlib
@@ -63,8 +65,12 @@ TABLES = (("matched.py", "tables", "KIC8462852"), ("matched_tables.py", "bliss",
           ("curved_pass.py", "vet-tables", "KIC8462852"), ("curved_pass.py", "turboseti-tables", "KIC8462852"),
           ("tools/report.py",))
 # What may differ when a table is made again: when, and by which commit and machine.
-STAMP_KEYS = {"provenance", "written_utc", "created_utc", "record"}
-STAMP_LINE = re.compile(r"(\d{4}-\d\d-\d\dT\d\d:\d\d(:\d\d)?Z|written \d{4}-|commit [0-9a-f]{7})")
+# What may differ when a table is made again, and nothing else: a record's
+# top-level provenance and written_utc; in a page, a UTC time, and the commit
+# named after "written TIME," in the report's list of its records.
+STAMP_KEYS = {"provenance", "written_utc"}
+STAMP_TIME = re.compile(r"\b\d{4}-\d\d-\d\dT\d\d:\d\d(:\d\d)?Z")
+STAMP_WRITTEN = re.compile(r"\b(written|finished) \d{4}-\d\d-\d\dT\d\d:\d\d(:\d\d)?Z, commit (?:[0-9a-f]{7}|None)")
 
 
 def files(data=None):
@@ -197,52 +203,48 @@ def check(path, say=print):
     return not bad
 
 
-def _strip(x):
-    if isinstance(x, dict):
-        return {k: _strip(v) for k, v in x.items() if k not in STAMP_KEYS}
-    if isinstance(x, list):
-        return [_strip(v) for v in x]
-    return x
+def _strip(record):
+    """A record without what says when and by which commit it was written:
+    only its top-level provenance and written_utc."""
+    if isinstance(record, dict):
+        return {k: v for k, v in record.items() if k not in STAMP_KEYS}
+    return record
 
 
-def _added(old, new, path=""):
-    """None if new differs from old in anything old has; else the keys only
-    new has (what the code has added to the record since it was written)."""
-    if isinstance(old, dict) and isinstance(new, dict):
-        out = []
-        for k in old:
-            if k not in new:
-                return None
-            sub = _added(old[k], new[k], f"{path}/{k}")
-            if sub is None:
-                return None
-            out += sub
-        return out + [f"{path}/{k}" for k in new if k not in old]
-    if isinstance(old, list) and isinstance(new, list):
-        if len(old) != len(new):
-            return None
-        out = []
-        for i, (a, b) in enumerate(zip(old, new)):
-            sub = _added(a, b, f"{path}[{i}]")
-            if sub is None:
-                return None
-            out += sub
-        return out
-    return [] if old == new else None
+def _unstamp(text):
+    return [STAMP_TIME.sub("<utc>", STAMP_WRITTEN.sub(r"\1 <utc>, commit <commit>", ln)) for ln in text.splitlines()]
 
 
-def _same(before, after, suffix):
+def same(before, after, suffix):
     """Whether a page or record came out the same but for when and by which
-    commit it was written: (same, fields only the new one has, diff)."""
+    commit it was written: (same, a few lines of difference)."""
     if suffix == ".json":
         try:
-            added = _added(_strip(json.loads(before)), _strip(json.loads(after)))
-            return added is not None, added or [], []
+            a, b = _strip(json.loads(before)), _strip(json.loads(after))
+            if a == b:
+                return True, []
+            return False, list(difflib.unified_diff(json.dumps(a, indent=1, sort_keys=True).splitlines(),
+                                                    json.dumps(b, indent=1, sort_keys=True).splitlines(),
+                                                    lineterm="", n=0))[2:12]
         except ValueError:
             pass
-    a = [ln for ln in before.decode(errors="replace").splitlines() if not STAMP_LINE.search(ln)]
-    b = [ln for ln in after.decode(errors="replace").splitlines() if not STAMP_LINE.search(ln)]
-    return a == b, [], list(difflib.unified_diff(a, b, lineterm="", n=0))[2:12]
+    a, b = _unstamp(before.decode(errors="replace")), _unstamp(after.decode(errors="replace"))
+    return a == b, list(difflib.unified_diff(a, b, lineterm="", n=0))[2:12]
+
+
+def compare(before, after):
+    """Every output that was there before must be there after, the same
+    apart from its stamps, and nothing may appear that was not there:
+    {"same": n, "changed": [(path, diff)], "missing": [...], "new": [...]}."""
+    out = {"same": 0, "changed": [], "missing": sorted(p for p in before if p not in after),
+           "new": sorted(p for p in after if p not in before)}
+    for p in sorted(set(before) & set(after)):
+        ok, diff = (True, []) if before[p] == after[p] else same(before[p], after[p], Path(p).suffix)
+        if ok:
+            out["same"] += 1
+        else:
+            out["changed"].append((p, diff))
+    return out
 
 
 def _snapshot(*folders):
@@ -250,20 +252,29 @@ def _snapshot(*folders):
 
 
 def reproduce(path, keep=None, say=print):
+    """The tables made again from the package, with the code of the commit
+    it was built at; False on any missing, new or changed output."""
     if not check(path, say):
+        return False
+    with zipfile.ZipFile(path) as z:
+        man = json.loads(z.read("MANIFEST.json"))
+    commit = man["git_commit"]
+    if man.get("uncommitted_changes"):
+        say(f"refused: the package was built from a tree with changes beside {commit[:7]}, so no commit holds "
+            "the code that made it; build it again from a clean tree")
+        return False
+    if subprocess.run(["git", "-C", str(ROOT), "cat-file", "-e", f"{commit}^{{commit}}"],
+                      capture_output=True).returncode:
+        say(f"refused: commit {commit[:7]}, which the package was built at, is not in this clone; fetch it")
         return False
     tmp = Path(keep) if keep else Path(tempfile.mkdtemp(prefix="ssy-reproduce-"))
     tree = tmp / "tree"
     tree.mkdir(parents=True)
-    head = _git("rev-parse", "--short", "HEAD")
-    tar = subprocess.run(["git", "-C", str(ROOT), "archive", "HEAD"], capture_output=True, check=True).stdout
+    tar = subprocess.run(["git", "-C", str(ROOT), "archive", commit], capture_output=True, check=True).stdout
     with tarfile.open(fileobj=io.BytesIO(tar)) as t:
         t.extractall(tree, filter="data")
     with zipfile.ZipFile(path) as z:
-        man = json.loads(z.read("MANIFEST.json"))
         z.extractall(tree, [n for n in z.namelist() if n.startswith("data/")])
-    if man["git_commit"][:7] != head:
-        say(f"note: the package was built at {man['git_commit'][:7]}, the code is HEAD {head}")
     data = tree / "data"
     watched = (tree / "docs" / "results", tree / "docs" / "report", data / "measurements")
     before = _snapshot(*watched)
@@ -274,35 +285,20 @@ def reproduce(path, keep=None, say=print):
         if r.returncode:
             say("    " + "\n    ".join((r.stderr or r.stdout).strip().splitlines()[-8:]))
             return False
-    after = _snapshot(*watched)
-    new = sorted(p for p in after if p not in before)
-    changed, grown, same = [], [], 0
-    for p in sorted(before):
-        if p not in after:
-            continue
-        if before[p] == after[p]:
-            same += 1
-            continue
-        ok, added, diff = _same(before[p], after[p], p.suffix)
-        if ok:
-            same += 1
-            if added:
-                grown.append((p, added))
-        else:
-            changed.append((p, diff))
+    res = compare(before, _snapshot(*watched))
     rel = lambda p: p.relative_to(tree).as_posix()  # noqa: E731
-    say(f"{path}: made again in {tree}; {same} page(s) and record(s) the same (apart from when and by "
-        f"which commit), {len(changed)} different, {len(new)} new")
-    for p, added in grown:
-        say(f"  the same, with {len(added)} field(s) the code has added since it was written: {rel(p)} "
-            f"({', '.join(added[:3])}{', ...' if len(added) > 3 else ''})")
-    for p, diff in changed:
+    say(f"{path}: made again at {commit[:7]} in {tree}; {res['same']} page(s) and record(s) the same (apart "
+        f"from when and by which commit), {len(res['changed'])} different, {len(res['missing'])} missing, "
+        f"{len(res['new'])} new")
+    for p, diff in res["changed"]:
         say(f"  different: {rel(p)}")
         for line in diff:
             say(f"    {line}")
-    for p in new:
+    for p in res["missing"]:
+        say(f"  missing: {rel(p)}")
+    for p in res["new"]:
         say(f"  new: {rel(p)}")
-    return not changed
+    return not (res["changed"] or res["missing"] or res["new"])
 
 
 def main(argv):

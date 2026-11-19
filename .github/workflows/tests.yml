@@ -4,10 +4,14 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   offline:
     # The offline checks only: no archive, no turboSETI, no BLISS, no data/.
-    # Windows too: the published records were made on Windows.
+    # Windows too: the published records were made on Windows. macOS and 3.13
+    # because the README offers them.
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -15,7 +19,11 @@ jobs:
         os: [ubuntu-latest]
         python-version: ["3.11", "3.12"]
         include:
+          - os: ubuntu-latest
+            python-version: "3.13"
           - os: windows-latest
+            python-version: "3.12"
+          - os: macos-latest
             python-version: "3.12"
     steps:
       - uses: actions/checkout@v5

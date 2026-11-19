@@ -48,34 +48,14 @@ site. When a second comes along, this gets revisited then.
 
 ## On ryanclinton.uk
 
-Set up 19 November 2026, at the address Ryan chose: the reports go at
-`https://ryanclinton.uk/astrophotography/signalsearch/`, one page each at
-`/astrophotography/signalsearch/SLUG/`, with a list of them at the
-section's front page. Not a subdomain: none was approved.
+The reports appear at `https://ryanclinton.uk/astrophotography/signalsearch/`,
+one page each at `/astrophotography/signalsearch/SLUG/`, with a list of
+them at the section's front page (set up 19 November 2026; not a subdomain).
 
-SignalSearchYoke posts a report the way telescopeyoke posts a diary entry:
-a folder, `findings/SLUG/`, sent into the web server's inbox, where the
-server checks it, builds the site, runs its privacy scan and publishes,
-or sets the post aside and leaves the live site as it was. The inbox and
-its key are SignalSearchYoke's own (`ryanclinton-signalsearch`, in WSL on
-the Windows PC); they take reports and nothing else.
-
-- `findings/SLUG/report.md`: a `+++` TOML header (title, summary,
-  version, date, commit, and optionally the DOI and the PDF's name, then
-  every version in `[[revisions]]`), then the report's Markdown, starting
-  at `##` (the site sets the title) and with no raw HTML.
-- Its figures beside it (`.svg`, `.png`, `.jpg`, `.webp`), written as
-  `![what it shows](NAME.svg)`. An SVG may carry nothing that runs or
-  loads: no script, links, `<use>`, `<image>` or outside `url()`.
-- Its PDFs beside it, one name per version (`report-v1.0.pdf`), the same
-  files as on Zenodo, with no JavaScript, actions, forms, attachments or
-  encryption. Their text and metadata go through the privacy scan, so no
-  home paths (`C:\Users\...`).
-
-The site adds the "how to cite" line (the DOI when there is one, else the
-page's address), the PDF to download, the revisions, "built from commit
-...", and Google Scholar's `citation_*` tags. The full format, the checks
-and the command to post are in ryanclinton.uk's
-[docs/posting-signalsearch.md](https://github.com/Ryan-Clinton/ryanclinton.uk/blob/main/docs/posting-signalsearch.md)
-(private; on this PC at
-`\\wsl.localhost\Ubuntu\home\facepipe\ryanclinton.uk\docs\posting-signalsearch.md`).
+Each page carries the report's text and figures, the PDF of each version
+(the same files as on Zenodo), its revisions, the commit it was built from,
+a "how to cite" line (the DOI when there is one, else the page's address)
+and Google Scholar's `citation_*` tags. The site checks every report before
+it goes up: figures that run or load nothing, PDFs with no active content,
+and no local paths in the text or metadata. How a report is posted to the
+site is kept with the site, not here.

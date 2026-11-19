@@ -1,6 +1,7 @@
 """What the scripts need around them: where their data is, the --json
 envelope, and keeping a record whole."""
 import contextlib
+import hashlib
 import json
 import os
 import platform
@@ -80,12 +81,19 @@ def main(command, work, as_json=False):
 # --- records -------------------------------------------------------------------
 
 def provenance(record_version=1):
-    """What made a record: the code's commit, the libraries, the time."""
+    """What made a record: the code's commit, whether any tracked file
+    (code, config, patch, environment list) differed from it and a hash of
+    how, the libraries, the time."""
+    diff_sha = None
     try:
         sha = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"], capture_output=True, text=True,
                              timeout=10).stdout.strip() or None
-        changed = bool(subprocess.run(["git", "-C", str(ROOT), "status", "--porcelain", "--", "*.py"],
+        changed = bool(subprocess.run(["git", "-C", str(ROOT), "status", "--porcelain", "--untracked-files=no"],
                                       capture_output=True, text=True, timeout=10).stdout.strip())
+        if changed:
+            diff = subprocess.run(["git", "-C", str(ROOT), "diff", "HEAD", "--binary"], capture_output=True,
+                                  timeout=30).stdout
+            diff_sha = hashlib.sha256(diff).hexdigest()
     except (OSError, subprocess.SubprocessError):
         sha, changed = None, None
     libraries = {}
@@ -101,7 +109,8 @@ def provenance(record_version=1):
         libraries["hdf5"] = h5py.version.hdf5_version
     except ImportError:
         pass
-    return {"git_commit": sha, "uncommitted_changes": changed, "schema_version": SCHEMA_VERSION,
+    return {"git_commit": sha, "uncommitted_changes": changed, "uncommitted_diff_sha256": diff_sha,
+            "schema_version": SCHEMA_VERSION,
             "record_version": record_version, "python": platform.python_version(), "libraries": libraries,
             "created_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
 

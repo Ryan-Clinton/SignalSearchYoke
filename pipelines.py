@@ -42,6 +42,7 @@ import yoke
 
 ROOT = yoke.DATA / "pipelines"
 PICKLES_COMMIT = "e4539e3066e0486409a3dd4d2acb1b835ff7d006"
+PICKLES_SHA256 = "a1089030762b6ea898a6afee35584987d2c2d08fe3d4644ae8ca307f8d4258d4"   # read 9 Nov 2026
 PICKLES_URL = f"https://raw.githubusercontent.com/UCBerkeleySETI/pickles/{PICKLES_COMMIT}/pickles.py"
 
 
@@ -50,14 +51,23 @@ def folder(target, session):
 
 
 def pickles_source():
-    """pickles.py at the pinned commit, fetched once: its path and SHA-256."""
+    """pickles.py at the pinned commit, fetched once: its path and SHA-256.
+    It is someone else's code and is run, so a copy (fetched or cached) that
+    is not byte for byte the one pinned is refused."""
     path = ROOT / "pickles" / PICKLES_COMMIT[:12] / "pickles.py"
     if not path.exists():
         got = requests.get(PICKLES_URL, timeout=60)
         got.raise_for_status()
+        if hashlib.sha256(got.content).hexdigest() != PICKLES_SHA256:
+            raise yoke.Refusal("INTERNAL_ERROR", f"{PICKLES_URL} is not the pickles.py pinned (SHA-256 "
+                               f"{PICKLES_SHA256[:12]}...); nothing written or run")
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(got.content)
-    return path, hashlib.sha256(path.read_bytes()).hexdigest()
+    sha = hashlib.sha256(path.read_bytes()).hexdigest()
+    if sha != PICKLES_SHA256:
+        raise yoke.Refusal("INTERNAL_ERROR", f"{path} is not the pickles.py pinned (SHA-256 {sha[:12]}..., "
+                           f"want {PICKLES_SHA256[:12]}...); delete it to fetch it again")
+    return path, sha
 
 
 def _tool(script, *args):
