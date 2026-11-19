@@ -1,6 +1,6 @@
 # Comparing radio-signal searches on Breakthrough Listen data
 
-Ryan Clinton. Version 0.1, 2026-11-18 (draft, not released).
+Ryan Clinton. Version 1.0, 2026-11-19.
 
 ## Summary
 
@@ -74,10 +74,11 @@ Looked at afterwards, not one of the criteria: nearly all of this search's false
 - The 2017 session's cuts were chosen on the same blocks they were judged on. Only the 2016 session was fixed in advance, and there both false rates failed.
 - BLISS's hits through this search's test, and the same-hit control, are combinations of two pipelines, designed after the main result was seen.
 - Of the planted signals BLISS finds at S/N 10 and this search raises no candidate for, 28 were traced stage by stage. 17 are found strongly in all three ON looks and then called interference because one OFF look reaches S/N 6 to 8 along the track with no OFF transmission identified: low-level OFF evidence consistent with noise (0.66% of 10,000 random unplanted tracks reach 6; that is the test's rate on noise, not a loss rate for these signals, which were chosen because BLISS found them). 2 meet something real in an OFF look, 7 are missed by the detector (mostly in crowded blocks) and 2 are too faint. The threshold was set beforehand and is not moved for this.
+- A third session, chosen by a rule fixed in advance, is still to be measured; until it is, nothing here is claimed beyond these two sessions.
 
 ## Data and code availability
 
-The observations are from the Breakthrough Listen Open Data Archive (Lebofsky et al. 2019, PASP 131, 124505). Breakthrough Listen is managed by the Breakthrough Initiatives. The code and the result records behind every number here are to be deposited on Zenodo with this version.
+The observations are from the Breakthrough Listen Open Data Archive (Lebofsky et al. 2019, PASP 131, 124505). Breakthrough Listen is managed by the Breakthrough Initiatives. The code (SignalSearchYoke) and the result records behind every number here are to be archived on Zenodo; this version's DOI will be added here when they are.
 
 ## References
 
@@ -87,6 +88,7 @@ The observations are from the Breakthrough Listen Open Data Archive (Lebofsky et
 ## Revisions
 
 - 0.1 (2026-11-18): first draft.
+- 1.0 (2026-11-19): first release: the signals BLISS finds and this search misses traced stage by stage, and the detector's misses measured.
 
 ## Records this version was written from
 

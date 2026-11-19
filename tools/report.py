@@ -21,9 +21,11 @@ ROOT = Path(__file__).resolve().parents[1]
 DATA = Path(os.environ.get("SSY_DATA") or ROOT / "data")
 OUT = ROOT / "docs" / "report" / "report.md"
 
-VERSION = "0.1"
-STATUS = "draft, not released"
-DATE = "2026-11-18"
+VERSION = "1.0"
+DATE = "2026-11-19"
+REVISIONS = (("0.1", "2026-11-18", "first draft."),
+             ("1.0", DATE, "first release: the signals BLISS finds and this search misses traced stage by "
+                         "stage, and the detector's misses measured."))
 
 
 def load(path):
@@ -144,6 +146,33 @@ def figure(rows, path):
     path.write_text("\n".join(o) + "\n", encoding="utf-8")
 
 
+def detector_cause(sig, cut=10.0):
+    """One reading of the detector's stages for a signal it gave no matching
+    hit for, from its looks without one (tools/detector_misses.py): the hit
+    cap, the blanking for other hits, the noise of its block, or the
+    detector's own S/N under the cut where the cadence test's is over it."""
+    miss = [lk for lk in sig["looks"] if lk["matching_hit_snr"] is None]
+    if not miss:
+        return "found"
+    if any(any(c["matching_hit_snr"] is not None for c in lk.get("raised_caps", [])) for lk in miss):
+        return "the hit cap"
+    if any(lk["blanked_by_others"]["share"] >= 0.25 for lk in miss):
+        return "blanked for a stronger hit"
+    if any(lk["exact_track"]["snr"] < cut and lk["exact_track"]["block_noise_over_median"] >= 1.5 for lk in miss):
+        return "interference raising its block's noise"
+    if any(lk["exact_track"]["snr"] < cut for lk in miss):
+        return "under the cut on the detector's own measure"
+    return "over the cut but not picked"
+
+
+def detector_sentence(det):
+    from collections import Counter
+    c = Counter(detector_cause(s) for s in det["signals"])
+    parts = ", ".join(f"{v} {k}" for k, v in c.most_common())
+    return (f"The {len(det['signals'])} signals the detector gave no matching hit for were measured through its "
+            f"stages, the detector unchanged; the first cause in each: {parts}.")
+
+
 def main():
     b = load("measurements/matched-bliss.json")
     s10 = load("measurements/step10.json")
@@ -152,6 +181,8 @@ def main():
     trace_path = DATA / "analysis" / "bliss_only" / "trace_summary.json"
     trace = json.loads(trace_path.read_text(encoding="utf-8")) if trace_path.exists() else None
     off_null = load("measurements/off_null.json")
+    det_path = DATA / "analysis" / "bliss_only" / "detector_misses.json"
+    det = json.loads(det_path.read_text(encoding="utf-8")) if det_path.exists() else None
 
     fc, tot = b["false_curves"], b["totals_matched"]
     at = {p: f"{float(c):g}" for p, c in b["matched_at"].items()}
@@ -174,7 +205,7 @@ def main():
     w = L.append
     w("# Comparing radio-signal searches on Breakthrough Listen data")
     w("")
-    w(f"Ryan Clinton. Version {VERSION}, {DATE} ({STATUS}).")
+    w(f"Ryan Clinton. Version {VERSION}, {DATE}.")
     w("")
     w("## Summary")
     w("")
@@ -317,12 +348,17 @@ def main():
           f"{tc['off_signal']} meet something real in an OFF look, "
           f"{tc['one_on_look'] + tc['no_on_hits']} are missed by the detector (mostly in crowded blocks) and "
           f"{tc['faint']} are too faint. The threshold was set beforehand and is not moved for this.")
+    if det:
+        w("- " + detector_sentence(det))
+    w("- A third session, chosen by a rule fixed in advance, is still to be measured; until it is, nothing "
+      "here is claimed beyond these two sessions.")
     w("")
     w("## Data and code availability")
     w("")
     w("The observations are from the Breakthrough Listen Open Data Archive (Lebofsky et al. 2019, PASP 131, "
-      "124505). Breakthrough Listen is managed by the Breakthrough Initiatives. The code and the result "
-      "records behind every number here are to be deposited on Zenodo with this version.")
+      "124505). Breakthrough Listen is managed by the Breakthrough Initiatives. The code (SignalSearchYoke) "
+      "and the result records behind every number here are to be archived on Zenodo; this version's DOI "
+      "will be added here when they are.")
     w("")
     w("## References")
     w("")
@@ -334,7 +370,8 @@ def main():
     w("")
     w("## Revisions")
     w("")
-    w(f"- {VERSION} ({DATE}): first draft.")
+    for v, d, note in REVISIONS:
+        w(f"- {v} ({d}): {note}")
     w("")
     w("## Records this version was written from")
     w("")
@@ -345,6 +382,7 @@ def main():
     for c in control:
         w(f"- bliss_control/block_{c['block']:03d}.json: finished {c['finished_utc']}")
     for name, r in (("data/analysis/bliss_only/trace_summary.json", trace),
+                    ("data/analysis/bliss_only/detector_misses.json", det),
                     ("data/measurements/off_null.json", off_null)):
         if r:
             pv = r.get("provenance", {})

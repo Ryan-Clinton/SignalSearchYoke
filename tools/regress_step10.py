@@ -38,7 +38,7 @@ def _diff(a, b, path="", out=None, limit=20):
         return out
     if isinstance(a, dict) and isinstance(b, dict):
         for k in sorted(set(a) | set(b)):
-            if k == "times":
+            if k in ("times", "finished_utc"):
                 continue
             if k not in a or k not in b:
                 out.append(f"{path}/{k}: only in {'new' if k in a else 'recorded'}")
