@@ -123,7 +123,8 @@ def store_inventory(path):
             "computer_names": hosts, "local_paths": found}
 
 
-HOME = re.compile(rb'/home/[a-z_][a-z0-9_-]*(?=/)|[A-Za-z]:\\{1,2}Users\\{1,2}[^\\"/]+(?=\\)|/Users/[^/"\s]+(?=/)')
+# Home folders, and a Windows drive as WSL mounts it (/mnt/c: tools run in WSL, BLISS, quote paths there)
+HOME = re.compile(rb'/home/[a-z_][a-z0-9_-]*(?=/)|[A-Za-z]:\\{1,2}Users\\{1,2}[^\\"/]+(?=\\)|/Users/[^/"\s]+(?=/)|/mnt/[a-z](?=/)')
 COMPUTER = "COMPUTER"
 
 
