@@ -6,7 +6,8 @@ deposit beside the report (docs/reproducing-results.md).
     python tools/evidence.py check ZIP         the zip against the manifest inside it
     python tools/evidence.py reproduce ZIP     the tables made again from the zip alone, compared
 
-In: the summary records (data/measurements, step 10's choice and deviations,
+In: the summary records (data/measurements, steps 10 and 12's choices, deviations and step 12's saved
+archive replies,
 the result pages' records), the per-block records they are built from
 (data/matched, data/curved_pass, data/analysis), and a consistent copy of
 the hit store data/ssy.sqlite (every hit, event, check and run; the table
@@ -56,8 +57,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 import yoke  # noqa: E402
 
-FOLDERS = ("measurements", "step10", "results", "analysis", "matched", "curved_pass")
-KEEP = {".json", ".md", ".png", ".svg", ".csv"}
+FOLDERS = ("measurements", "step10", "step12", "results", "analysis", "matched", "curved_pass")
+KEEP = {".json", ".md", ".png", ".svg", ".csv", ".txt"}     # .txt: step 12's saved archive replies
 LEAVE_OUT = {"partial", "work"}
 MACHINE_PATH = re.compile(rb'(/home/[^/"\s]+|/Users/[^/"\s]+|/mnt/[a-z]/|[A-Za-z]:\\\\Users\\\\[^\\"]+'
                           rb'|[A-Za-z]:/Users/[^/"]+|\\\\\\\\[A-Za-z0-9_.-]+\\\\|AppData)')
@@ -67,7 +68,7 @@ STORE = "ssy.sqlite"
 TABLES = (("matched.py", "tables", "KIC8462852"), ("matched_tables.py", "bliss", "KIC8462852"),
           ("curved_pass.py", "tables", "KIC8462852"), ("curved_pass.py", "orbit-tables", "KIC8462852"),
           ("curved_pass.py", "vet-tables", "KIC8462852"), ("curved_pass.py", "turboseti-tables", "KIC8462852"),
-          ("tools/report.py",))
+          ("tools/operating_points.py", ), ("tools/report.py",))
 # What may differ when a table is made again: when, and by which commit and machine.
 # What may differ when a table is made again, and nothing else: a record's
 # top-level provenance and written_utc; in a page, a UTC time, and the commit

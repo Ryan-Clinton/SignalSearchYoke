@@ -12,8 +12,9 @@ Listen's published recordings over the web.
 ## What has been found
 
 The report, [Comparing radio-signal searches on Breakthrough Listen
-data](docs/report/report.md) (version 0.1, draft), has the method, tables
-and limits. In short:
+data](docs/report/report.md) (version 1.3; also on
+[ryanclinton.uk](https://ryanclinton.uk/astrophotography/signalsearch/comparing-searches/)
+with a PDF), has the method, tables and limits. In short:
 
 - **2017 session (KIC 8462852, AGBT17A_999_68), 121 blocks, 13,310 planted
   signals.** At the cut where each pipeline's measured false-candidate
@@ -31,12 +32,28 @@ and limits. In short:
   lie in blocks touching known satellite bands. No band has been masked
   afterwards, because that would be choosing the rule after seeing the
   result. [The verdict](docs/results/HIP17147-AGBT16A_999_192-step10.md).
+- **2019 session (NGC 6946, AGBT19B_999_104, C band), chosen and fixed in
+  advance** ([config/step12.json](config/step12.json); the session chosen
+  from the archive's metadata by a rule written down first, one logged
+  change after the freeze, a memory fix to how turboSETI loads files).
+  Every criterion fixed beforehand was met at its point estimate: no false
+  candidate from either pipeline in 64 blocks (95% interval 0 to 0.115, so
+  above 0.1 at its top), and 2,404 of 7,040 planted signals found against
+  turboSETI's 247. The band was quiet (3 crowded blocks of 64), so this
+  does not show the false-candidate test holding where 2016 failed.
+  [The verdict](docs/results/NGC6946-AGBT19B_999_104-step12.md).
+- **How big the difference is depends on the cut.** At SNR 30 each, this
+  search finds about ten times as many of the planted signals; at the
+  lowest cuts whose false rate is at most 0.1 in 2019 (8 against 5) about
+  three times as many, though the gap in share is then wider (+0.47 of the
+  signals against +0.31). No single ratio describes it; the report gives
+  every tested cut.
 - **No signal from another world.** The 2017 sweep's 11 candidates were
   all marked interference or likely interference by the checks
   ([docs/leads/](docs/leads/)); "unexplained" there would mean the end of
   the automatic checks, not a discovery.
 
-Two sessions from one telescope do not show better sensitivity in general.
+Three sessions from one telescope do not show better sensitivity in general.
 
 ## What it does, and how far each part has got
 
@@ -49,7 +66,7 @@ Two sessions from one telescope do not show better sensitivity in general.
 | Planted signals through everything (`injection.py`, `measure.py`) | in use |
 | Comparison with turboSETI, pickles and BLISS at matched false rates (`pipelines.py`, `matched.py`) | done: turboSETI on both sessions, pickles and BLISS on the 2017 session |
 | A second pass for curved tracks (`curved.py`, `curved_pass.py`) | **experimental**, apart from the search |
-| A third session before any broad claim (step 12 of [docs/comparable.md](docs/comparable.md)) | proposed, not run |
+| A third session before any broad claim (step 12 of [docs/comparable.md](docs/comparable.md)) | done: every criterion met at its point estimate, in a quiet band |
 | Parallel runs ([docs/parallel.md](docs/parallel.md)), many people's computers ([docs/multiuser.md](docs/multiuser.md)) | plans, not built |
 
 It does not search for pulsed or broadband signals, drifts beyond ±4 Hz/s,

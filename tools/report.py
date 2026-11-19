@@ -21,14 +21,18 @@ ROOT = Path(__file__).resolve().parents[1]
 DATA = Path(os.environ.get("SSY_DATA") or ROOT / "data")
 OUT = ROOT / "docs" / "report" / "report.md"
 
-VERSION = "1.2"
+VERSION = "1.3"
 DATE = "2026-11-19"
 REVISIONS = (("0.1", "2026-11-18", "first draft."),
              ("1.0", DATE, "first release: the signals BLISS finds and this search misses traced stage by "
                          "stage, and the detector's misses measured."),
              ("1.1", DATE, "the code's repository, now public, linked."),
              ("1.2", DATE, "the third session, chosen and fixed in advance (NGC 6946 at C band): every "
-                           "criterion held."))
+                           "criterion held."),
+             ("1.3", DATE, "recovery at every tested cut for all three sessions, with the paired difference "
+                           "and blocks resampled in runs; step 12 described as meeting its criteria at the point "
+                           "estimate; what the injections, the false-candidate control and the comparison of "
+                           "whole pipelines do and do not measure."))
 
 
 def load(path):
@@ -209,6 +213,8 @@ def main():
     devs12 = json.loads(dev12_path.read_text(encoding="utf-8")) if dev12_path.exists() else []
     bliss12_path = DATA / "step12" / "bliss_status.json"
     bliss12 = json.loads(bliss12_path.read_text(encoding="utf-8")) if bliss12_path.exists() else None
+    ops_path = DATA / "analysis" / "operating_points.json"
+    ops = json.loads(ops_path.read_text(encoding="utf-8")) if ops_path.exists() else None
     control_dir = DATA / "matched" / f"{b['target']}-{b['session']}" / "bliss_control"
     control = [json.loads(p.read_text(encoding="utf-8")) for p in sorted(control_dir.glob("block_*.json"))]
     trace_path = DATA / "analysis" / "bliss_only" / "trace_summary.json"
@@ -268,7 +274,8 @@ def main():
         f12, r12 = s12["false_rate"], s12["recovery_three_looks"]
         held = all(v.startswith("holds") for v in s12["criteria"].values())
         w(f"On a third session, chosen by a rule from the archive's metadata and fixed in advance "
-          f"({s12['target']}, a galaxy, at C band in 2019), {'every criterion held' if held else 'not every criterion held'}: "
+          f"({s12['target']}, a galaxy, at C band in 2019), "
+          f"{'every criterion fixed beforehand was met at its point estimate' if held else 'not every criterion held'}: "
           f"this search found {n(r12['ours']['recovered'])} of {n(r12['ours']['of'])} signals against turboSETI's "
           f"{n(r12['turboseti']['recovered'])}, and "
           + ("neither raised a false candidate" if f12['ours']['per_block'] == 0 == f12['turboseti']['per_block']
@@ -299,18 +306,27 @@ def main():
       f"of the session.")
     w(f"- **Planted signals.** {m['per_block']} a block, in the ON looks only, across {len(grid)} strengths "
       f"(S_in {grid[0]:g} to {grid[-1]:g}, the signal-to-noise a search would give collecting all its power in "
-      f"ideal noise) and {WORDS.get(m['bins'], m['bins'])} drift bins up to {math.ceil(m['max_drift']):g} Hz/s.")
+      f"ideal noise) and {WORDS.get(m['bins'], m['bins'])} drift bins up to {math.ceil(m['max_drift']):g} Hz/s. "
+      "Each look's signal is scaled to that look's own measured noise, so a signal has the same S_in in every "
+      "ON look: this measures recovery at a controlled signal-to-noise, not of a transmitter of fixed flux "
+      "whose signal-to-noise would vary from look to look.")
     w(f"- **Found** means detected in all three ON looks within ±{m['tol_hz']:g} Hz and ±{m['tol_drift']:g} Hz/s "
       "of the planted signal (the tolerances of Margot et al. 2023).")
     w(f"- **False candidates** are counted by running each pipeline with the wrong looks called ON: the {m['wrong']} "
       "other ways of choosing three of the six looks. Anything a pipeline keeps under a wrong choice is "
-      "interference or noise. Candidates sharing a hit count once.")
+      "interference or noise. Candidates sharing a hit count once. This is a wrong-cadence control rate, "
+      "not a calibrated false-alarm probability: the telescope's pointings were not assigned at random, the "
+      "looks share their interference, and a wrong choice's looks are put in ON, OFF order, not in time "
+      "order. How well it predicts false candidates in real cadences has not been measured.")
     w(f"- **Matched comparison.** Each pipeline's cut (its signal-to-noise threshold) is set where it "
       f"gives at most {rate} false candidates a block, and recovery is compared there.")
     w(f"- **Pipelines.** turboSETI {m['turboseti']}; BLISS at commit {b['config']['bliss_commit'][:7]} with its GPU "
       "backend and its own event stage; this search, which sums along every drift up to ±4 Hz/s with the "
       "smear removed, keeps hits from S/N 5 as shadow hits, and calls a candidate only when every ON look "
-      "shows the signal and no OFF look does.")
+      "shows the signal and no OFF look does. Its candidate needs a hit at the cut in one ON look and the "
+      "signal measured along its track in the others; turboSETI's needs a hit in each. So these are whole "
+      "pipelines compared, detector and cadence test together; BLISS's hits through this search's test "
+      "separate the two in part.")
     w("- **The second and third sessions** used criteria frozen before their data was read, with a fingerprint "
       "of the code checked at each stage; the third was chosen by a rule fixed beforehand, from the archive's "
       "metadata alone.")
@@ -426,6 +442,34 @@ def main():
           f"{s12['blocks']} blocks crowded, against {s10['of']['crowded']} of "
           f"{s10['of']['crowded'] + s10['of']['clean']} in 2016.")
         w("")
+    if ops:
+        w("## Recovery at every operating point")
+        w("")
+        w("A single cut does not give one ratio between the pipelines. For each session, the same planted "
+          "signals at the frozen cut (30 each), the published one (10 each) and the lowest tested cut of each "
+          f"pipeline whose false-candidate rate is at most {ops['rate']:g} at its point estimate. The paired "
+          "difference is in the share of the signals both were given, with a bootstrap over blocks, and again "
+          "over runs of four adjacent blocks (neighbouring blocks may share interference). Supplementary and "
+          "exploratory: the frozen verdicts above are unchanged.")
+        w("")
+        w("| session | operating point | cuts (this search, turboSETI) | found | false a block | paired "
+          "difference (blocks; runs of 4) |")
+        w("|---|---|---|---|---|---|")
+        for ss in ops["sessions"]:
+            for name, pt in ss["points"].items():
+                if "found" not in pt:
+                    w(f"| {ss['target']} | {name} | — | {pt['note']} | | |")
+                    continue
+                pr = {x["runs_of"]: x for x in pt["paired"]}
+                w(f"| {ss['target']} | {name} | {pt['cuts'][0]}, {pt['cuts'][1]} | {n(pt['found'][0])} against "
+                  f"{n(pt['found'][1])} of {n(ss['signals'])} | {pt['false_per_block'][0]:.3g}, "
+                  f"{pt['false_per_block'][1]:.3g} | {pr[1]['difference']:+.3f} ({iv(pr[1]['interval'])}; "
+                  f"{iv(pr[4]['interval'])}) |")
+        w("")
+        w("At the lower cuts the ratio falls (about ten times as many found at 30 each, about three times at "
+          "the lowest qualifying cuts in 2019) while the difference in share grows. Resampling in runs of four "
+          "blocks barely widens the intervals. In 2016 no tested cut of this search reached the rate.")
+        w("")
     w("## Limitations")
     w("")
     w(f"- {'Three' if s12 else 'Two'} observing sessions, one telescope, one recording pipeline. Nothing here "
@@ -460,7 +504,11 @@ def main():
     if not s12:
         w("- A third session, chosen by a rule fixed in advance, is still to be measured; until it is, nothing "
           "here is claimed beyond these two sessions.")
-    elif bliss12 and bliss12.get("not_possible"):
+    w("- The frozen recovery criterion compares two Wilson intervals, which treat the planted signals as "
+      "independent; signals share their block and their session. The paired difference with a bootstrap over "
+      "blocks (above) is the better measure, and it is supplementary. All the blocks of a session come from "
+      "one observation, so none of these intervals speaks for other sessions.")
+    if s12 and bliss12 and bliss12.get("not_possible"):
         w("- BLISS's hits through this search's test, supplementary in the third session, could not be run "
           "there: the step that hands BLISS each block expects a slice width these blocks do not have, and the "
           "frozen rule records that rather than adapting it.")
@@ -497,7 +545,8 @@ def main():
           f"{str(pv.get('git_commit', ''))[:7]}")
     for c in control:
         w(f"- bliss_control/block_{c['block']:03d}.json: finished {c['finished_utc']}")
-    for name, r in (("data/analysis/bliss_only/trace_summary.json", trace),
+    for name, r in (("data/analysis/operating_points.json", ops),
+                    ("data/analysis/bliss_only/trace_summary.json", trace),
                     ("data/analysis/bliss_only/detector_misses.json", det),
                     ("data/measurements/off_null.json", off_null)):
         if r:

@@ -35,8 +35,10 @@ REVISIONS = (
     ("1.0", "2026-11-19", "First release: the signals BLISS finds and this search misses traced stage by stage, "
                           "and the detector's misses measured.", True),
     ("1.1", "2026-11-19", "The code's repository, now public, linked.", True),
-    ("1.2", None, "The third session, chosen and fixed in advance (NGC 6946 at C band): every criterion held.",
-     True),
+    ("1.2", "2026-11-19", "The third session, chosen and fixed in advance (NGC 6946 at C band): every criterion "
+                          "held.", True),
+    ("1.3", None, "Recovery at every tested cut for all three sessions; step 12 described as meeting its criteria "
+                  "at the point estimate; what the injections and the false-candidate control measure.", True),
 )
 CHROME = (Path("C:/Program Files/Google/Chrome/Application/chrome.exe"),
           Path("C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"))

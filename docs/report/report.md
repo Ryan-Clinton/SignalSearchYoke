@@ -1,6 +1,6 @@
 # Comparing radio-signal searches on Breakthrough Listen data
 
-Ryan Clinton. Version 1.2, 2026-11-19.
+Ryan Clinton. Version 1.3, 2026-11-19.
 
 ## Summary
 
@@ -10,7 +10,7 @@ On a 2017 session (KIC8462852), at the cut where each pipeline's measured false-
 
 On a second session, fixed in advance (HIP17147, 2016), this search again found far more than turboSETI (4,337 against 417), but both pipelines **failed** the false-candidate limit set beforehand: 39.1 and 1.27 a block against 0.1, almost all of this search's in known satellite bands. That failure is part of the result.
 
-On a third session, chosen by a rule from the archive's metadata and fixed in advance (NGC6946, a galaxy, at C band in 2019), every criterion held: this search found 2,404 of 7,040 signals against turboSETI's 247, and neither raised a false candidate. That band was quiet (3 of 64 blocks crowded), and 64 blocks leave the rates' intervals reaching 0.12, above the limit.
+On a third session, chosen by a rule from the archive's metadata and fixed in advance (NGC6946, a galaxy, at C band in 2019), every criterion fixed beforehand was met at its point estimate: this search found 2,404 of 7,040 signals against turboSETI's 247, and neither raised a false candidate. That band was quiet (3 of 64 blocks crowded), and 64 blocks leave the rates' intervals reaching 0.12, above the limit.
 
 These are three sessions from one telescope. They do not show better sensitivity in general.
 
@@ -21,11 +21,11 @@ Searches for narrowband technosignatures look for a tone drifting steadily in fr
 ## Method
 
 - **Data.** Breakthrough Listen's high-resolution spectra (about 2.8 Hz channels) of a whole ON-OFF cadence: three ON looks at the target, each followed by an OFF look elsewhere. 121 blocks of frequency per session: 61 crowded with interference and 60 clean, chosen at random within each class and weighted by each class's share of the session.
-- **Planted signals.** 110 a block, in the ON looks only, across 11 strengths (S_in 10 to 400, the signal-to-noise a search would give collecting all its power in ideal noise) and five drift bins up to 4 Hz/s.
+- **Planted signals.** 110 a block, in the ON looks only, across 11 strengths (S_in 10 to 400, the signal-to-noise a search would give collecting all its power in ideal noise) and five drift bins up to 4 Hz/s. Each look's signal is scaled to that look's own measured noise, so a signal has the same S_in in every ON look: this measures recovery at a controlled signal-to-noise, not of a transmitter of fixed flux whose signal-to-noise would vary from look to look.
 - **Found** means detected in all three ON looks within ±6 Hz and ±0.05 Hz/s of the planted signal (the tolerances of Margot et al. 2023).
-- **False candidates** are counted by running each pipeline with the wrong looks called ON: the 19 other ways of choosing three of the six looks. Anything a pipeline keeps under a wrong choice is interference or noise. Candidates sharing a hit count once.
+- **False candidates** are counted by running each pipeline with the wrong looks called ON: the 19 other ways of choosing three of the six looks. Anything a pipeline keeps under a wrong choice is interference or noise. Candidates sharing a hit count once. This is a wrong-cadence control rate, not a calibrated false-alarm probability: the telescope's pointings were not assigned at random, the looks share their interference, and a wrong choice's looks are put in ON, OFF order, not in time order. How well it predicts false candidates in real cadences has not been measured.
 - **Matched comparison.** Each pipeline's cut (its signal-to-noise threshold) is set where it gives at most 0.1 false candidates a block, and recovery is compared there.
-- **Pipelines.** turboSETI 2.3.2; BLISS at commit 2b98afe with its GPU backend and its own event stage; this search, which sums along every drift up to ±4 Hz/s with the smear removed, keeps hits from S/N 5 as shadow hits, and calls a candidate only when every ON look shows the signal and no OFF look does.
+- **Pipelines.** turboSETI 2.3.2; BLISS at commit 2b98afe with its GPU backend and its own event stage; this search, which sums along every drift up to ±4 Hz/s with the smear removed, keeps hits from S/N 5 as shadow hits, and calls a candidate only when every ON look shows the signal and no OFF look does. Its candidate needs a hit at the cut in one ON look and the signal measured along its track in the others; turboSETI's needs a hit in each. So these are whole pipelines compared, detector and cadence test together; BLISS's hits through this search's test separate the two in part.
 - **The second and third sessions** used criteria frozen before their data was read, with a fingerprint of the code checked at each stage; the third was chosen by a rule fixed beforehand, from the archive's metadata alone.
 
 ## Results: the 2017 session (KIC8462852, AGBT17A_999_68)
@@ -88,6 +88,24 @@ The code changed after the freeze, once: tools/turbo_curves.py, logged as a devi
 
 At the frozen cut (30), both pipelines raised 0 false candidates a block (95% interval 0 to 0.115), against a limit of 0.1: a rate of zero, but 64 blocks cannot show it below the limit. This search found 2,404 of 7,040 signals in all three ON looks, turboSETI 247. The curved pass found 1,621 of 3,840 curved signals against production's 265, losing 0. The band was quiet: 3 of 64 blocks crowded, against 184 of 304 in 2016.
 
+## Recovery at every operating point
+
+A single cut does not give one ratio between the pipelines. For each session, the same planted signals at the frozen cut (30 each), the published one (10 each) and the lowest tested cut of each pipeline whose false-candidate rate is at most 0.1 at its point estimate. The paired difference is in the share of the signals both were given, with a bootstrap over blocks, and again over runs of four adjacent blocks (neighbouring blocks may share interference). Supplementary and exploratory: the frozen verdicts above are unchanged.
+
+| session | operating point | cuts (this search, turboSETI) | found | false a block | paired difference (blocks; runs of 4) |
+|---|---|---|---|---|---|
+| KIC8462852 | frozen (30 each) | 30, 30 | 4,520 against 442 of 13,310 | 0.0682, 0.0487 | +0.306 (0.301 to 0.311; 0.3 to 0.312) |
+| KIC8462852 | published (10 each) | 10, 10 | 8,706 against 1,709 of 13,310 | 3.3, 0.286 | +0.526 (0.514 to 0.536; 0.511 to 0.538) |
+| KIC8462852 | lowest cut with point estimate at most 0.1 | 30, 30 | 4,520 against 442 of 13,310 | 0.0682, 0.0487 | +0.306 (0.301 to 0.311; 0.3 to 0.312) |
+| HIP17147 | frozen (30 each) | 30, 30 | 4,337 against 417 of 13,310 | 39.1, 1.27 | +0.294 (0.284 to 0.304; 0.281 to 0.308) |
+| HIP17147 | published (10 each) | 10, 10 | 8,258 against 1,550 of 13,310 | 107, 1.95 | +0.504 (0.485 to 0.521; 0.476 to 0.528) |
+| HIP17147 | lowest cut with point estimate at most 0.1 | — | no tested cut reaches 0.1 for this search | | |
+| NGC6946 | frozen (30 each) | 30, 30 | 2,404 against 247 of 7,040 | 0, 0 | +0.306 (0.302 to 0.311; 0.302 to 0.311) |
+| NGC6946 | published (10 each) | 10, 10 | 4,702 against 952 of 7,040 | 0, 0 | +0.533 (0.525 to 0.54; 0.525 to 0.54) |
+| NGC6946 | lowest cut with point estimate at most 0.1 | 8, 5 | 5,049 against 1,714 of 7,040 | 0.0156, 0 | +0.474 (0.466 to 0.481; 0.467 to 0.48) |
+
+At the lower cuts the ratio falls (about ten times as many found at 30 each, about three times at the lowest qualifying cuts in 2019) while the difference in share grows. Resampling in runs of four blocks barely widens the intervals. In 2016 no tested cut of this search reached the rate.
+
 ## Limitations
 
 - Three observing sessions, one telescope, one recording pipeline. Nothing here speaks for Parkes, MeerKAT or another receiver.
@@ -96,6 +114,7 @@ At the frozen cut (30), both pipelines raised 0 false candidates a block (95% in
 - BLISS's hits through this search's test, and the same-hit control, are combinations of two pipelines, designed after the main result was seen.
 - Of the planted signals BLISS finds at S/N 10 and this search raises no candidate for, 28 were traced stage by stage. 17 are found strongly in all three ON looks and then called interference because one OFF look reaches S/N 6 to 8 along the track with no OFF transmission identified: low-level OFF evidence consistent with noise (0.66% of 10,000 random unplanted tracks reach 6; that is the test's rate on noise, not a loss rate for these signals, which were chosen because BLISS found them). 2 meet something real in an OFF look, 7 are missed by the detector (mostly in crowded blocks) and 2 are too faint. The threshold was set beforehand and is not moved for this.
 - The 8 signals the detector gave no matching hit for were measured through its stages, the detector unchanged; the first cause in each: 6 the hit cap, 2 found, but measured outside the tolerances. The hit cap is the 2,000 hits kept a look: in crowded looks the signal, at S/N 12.3 to 40.6, lies below that many stronger hits, and a cap of 5,000 to 20,000 finds it. Those measured outside the tolerances drift fast (2.0 and 1.6 Hz/s); their measured drift was 0.05 Hz/s off, just outside the tolerance. Neither is changed here: the detector stays as step 10 ran it.
+- The frozen recovery criterion compares two Wilson intervals, which treat the planted signals as independent; signals share their block and their session. The paired difference with a bootstrap over blocks (above) is the better measure, and it is supplementary. All the blocks of a session come from one observation, so none of these intervals speaks for other sessions.
 - BLISS's hits through this search's test, supplementary in the third session, could not be run there: the step that hands BLISS each block expects a slice width these blocks do not have, and the frozen rule records that rather than adapting it.
 
 ## Data and code availability
@@ -113,6 +132,7 @@ The observations are from the Breakthrough Listen Open Data Archive (Lebofsky et
 - 1.0 (2026-11-19): first release: the signals BLISS finds and this search misses traced stage by stage, and the detector's misses measured.
 - 1.1 (2026-11-19): the code's repository, now public, linked.
 - 1.2 (2026-11-19): the third session, chosen and fixed in advance (NGC 6946 at C band): every criterion held.
+- 1.3 (2026-11-19): recovery at every tested cut for all three sessions, with the paired difference and blocks resampled in runs; step 12 described as meeting its criteria at the point estimate; what the injections, the false-candidate control and the comparison of whole pipelines do and do not measure.
 
 ## Records this version was written from
 
@@ -121,6 +141,7 @@ The observations are from the Breakthrough Listen Open Data Archive (Lebofsky et
 - data/measurements/step12.json: written 2026-11-19T09:20:07Z, commit f161e25
 - bliss_control/block_035.json: finished 2026-11-18T15:20:01Z
 - bliss_control/block_129.json: finished 2026-11-18T15:37:02Z
+- data/analysis/operating_points.json: written 2026-11-19T10:32:38Z, commit 5c3fd08
 - data/analysis/bliss_only/trace_summary.json: written 2026-11-19T00:54:45Z, commit 2b1b22b
 - data/analysis/bliss_only/detector_misses.json: written 2026-11-19T02:28:46Z, commit 3fd7837
 - data/measurements/off_null.json: written 2026-11-11T02:41:54Z, commit e5f6c77
