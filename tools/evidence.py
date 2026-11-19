@@ -123,7 +123,7 @@ def manifest(data=None, store=None):
             paths[rel.as_posix()] = found[:5]
     return {"package": "SignalSearchYoke derived evidence",
             "created_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            "git_commit": _git("rev-parse", "HEAD"), "uncommitted_changes": bool(_git("status", "--porcelain")),
+            "git_commit": _git("rev-parse", "HEAD"), "uncommitted_changes": bool(_git("status", "--porcelain", "--untracked-files=no")),
             "folders": list(FOLDERS), "files": rows, "total_bytes": sum(r["bytes"] for r in rows),
             "records_naming_local_paths": paths,
             "store": store,
@@ -205,16 +205,44 @@ def _strip(x):
     return x
 
 
+def _added(old, new, path=""):
+    """None if new differs from old in anything old has; else the keys only
+    new has (what the code has added to the record since it was written)."""
+    if isinstance(old, dict) and isinstance(new, dict):
+        out = []
+        for k in old:
+            if k not in new:
+                return None
+            sub = _added(old[k], new[k], f"{path}/{k}")
+            if sub is None:
+                return None
+            out += sub
+        return out + [f"{path}/{k}" for k in new if k not in old]
+    if isinstance(old, list) and isinstance(new, list):
+        if len(old) != len(new):
+            return None
+        out = []
+        for i, (a, b) in enumerate(zip(old, new)):
+            sub = _added(a, b, f"{path}[{i}]")
+            if sub is None:
+                return None
+            out += sub
+        return out
+    return [] if old == new else None
+
+
 def _same(before, after, suffix):
-    """Equal but for when and by which commit a record was written."""
+    """Whether a page or record came out the same but for when and by which
+    commit it was written: (same, fields only the new one has, diff)."""
     if suffix == ".json":
         try:
-            return _strip(json.loads(before)) == _strip(json.loads(after)), []
+            added = _added(_strip(json.loads(before)), _strip(json.loads(after)))
+            return added is not None, added or [], []
         except ValueError:
             pass
     a = [ln for ln in before.decode(errors="replace").splitlines() if not STAMP_LINE.search(ln)]
     b = [ln for ln in after.decode(errors="replace").splitlines() if not STAMP_LINE.search(ln)]
-    return a == b, list(difflib.unified_diff(a, b, lineterm="", n=0))[2:12]
+    return a == b, [], list(difflib.unified_diff(a, b, lineterm="", n=0))[2:12]
 
 
 def _snapshot(*folders):
@@ -248,21 +276,26 @@ def reproduce(path, keep=None, say=print):
             return False
     after = _snapshot(*watched)
     new = sorted(p for p in after if p not in before)
-    changed, same = [], 0
+    changed, grown, same = [], [], 0
     for p in sorted(before):
         if p not in after:
             continue
         if before[p] == after[p]:
             same += 1
             continue
-        ok, diff = _same(before[p], after[p], p.suffix)
+        ok, added, diff = _same(before[p], after[p], p.suffix)
         if ok:
             same += 1
+            if added:
+                grown.append((p, added))
         else:
             changed.append((p, diff))
     rel = lambda p: p.relative_to(tree).as_posix()  # noqa: E731
     say(f"{path}: made again in {tree}; {same} page(s) and record(s) the same (apart from when and by "
         f"which commit), {len(changed)} different, {len(new)} new")
+    for p, added in grown:
+        say(f"  the same, with {len(added)} field(s) the code has added since it was written: {rel(p)} "
+            f"({', '.join(added[:3])}{', ...' if len(added) > 3 else ''})")
     for p, diff in changed:
         say(f"  different: {rel(p)}")
         for line in diff:

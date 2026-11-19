@@ -77,15 +77,15 @@ py -3 -m venv .venv
 .venv\Scripts\python seti.py find KIC8462852
 ```
 
-`find` lists the target's looks by session, from the archive's listing.
-One small search, on 3 MHz of one look (it reads only that slice; under a
-minute here):
+`find` lists the target's looks by session, from the archive's listing
+(`--json` gives each look's URL). One small search, on 3 MHz of the 2017
+session's first ON look (it reads only that slice; under a minute here):
 
 ```
-python seti.py search URL --from 2250 --to 2253
+python seti.py search https://bldata.berkeley.edu/pipeline/AGBT17A_999_68/holding/spliced_blc2021222324252627_guppi_57898_22410_DIAG_KIC8462852_0031.gpuspec.0000.h5 --from 2250 --to 2253
 ```
 
-with a `.gpuspec.0000.h5` URL from `find`'s answer. `sweep KIC8462852
+`sweep KIC8462852
 --blocks 3` searches the first three blocks of the target's whole cadence
 and runs the cadence test on them. What it keeps goes into `data/`
 (created on first use; `SSY_DATA` moves it): every hit of a sweep in
@@ -111,6 +111,7 @@ python -m unittest discover -s tests -v
 | [docs/results/](docs/results/) | the result pages, written by the code from the records |
 | [docs/research/](docs/research/) | research notes behind the plan, some written with AI assistants; a claim is taken from the cited paper, not the note |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | tests, and what a change must not move |
+| [docs/releasing.md](docs/releasing.md) | what is checked before a release and before the evidence is deposited |
 | [HANDOVER.md](HANDOVER.md) | historical: the project's state on 9 November 2026 |
 
 ## Data and credit

@@ -229,7 +229,7 @@ the default place.
   121 blocks at matched rates: the same matched cut (30), false rate
   0.068 to 0.071 a block. By step 4's three-look standard (`recheck`,
   12 Nov; the strict per-hit test overstated production's curved
-  recovery): 4,078 to 6,557 of 14,520 (+61%); at 1e-4 29-44% to 65-78%,
+  recovery): 4,078 to 6,557 of 14,520 (+61%; the vetting run counts 6,555, a gap of 2 not yet traced: docs/seti.md); at 1e-4 29-44% to 65-78%,
   at 3e-4 0-2% to 70-82%, at 1e-3 0% to 55-81% (S_in 120, 400). On the
   same signals and standard turboSETI recovers 613 at cut 30 (level with
   production at 1e-4 only at S_in 400 and cut 10; ahead of it at 3e-4,

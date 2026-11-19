@@ -15,8 +15,11 @@ site. When a second comes along, this gets revisited then.
   - data and code availability;
   - references and revisions.
 
-  Every number is read from the project's result records and checked
-  against them. The records are not in git (data/ is ignored):
+  Every number is read from the project's result records, and so is the
+  experiment's definition (signals a block, the strength grid, the drift
+  bins, the tolerances, the wrong choices, the pipelines' versions):
+  `tools/report.py` refuses to write the report if the per-block records,
+  the summary records and the environment as run disagree. The records are not in git (data/ is ignored):
   `tools/evidence.py build` packs the summary records (data/measurements,
   step 10's choice and deviations), the per-block records (data/matched,
   data/curved_pass) and a copy of the hit store, with a manifest of

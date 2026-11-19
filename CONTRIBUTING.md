@@ -12,8 +12,21 @@ python -m unittest discover -s tests -v
 ```
 
 The tests are offline and take about ten seconds; GitHub runs the same on
-every push and pull request (Python 3.11 and 3.12). They need no archive
-access, no turboSETI or BLISS, and nothing in `data/`.
+every push and pull request (Linux on Python 3.11 and 3.12, Windows on
+3.12). They need no archive access, no turboSETI or BLISS, and nothing in
+`data/`.
+
+## Two tiers of checks
+
+| Tier | What | When |
+|---|---|---|
+| Fast | the offline tests: the search on synthetic looks, the cadence test, records and the store, step 10's freeze, the BLISS port, imports; and `tests/reference_hits.json`, every hit the search gives on one seeded synthetic look with three planted signals | every push and pull request |
+| Scientific | the measurements on real blocks: planted signals through every pipeline, false candidates under the 19 wrong choices, the matched comparison (docs/reproducing-results.md, level 3); and the tables made again from the evidence package (`tools/evidence.py reproduce`, level 2) | before a change to the search, the cadence test, the checks or the planting is released, and before each version of the report |
+
+The reference hits only say that the search's output moved; the measured
+records are the standard. A change meant to move them raises the search's
+version and writes the reference again (`python tests/test_reference.py
+--write`) in the same commit.
 
 ## What a change must not move without saying so
 

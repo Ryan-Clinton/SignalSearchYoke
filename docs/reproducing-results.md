@@ -98,10 +98,28 @@ commit):
 Left out: the raw spectra (about 15 GB a look; they stay in the archive,
 and the records name each file's URL), chunk indexes, caches, unfinished
 work, locks and logs. About 1.3 GB before compression. It is deposited on
-Zenodo with each version of the report (docs/publishing.md);
-`python tools/evidence.py check ZIP` checks a copy against its manifest.
-The manifest lists every record that names a path on the machine that made
-it.
+Zenodo with each version of the report (docs/publishing.md).
+
+The manifest gives each record's SHA-256 and size, and the store's SHA-256,
+size and tables (every column, every row count). It also says what in the
+package names the machine that made it, read from the package itself: the
+records that name a local path (BLISS's records name its module and
+response file under the home folder in WSL) and, in the store, the
+computer name in the runs table and any text that looks like a local path
+(none). Nothing else in the store is about the machine: the rest is the
+archive's file URLs, the blocks, hits, events, checks, planted signals and
+the search's parameters and library versions.
+
+- `python tools/evidence.py check ZIP` refuses a copy with a record missing
+  or changed, an entry the manifest does not list, or a store that is
+  missing or differs.
+- `python tools/evidence.py reproduce ZIP` is the level-2 test from the
+  package alone: the committed code (`git archive HEAD`) in a new folder,
+  the package unpacked as its data folder, so this checkout's `data/` is
+  out of reach; it runs the table commands below there and compares every
+  page and summary record they write with what was there before (the
+  committed pages, the packaged records), ignoring only when and by which
+  commit a record was written.
 
 ## Making the tables again (level 2)
 
@@ -116,7 +134,8 @@ the core environment only:
 | The report | `python tools/report.py` | `docs/report/report.md` |
 
 The pages are written into the checkout's `docs/`, so `git diff` shows at
-once whether they came out the same.
+once whether they came out the same; `tools/evidence.py reproduce` runs all
+of these in a separate copy and does the comparison.
 
 ## Running it again (level 3)
 
