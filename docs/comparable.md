@@ -1047,6 +1047,28 @@ No spectra of a candidate session are read before the freeze is committed.
 - **Not done in it:** no investigation of the session's candidates beyond
   the verdict's own records before the verdict is written.
 
+**The selection, run 19 November 2026** (`tools/step12_select.py`,
+committed before it ran; `data/step12/selection/choice.json`, every reply
+of the archive saved with its SHA-256): **no session eligible.** The
+archive answers no query without a target (asked by telescope alone it
+lists nothing), so the rule went to its target list; the five targets'
+files are Green Bank's at L and S band (36 and 74 files) and ten optical
+spectra of APF's, which are not a radio product. No Parkes, C-band or
+X-band session is among them, so under rule 6 step 12 is not run, and
+nothing was relaxed. No spectra were read.
+
+One fault in the script, found on its first run and fixed before any
+choice was written: the archive ignores a telescope parameter (asked for
+Parkes, it listed Green Bank's files), and the script took the query's
+telescope for the files'. It was stopped while computing the gate's
+reference and before writing a choice; the fix takes each file's own
+listed telescope (5b3a66b). The run above is the fixed one.
+
+A new rule (a longer target list fixed from a published catalogue before
+any query) would be a second selection, made after the first came up
+empty on metadata alone; it is Ryan's decision and would be reviewed
+before it ran.
+
 **Done when:** its verdict is published beside step 10's, as generated.
 
 ## 3. What this plan does not do
