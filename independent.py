@@ -50,8 +50,16 @@ import seti
 import store
 import yoke
 
+STEP = 10
 CONFIG = yoke.ROOT / "config" / "step10.json"
 ROOT = yoke.DATA / "step10"
+KEEP = ("selection", "catalogue")       # a step's own folders written before its freeze (step 12's choice)
+
+
+def set_step(n):
+    """Run another step's config: config/stepN.json, data/stepN/ (step 12 takes step 10's code)."""
+    global STEP, CONFIG, ROOT
+    STEP, CONFIG, ROOT = int(n), yoke.ROOT / "config" / f"step{int(n)}.json", yoke.DATA / f"step{int(n)}"
 
 # The code the measurement and the verdict rest on. Whole files: this one,
 # and every project module the measurement imports (the import closure of
@@ -167,7 +175,7 @@ def frozen(cfg, deviation=None, stage=""):
         if changed:
             problems.append("changed since the freeze: " + ", ".join(changed))
     if problems and not deviation:
-        raise yoke.Refusal("INVALID_REQUEST", "Step 10 is frozen: " + "; ".join(problems)
+        raise yoke.Refusal("INVALID_REQUEST", f"Step {STEP} is frozen: " + "; ".join(problems)
                            + ". Put it back, or run with --deviation \"why\" (logged and reported).")
     if problems:
         ROOT.mkdir(parents=True, exist_ok=True)
@@ -199,7 +207,12 @@ def sweep(cfg, count=None, deviation=None, say=print):
     db = store.connect()
     kept = _files(cfg, db)
     db.close()
-    if not kept:
+    files = None
+    if not kept and cfg.get("files_from_config"):
+        # The cadence is six files of one recording node, which seti.find does not list as one cadence
+        # (it reads the session's nodes together): the sweep is given the frozen files.
+        files = (cfg["session"], list(cfg["files"]))
+    elif not kept:
         # Before its first block: the archive's first whole cadence of the target must be the frozen one,
         # since seti.sweep takes that.
         found = seti.find(cfg["target"], say=lambda *_: None)
@@ -210,7 +223,7 @@ def sweep(cfg, count=None, deviation=None, say=print):
             raise yoke.Refusal("INVALID_REQUEST", "The archive's first whole cadence of "
                                f"{cfg['target']} is not the frozen session and files.")
     n = cfg["blocks"]["of_session"]
-    return seti.sweep(cfg["target"], count=n if count is None else count, say=say)
+    return seti.sweep(cfg["target"], count=n if count is None else count, say=say, files=files)
 
 
 def choose(cfg, deviation=None, say=print):
@@ -234,10 +247,21 @@ def choose(cfg, deviation=None, say=print):
     crowded = [int(r["block_idx"]) for r in rows if r["hits"] > rule["crowded_hits"]]
     clean = [int(r["block_idx"]) for r in rows if r["hits"] <= rule["crowded_hits"]]
     rng = np.random.default_rng(rule["seed"])
-    pick_crowded = sorted(int(b) for b in rng.choice(crowded, size=min(rule["crowded_max"], len(crowded)),
-                                                     replace=False)) if crowded else []
-    n_clean = min(rule["total"] - len(pick_crowded), len(clean))
-    pick_clean = sorted(int(b) for b in rng.choice(clean, size=n_clean, replace=False)) if clean else []
+    if len(rows) <= rule["total"]:
+        # A session of no more blocks than the sample: every block (comparable.md step 12).
+        pick_crowded, pick_clean = sorted(crowded), sorted(clean)
+    else:
+        pick_crowded = sorted(int(b) for b in rng.choice(crowded, size=min(rule["crowded_max"], len(crowded)),
+                                                         replace=False)) if crowded else []
+        n_clean = min(rule["total"] - len(pick_crowded), len(clean))
+        pick_clean = sorted(int(b) for b in rng.choice(clean, size=n_clean, replace=False)) if clean else []
+        short = rule["total"] - len(pick_crowded) - len(pick_clean)
+        rest = sorted(set(crowded) - set(pick_crowded))
+        if short > 0 and rest:
+            # Too few clean blocks: more crowded ones at random to make the total (step 12's rule; drawn
+            # after the others, so step 10's choice, which never came here, is unchanged).
+            pick_crowded = sorted(pick_crowded + [int(b) for b in rng.choice(rest, size=min(short, len(rest)),
+                                                                             replace=False)])
     chosen = dict(sorted(({b: "crowded" for b in pick_crowded} | {b: "clean" for b in pick_clean}).items()))
     choice = {"chosen": chosen, "of": {"crowded": len(crowded), "clean": len(clean)},
               "crowded_hits": rule["crowded_hits"], "rule": rule, "config_sha256": load()[1]}
@@ -419,7 +443,8 @@ def verdict(cfg, deviation=None, progress=False, say=print):
         for p in problems[:20]:
             say(f"  {p}")
         if problems and not progress:
-            raise yoke.Refusal("INVALID_REQUEST", "Step 10 is not complete: no verdict (see data/step10/progress.json).")
+            raise yoke.Refusal("INVALID_REQUEST", f"Step {STEP} is not complete: no verdict "
+                                                  f"(see data/step{STEP}/progress.json).")
         return state
     recs = [got[b] for b in sorted(got)]
     crecs = [cgot[b] for b in sorted(cgot)]
@@ -475,11 +500,12 @@ def verdict(cfg, deviation=None, progress=False, say=print):
         "the pass's curved recovery above production's": _apart(crec[cfg_key], crec["production"]),
         "the pass loses none of production's recoveries": "holds" if lost == 0 else f"fails ({lost})"})
     out["kind"] = "measured"
-    yoke.write(yoke.DATA / "measurements" / "step10.json", out, stamp=True)
+    out["step"] = STEP
+    yoke.write(yoke.DATA / "measurements" / f"step{STEP}.json", out, stamp=True)
     # The full tables of the new session, under their own names (step 4's records are left as they are).
     matched_tables.write(target, say=lambda *_: None, name=f"matched-{target}.json")
     curved_pass.tables(target, say=lambda *_: None, name=f"curved-pass-{target}.json")
-    page = yoke.ROOT / "docs" / "results" / f"{target}-{session}-step10.md"
+    page = yoke.ROOT / "docs" / "results" / f"{target}-{session}-step{STEP}.md"
     page.write_text(markdown(out, cfg), encoding="utf-8")
     say(f"{page}")
     for k, v in out["criteria"].items():
@@ -493,13 +519,14 @@ def _iv(x):
 
 def markdown(r, cfg):
     lines = [f"# {r['target']} {r['session']}: step 4's comparison on another session", "",
-             f"Written by `independent.py verdict` (comparable.md step 10) under config/step10.json "
+             f"Written by `independent.py verdict` (comparable.md step {STEP}) under config/step{STEP}.json "
              f"(sha256 {r['config_sha256'][:12]}, committed {r['config_commit']}); the record is "
-             "data/measurements/step10.json. Every choice was fixed in that file before any of this session's data "
+             f"data/measurements/step{STEP}.json. Every choice was fixed in that file before any of this "
+             "session's data "
              "was read; nothing here was chosen on it.", ""]
     if r["deviations"]:
         lines += ["**Deviations from the frozen config:** " + "; ".join(r["deviations"])
-                  + " (data/step10/deviations.json).", ""]
+                  + f" (data/step{STEP}/deviations.json).", ""]
     lines += [f"{r['blocks']} blocks ({r['classes']['crowded']} crowded of {r['of']['crowded']}, "
               f"{r['classes']['clean']} clean of {r['of']['clean']}), every one whole (the verdict is refused "
               "otherwise), weighted by each class's share of the session's blocks. Code at "
@@ -551,7 +578,7 @@ def markdown(r, cfg):
 def freeze(say=print):
     """Write the code fingerprints into the config, before the first stage only."""
     cfg, _ = load()
-    if ROOT.exists() and any(ROOT.iterdir()):
+    if ROOT.exists() and any(x.name not in KEEP for x in ROOT.iterdir()):
         raise yoke.Refusal("INVALID_REQUEST", f"{ROOT} exists: a stage has run, so the freeze is fixed.")
     db = store.connect()
     swept = db.execute("SELECT COUNT(*) FROM files WHERE session=?", (cfg["session"],)).fetchone()[0]
@@ -565,6 +592,7 @@ def freeze(say=print):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--step", type=int, default=10, help="the step whose config to run (10 or 12)")
     sub = ap.add_subparsers(dest="cmd", required=True)
     for name in ("check", "sweep", "choose", "measure", "curved", "verdict", "freeze"):
         p = sub.add_parser(name)
@@ -577,6 +605,7 @@ def main(argv=None):
         if name == "verdict":
             p.add_argument("--progress", action="store_true", help="how far the runs are; never a verdict")
     a = ap.parse_args(argv)
+    set_step(a.step)
     try:
         if a.cmd == "freeze":
             freeze()

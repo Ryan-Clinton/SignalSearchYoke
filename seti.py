@@ -505,12 +505,18 @@ def search_params():
             "search_version": SEARCH_VERSION}
 
 
-def _cadence_files(db, target, get, say):
-    """The cadence's six files: from the store if a sweep kept them, or
-    found in the archive (and then kept)."""
+def _cadence_files(db, target, get, say, files=None):
+    """The cadence's six files: from the store if a sweep kept them, given
+    (session, six URLs, as a frozen config names them), or found in the
+    archive (and then kept)."""
     kept = store.cadence_files(db, target)
     if kept:
         return kept[0], kept[1], None
+    if files:
+        session, urls = files
+        names = [re.search(r"guppi_\d+_\d+_(.+?)_\d{4}\.", u) for u in urls]
+        scans = [{"target": unquote(m.group(1)).removeprefix("DIAG_") if m else None} for m in names]
+        return session, list(urls), scans
     found = find(target, get=get, say=lambda *_: None)
     session = next((s for s in found["sessions"] if s["complete"]), None)
     if not session:
@@ -565,7 +571,7 @@ def export(db, target, session, block_list):
     return record
 
 
-def sweep(target, count=1, say=print, get=requests.get):
+def sweep(target, count=1, say=print, get=requests.get, files=None):
     """Search the target's first whole cadence `count` blocks further than
     the runs before got, keeping every hit of every look and every cadence
     result in the hit store, so the whole band is covered over many runs:
@@ -573,7 +579,7 @@ def sweep(target, count=1, say=print, get=requests.get):
     fetched while this one is searched."""
     with _Lock():
         db = store.connect()
-        session, urls, scans = _cadence_files(db, target, get, say)
+        session, urls, scans = _cadence_files(db, target, get, say, files)
         indexes = reading.prepare(urls)
         file_ids = [store.upsert_file(db, index, session=session,
                                       target=(scans[i]["target"] if scans else None), cadence_target=target,

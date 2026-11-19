@@ -1,0 +1,73 @@
+{
+ "step": 12,
+ "purpose": "Steps 4 and 10's matched comparison (and the curved second pass with it) on a third session, at another band, every choice below fixed before any of its spectra are read (comparable.md step 12).",
+ "frozen_utc": "2026-11-19",
+ "target": "NGC6946",
+ "session": "AGBT19B_999_104",
+ "chosen_how": "By tools/step12_select.py from the archive's metadata alone (comparable.md step 12, its rule and its second selection): the target list extended by Isaacson et al. 2017's 1,709 stars in catalogue order, telescopes Parkes first (no Parkes session had a whole run of six looks of the finest product), then Green Bank at C band; the first session by folder name with a run ON, OFF, ON, OFF, ON, OFF, its header readable with 64 blocks (61 or more), and the compatibility gate passed (recovery 0.349 against 0.314 needed). Its six files are one recording node's (blc42, 7876.5 to 8064.0 MHz), which seti.find does not list as a cadence since it reads the nodes together, so the sweep takes them from here. Only the first file's HDF5 index was read. data/step12/selection/choice_2.json, sha256 1a006c64a26f17bca222f3184e2a2f093cfbee80a625a72b1e0eacbc5e4091dd",
+ "files": [
+  "http://bldata.berkeley.edu/pipeline/AGBT19B_999_104/blc42_blp02/blc42_guppi_58795_19037_NGC6946_0020.gpuspec.0000.h5",
+  "http://bldata.berkeley.edu/pipeline/AGBT19B_999_104/blc42_blp02/blc42_guppi_58795_19358_HIP100714_0021.gpuspec.0000.h5",
+  "http://bldata.berkeley.edu/pipeline/AGBT19B_999_104/blc42_blp02/blc42_guppi_58795_19679_NGC6946_0022.gpuspec.0000.h5",
+  "http://bldata.berkeley.edu/pipeline/AGBT19B_999_104/blc42_blp02/blc42_guppi_58795_19998_HIP100944_0023.gpuspec.0000.h5",
+  "http://bldata.berkeley.edu/pipeline/AGBT19B_999_104/blc42_blp02/blc42_guppi_58795_20316_NGC6946_0024.gpuspec.0000.h5",
+  "http://bldata.berkeley.edu/pipeline/AGBT19B_999_104/blc42_blp02/blc42_guppi_58795_20631_HIP101218_0025.gpuspec.0000.h5"
+ ],
+ "files_from_config": true,
+ "sweep": {
+  "how": "seti.py sweep over every block (the production search and cadence test, every hit kept in the store), so that the block rule has every block's hit count and check 6 has a second session",
+  "search_version": "4 (search 2; cadence test 3: seeds from every ON look, one-to-one complete matching by one distance, every look measured along the track, OFF test below the threshold, DOT score, the OFF test's veto rate on random tracks; 9 Nov 2026)"
+ },
+ "blocks": {
+  "of_session": 64,
+  "crowded_hits": 20,
+  "crowded_max": 61,
+  "total": 121,
+  "seed": 12,
+  "rule": "Crowded: more than 20 hits at the sweep's cut in the six looks together (step 4's rule). The session has 64 blocks, no more than the sample of 121, so every block is measured (comparable.md step 12); rates weight each class by its share of the session's blocks, the intervals from the blocks measured, the criteria unchanged. A class with no block is reported as absent."
+ },
+ "measurement": {
+  "how": "matched.block, unchanged: each block's six slices read once; this search, turboSETI and pickles judged with the 19 wrong choices of ON looks at their grids of cuts; 110 signals planted in the true ON looks (step 4's S_in and drift grid, seed matched.SEED per block); recovery in all three ON looks at 6 Hz and 0.05 Hz/s, turboSETI's checked from its own hit tables",
+  "curved_pass": "curved_pass.block, unchanged, on the same blocks: production and the second pass at a_max 1e-4, 3e-4 and 1e-3, 120 signals a block at |a| 0 to 1e-3 (seed curved_pass.SEED per block), judged by step 4's three-look standard"
+ },
+ "expected": {
+  "blocks": 64,
+  "tones_per_block": 110,
+  "curved_tones_per_block": 120,
+  "how": "the verdict is refused unless each of the 64 blocks has a whole record of each run (the frozen format, its class, this session's six looks, 110 and 120 signals, every field the criteria read) and no other block is there: 7,040 and 7,680 signals, every one in the denominator"
+ },
+ "criteria": {
+  "cut": 30,
+  "rate": 0.1,
+  "false_count": "distinct false candidates a block over the 19 wrong choices, joined by shared hits (step 4's curves), weighted by class, with a stratified bootstrap interval over the blocks (matched_tables._rate, its seed 1)",
+  "holding": [
+   "this search's false rate at SNR 30 at most 0.1 a block: 'holds' when the interval is under 0.1 too, 'holds, its interval reaching above the limit' when only the estimate is, 'fails' when the estimate is above it",
+   "turboSETI's false rate at SNR 30, the same",
+   "this search's recovery in all three ON looks at SNR 30, of every planted signal, above turboSETI's with the two Wilson intervals apart ('not shown' when they overlap)",
+   "the curved second pass at a_max 1e-3: its false rate at SNR 30 the same as the first",
+   "its recovery in all three ON looks of the signals planted at |a| of 1e-4 and more, above production's with the intervals apart",
+   "it loses none of production's recoveries"
+  ],
+  "curved_pass": {
+   "a_max": 0.001,
+   "curved_from": 0.0001
+  },
+  "supplementary": "Reported beside the criteria, not one: the paired recovery of the same signals (both, either alone, neither) and the difference in share with a bootstrap over blocks (seed 2), for this search against turboSETI and for the pass against production on the curved signals; false associations counted.",
+  "if_it_fails": "A rate above 0.1, or a recovery not above, is the result: reported as it is, not mended by a new cut, a new rule or new blocks. The curves at every cut are measured and shown, not used to choose."
+ },
+ "step4": {
+  "session": "AGBT17A_999_68",
+  "ours_recovered": 4520,
+  "turboseti_recovered": 442,
+  "planted": 13310,
+  "rate": 0.1
+ },
+ "step10": {
+  "session": "AGBT16A_999_192",
+  "verdict": "both false rates failed; recovery held"
+ },
+ "supplementary": {
+  "bliss_hybrid": "BLISS's hits found once at S/N 5 through this search's cadence test, cut 30 (matched.py bliss-judge, as step 11): supplementary, fixed now, designed after step 11's result. If BLISS does not read the session's files unchanged, recorded as not possible and left out."
+ },
+ "regression": "tools/regress_step10.py must pass at the frozen commit (two of step 10's blocks measured again, every field but the timings identical)"
+}

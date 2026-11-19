@@ -1093,6 +1093,34 @@ for its file names. This is a second selection made after the first came
 up empty; no spectra had been read, and nothing about any session's
 contents was known.
 
+**Chosen, 19 November 2026** (the second selection): **NGC 6946 at C
+band, session AGBT19B_999_104 (Green Bank, November 2019)**, the six
+files of one recording node (blc42, 7,876.5 to 8,064.0 MHz, 64 blocks).
+1,709 stars were looked up: the Parkes sessions listed had no whole run
+of six looks of the finest product (26) or no such product (3), and
+the first Green Bank C-band session by folder name with a whole run, a
+readable header and 61 blocks or more is this one. The gate: on
+synthetic noise of its layout (the same as Green Bank's at L and S band)
+the share recovered is 0.349, the reference's, against 0.314 needed. The
+target is a galaxy, not one of the catalogue's stars: the rule takes the
+first whole run in a session the catalogue's stars led to, whatever its
+ON target. With 64 blocks, all are measured.
+
+**Frozen, 19 November 2026:** config/step12.json, with the code's
+fingerprints, committed before the sweep. `independent.py --step 12`
+runs it (the same stages as step 10's: check, sweep, choose, measure,
+curved, verdict), and `tools/step12_run.py` takes it from the freeze to
+the verdict as one resumable job in the queue, measure and curved three
+shards each at once, after the regression against step 10 has passed at
+the frozen commit. Three changes were made for it, none to the
+measurement: independent.py takes the step's config (step 10's results
+unchanged); the sweep takes the six files from the config, since
+`seti.py find` reads a session's recording nodes together and does not
+list one node's six looks as a cadence; and the block rule takes every
+block when a session has no more than 121, and fills a shortfall of
+clean blocks with crowded ones (step 10's choice never reached either).
+BLISS through this search's test runs after the verdict, supplementary.
+
 **Done when:** its verdict is published beside step 10's, as generated.
 
 ## 3. What this plan does not do
