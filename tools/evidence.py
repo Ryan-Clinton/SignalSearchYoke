@@ -15,14 +15,18 @@ stay in Breakthrough Listen's archive), the chunk indexes and caches,
 half-finished work (partial/), locks and logs. Unpacked as the data folder
 (SSY_DATA), the tables are made again without reading a spectrum.
 
-Files go in byte for byte; nothing is rewritten. The manifest gives each
-file's SHA-256 and size; the store's SHA-256, size and tables (columns and
-rows); the commit and whether the tree had changes; and what in the package
-names the machine that made it: every record that names a local path
-(BLISS's records name its module and response file), the computer names in
-the store's runs, and any local path in the store's text. check refuses a
-zip with a file missing or changed, an entry the manifest does not list, or
-a store that is missing or differs.
+Files go in as they are but for one substitution (scrub): the names of
+the machine that made them. Every home folder is written `~` (BLISS's
+records name its module and response file under one), and every computer
+name the store's runs give is written COMPUTER, in the records and in the
+store's copy (wiped from its file, not just unlinked). The build is
+refused if anything packaged still names the machine. The manifest gives
+each file's SHA-256 and size as packaged, and its original SHA-256 where
+the substitution changed it; the store's SHA-256 (packaged and original),
+size and tables; the commit and whether the tree had changes; and what was
+substituted, by count. check refuses a zip with a file missing or changed,
+an entry the manifest does not list, or a store that is missing or
+differs.
 
 reproduce takes the zip alone: the code of the commit the package was
 built at (git archive; a package built from a tree with changes is
@@ -118,21 +122,59 @@ def store_inventory(path):
             "computer_names": hosts, "local_paths": found}
 
 
-def manifest(data=None, store=None):
-    data = Path(data or yoke.DATA)
-    rows, paths = [], {}
-    for rel in files(data):
-        raw = (data / rel).read_bytes()
-        rows.append({"path": rel.as_posix(), "bytes": len(raw), "sha256": hashlib.sha256(raw).hexdigest()})
-        found = sorted({m.decode(errors="replace") for m in MACHINE_PATH.findall(raw)})
-        if found:
-            paths[rel.as_posix()] = found[:5]
+HOME = re.compile(rb'/home/[a-z_][a-z0-9_-]*(?=/)|[A-Za-z]:\\{1,2}Users\\{1,2}[^\\"/]+(?=\\)|/Users/[^/"\s]+(?=/)')
+COMPUTER = "COMPUTER"
+
+
+def scrub(raw, hosts):
+    """A record with the machine's names taken out: every home folder made
+    `~`, every computer name COMPUTER. Returns (bytes, home folders
+    replaced, computer names replaced)."""
+    out, homes = HOME.subn(b"~", raw)
+    names = 0
+    for h in hosts:
+        names += out.count(h.encode())
+        out = out.replace(h.encode(), COMPUTER.encode())
+    return out, homes, names
+
+
+def _scrub_store(path, hosts):
+    """The store's copy without the computer names its runs were on, the
+    old values wiped from the file, not just unlinked (secure_delete,
+    VACUUM). Refuses if any text column still names the machine."""
+    db = sqlite3.connect(path)
+    db.execute("PRAGMA secure_delete = ON")
+    n = db.execute("UPDATE runs SET host = ? WHERE host IS NOT NULL", (COMPUTER,)).rowcount if hosts else 0
+    db.commit()
+    db.execute("VACUUM")
+    db.close()
+    inv = store_inventory(path)
+    left = [k for k in inv["local_paths"]]
+    db = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    for (name,) in db.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall():
+        for c in db.execute(f'PRAGMA table_info("{name}")').fetchall():
+            if c[2].upper() in ("TEXT", "") and any(
+                    db.execute(f'SELECT 1 FROM "{name}" WHERE "{c[1]}" LIKE ? LIMIT 1', (f"%{h}%",)).fetchone()
+                    for h in hosts):
+                left.append(f"{name}.{c[1]}")
+    db.close()
+    raw = path.read_bytes()
+    if any(h.encode() in raw for h in hosts) or HOME.search(raw):
+        left.append("the file's bytes")
+    if left:
+        raise yoke.Refusal("INTERNAL_ERROR", f"the store's copy still names the machine in {sorted(set(left))}; "
+                                             "nothing packaged")
+    return n, inv
+
+
+def manifest(rows, store, substituted):
     return {"package": "SignalSearchYoke derived evidence",
             "created_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            "git_commit": _git("rev-parse", "HEAD"), "uncommitted_changes": bool(_git("status", "--porcelain", "--untracked-files=no")),
+            "git_commit": _git("rev-parse", "HEAD"),
+            "uncommitted_changes": bool(_git("status", "--porcelain", "--untracked-files=no")),
             "folders": list(FOLDERS), "files": rows, "total_bytes": sum(r["bytes"] for r in rows),
-            "records_naming_local_paths": paths,
             "store": store,
+            "machine_names_substituted": substituted,
             "included": "the records under data/ listed in files, and the hit store data/ssy.sqlite (store), "
                         "copied with SQLite's backup so it is one consistent state",
             "not_included": "raw spectra (Breakthrough Listen Open Data Archive), chunk indexes, caches, "
@@ -140,6 +182,11 @@ def manifest(data=None, store=None):
 
 
 def build(out_dir=None, say=print):
+    """The package: every record and a copy of the store, with the machine's
+    names substituted (scrub) and nothing else changed. Each record whose
+    bytes changed keeps its original SHA-256 in the manifest beside the
+    packaged one; the build is refused if anything packaged still names the
+    machine."""
     out_dir = Path(out_dir or yoke.DATA / "evidence")
     out_dir.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory() as tmp:
@@ -149,23 +196,47 @@ def build(out_dir=None, say=print):
         src.backup(dst)
         dst.close()
         src.close()
-        man = manifest(store=store_inventory(copy))
+        original_store = _sha(copy)
+        hosts = store_inventory(copy)["computer_names"]
+        store_rows, inv = _scrub_store(copy, hosts)
+        inv["original_sha256"] = original_store
+        rows, packed, homes, names, left = [], {}, 0, 0, []
+        for rel in files():
+            raw = (yoke.DATA / rel).read_bytes()
+            out, h, n = scrub(raw, hosts)
+            row = {"path": rel.as_posix(), "bytes": len(out), "sha256": hashlib.sha256(out).hexdigest()}
+            if out != raw:
+                row["original_sha256"] = hashlib.sha256(raw).hexdigest()
+                homes, names = homes + h, names + n
+            if MACHINE_PATH.search(out) or any(x.encode() in out for x in hosts):
+                left.append(rel.as_posix())
+            rows.append(row)
+            packed[rel.as_posix()] = out
+        if left:
+            raise yoke.Refusal("INTERNAL_ERROR", f"{len(left)} record(s) still name the machine after the "
+                                                 f"substitution, e.g. {left[:3]}; nothing packaged")
+        substituted = {
+            "rule": "every home folder (/home/NAME, C:\\Users\\NAME, /Users/NAME) written as ~, every computer "
+                    "name the store's runs give written as " + COMPUTER + "; nothing else changed",
+            "records_changed": sum("original_sha256" in r for r in rows),
+            "home_folders_replaced": homes, "computer_names_replaced_in_records": names,
+            "store_runs_changed": store_rows}
+        man = manifest(rows, inv, substituted)
         if man["uncommitted_changes"]:
             say("note: the working tree has changes; the manifest says so")
         out = out_dir / f"ssy-evidence-{man['git_commit'][:7]}.zip"
         part = out.with_suffix(".zip.part")
         with zipfile.ZipFile(part, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as z:
             z.writestr("MANIFEST.json", json.dumps(man, indent=1))
-            for r in man["files"]:
-                z.write(yoke.DATA / r["path"], "data/" + r["path"])
+            for r in rows:
+                z.writestr("data/" + r["path"], packed[r["path"]])
             z.write(copy, "data/" + STORE)
     part.replace(out)
     (out_dir / (out.stem + ".manifest.json")).write_text(json.dumps(man, indent=1), encoding="utf-8")
-    st = man["store"]
-    say(f"{out}: {len(man['files'])} files and the store, {man['total_bytes'] / 1e6:.0f} MB of records and "
-        f"{st['bytes'] / 1e6:.0f} MB of store before compression, {out.stat().st_size / 1e6:.0f} MB zipped")
-    say(f"  naming the machine: {len(man['records_naming_local_paths'])} record(s) with local paths; "
-        f"store computer names {st['computer_names']}, local paths in {sorted(st['local_paths']) or 'no column'}")
+    say(f"{out}: {len(rows)} files and the store, {man['total_bytes'] / 1e6:.0f} MB of records and "
+        f"{inv['bytes'] / 1e6:.0f} MB of store before compression, {out.stat().st_size / 1e6:.0f} MB zipped")
+    say(f"  machine names taken out: {homes} home folder(s) and {names} computer name(s) in "
+        f"{substituted['records_changed']} record(s), {store_rows} run(s) in the store; none left")
     return out
 
 

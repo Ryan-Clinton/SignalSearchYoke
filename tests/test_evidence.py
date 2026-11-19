@@ -39,6 +39,9 @@ class Package(unittest.TestCase):
         data = yoke.DATA
         (data / "measurements").mkdir(parents=True, exist_ok=True)
         (data / "measurements" / "m.json").write_text('{"found": 4520}', encoding="utf-8")
+        (data / "measurements" / "b.json").write_text(json.dumps(
+            {"found": 7, "provenance": {"response": "/home/someone/ssy/gbt.f32", "host": "A-PC",
+                                        "win": "C:\\Users\\Someone\\x.txt"}}), encoding="utf-8")
         db = sqlite3.connect(data / evidence.STORE)
         db.execute("CREATE TABLE IF NOT EXISTS runs (run_id INTEGER PRIMARY KEY, host TEXT, command TEXT)")
         db.execute("INSERT INTO runs (host, command) VALUES ('A-PC', 'sweep X')")
@@ -56,8 +59,22 @@ class Package(unittest.TestCase):
     def test_whole_package_passes(self):
         self.assertTrue(self.check(self.zip))
         man = json.loads(zipfile.ZipFile(self.zip).read("MANIFEST.json"))
-        self.assertEqual(man["store"]["computer_names"], ["A-PC"])
+        self.assertEqual(man["store"]["computer_names"], [evidence.COMPUTER])
         self.assertNotIn("ssy.sqlite", man["not_included"])
+
+    def test_machine_names_taken_out_and_nothing_else(self):
+        z = zipfile.ZipFile(self.zip)
+        man = json.loads(z.read("MANIFEST.json"))
+        rec = json.loads(z.read("data/measurements/b.json"))
+        self.assertEqual(rec, {"found": 7, "provenance": {"response": "~/ssy/gbt.f32", "host": evidence.COMPUTER,
+                                                          "win": "~\\x.txt"}})
+        self.assertEqual(z.read("data/measurements/m.json"), b'{"found": 4520}')
+        rows = {r["path"]: r for r in man["files"]}
+        self.assertIn("original_sha256", rows["measurements/b.json"])
+        self.assertNotIn("original_sha256", rows["measurements/m.json"])
+        self.assertEqual(man["machine_names_substituted"]["store_runs_changed"], 1)
+        store = z.read("data/" + evidence.STORE)
+        self.assertNotIn(b"A-PC", store)
 
     def test_changed_entry_refused(self):
         bad = self.tmp / "changed.zip"
