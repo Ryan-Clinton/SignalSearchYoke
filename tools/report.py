@@ -21,11 +21,12 @@ ROOT = Path(__file__).resolve().parents[1]
 DATA = Path(os.environ.get("SSY_DATA") or ROOT / "data")
 OUT = ROOT / "docs" / "report" / "report.md"
 
-VERSION = "1.0"
+VERSION = "1.1"
 DATE = "2026-11-19"
 REVISIONS = (("0.1", "2026-11-18", "first draft."),
              ("1.0", DATE, "first release: the signals BLISS finds and this search misses traced stage by "
-                         "stage, and the detector's misses measured."))
+                         "stage, and the detector's misses measured."),
+             ("1.1", DATE, "the code's repository, now public, linked."))
 
 
 def load(path):
@@ -395,9 +396,10 @@ def main():
     w("## Data and code availability")
     w("")
     w("The observations are from the Breakthrough Listen Open Data Archive (Lebofsky et al. 2019, PASP 131, "
-      "124505). Breakthrough Listen is managed by the Breakthrough Initiatives. The code (SignalSearchYoke) "
-      "and the result records behind every number here are to be archived on Zenodo; this version's DOI "
-      "will be added here when they are.")
+      "124505). Breakthrough Listen is managed by the Breakthrough Initiatives. The code is at "
+      "https://github.com/Ryan-Clinton/SignalSearchYoke (this version was built from the commit named on "
+      "its page). The code and the result records behind every number here are to be archived on Zenodo; "
+      "the DOI will be added here when they are.")
     w("")
     w("## References")
     w("")
