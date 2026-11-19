@@ -3,3 +3,23 @@ __pycache__/
 *.part
 .venv/
 publish/
+# local settings, keys and environments
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+# test, build and editor leftovers
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db

@@ -198,6 +198,9 @@ def main():
     p10 = s10["supplementary"]["paired_ours_turboseti"]
     curved = s10["supplementary"]["paired_pass_production_curved"]
     rate = b["rate_matched"]
+    over = sum(r["interval"][1] > rate for r in (ours_r, turbo_r, hyb_r))
+    dev_path = DATA / "step10" / "deviations.json"
+    devs = json.loads(dev_path.read_text(encoding="utf-8")) if dev_path.exists() else []
     m = method(b)
     grid = m["strengths"]
 
@@ -214,8 +217,10 @@ def main():
       f"Telescope, by planting {n(planted)} synthetic signals in the data and counting how many each "
       f"pipeline found, and how many false candidates each raised, on the same blocks.")
     w("")
-    w(f"On a 2017 session ({b['target']}), at the cut where each gives at most {rate} false candidates a "
-      f"block, this search found {n(tot['ours'])} of the {n(planted)} signals in all three ON looks, turboSETI "
+    w(f"On a 2017 session ({b['target']}), at the cut where each pipeline's measured false-candidate rate is "
+      f"at most {rate} a block (a point estimate; {'each' if over == 3 else f'{over} of the three'} 95% "
+      f"interval{'s' if over not in (1, 3) else ''} reach{'es' if over in (1, 3) else ''} above it, and the cuts were chosen "
+      f"on the blocks they were judged on), this search found {n(tot['ours'])} of the {n(planted)} signals in all three ON looks, turboSETI "
       f"{n(tot['turboseti'])}. BLISS as published never reached that false-candidate rate at any cut "
       f"tested. BLISS's own hits put through this search's ON/OFF test did reach it, and found "
       f"{n(tot['bliss_ours'])}.")
@@ -272,8 +277,11 @@ def main():
       f"({iv(hyb_r['interval'], 2)}) | {n(tot['bliss_ours'])} |")
     w(f"| BLISS as published | none reaches {rate} | lowest {bl_min['per_block']:.3g} (at {bl_min_cut}) | — |")
     w("")
-    w(f"All three matched pipelines meet the {rate}-a-block target at the tested cut, with different "
-      f"measured false rates. On the same {n(planted)} signals, this search and BLISS's hits through its test "
+    w(f"At its tested cut, each matched pipeline's measured false rate is at or below {rate} a block. These "
+      f"are point estimates, and they differ; {'each 95% interval reaches' if over == 3 else f'{over} of the three 95% intervals reach'} "
+      f"above {rate}, and the cuts were chosen on the same "
+      f"blocks they are judged on. The pipelines are matched on the measured rate against the target, not "
+      f"shown to lie below it. On the same {n(planted)} signals, this search and BLISS's hits through its test "
       f"both found {n(pair['both'])}; this search alone {n(pair['ours_only'])}, BLISS's hits alone "
       f"{n(pair['bliss_ours_only'])}. The difference, {pair['difference in share']:+.3f} of the signals "
       f"({iv(pair['interval'])}, {pair['how']}), holds for this session, these cuts and this signal grid.")
@@ -284,8 +292,9 @@ def main():
     w("")
     w("*Figure 1. Share of the planted signals found in all three ON looks at each pipeline's matched cut, "
       f"against signal strength (the {WORDS.get(len(grid), len(grid))} steps of the grid, evenly spaced), one "
-      f"panel per drift range ({m['at_each_point']} signals at each point). Each pipeline's cut meets the "
-      f"{rate}-a-block target; their measured false rates differ (the table above).*")
+      f"panel per drift range ({m['at_each_point']} signals at each point). At each pipeline's cut its measured "
+      f"false rate is at or below {rate} a block; the rates differ, and their 95% intervals reach above "
+      f"{rate} (the table above).*")
     w("")
     if control:
         w("**Why BLISS as published has no matched cut.** On the two blocks that carry most of its false "
@@ -313,6 +322,12 @@ def main():
     for k, v in s10["criteria"].items():
         w(f"| {k} | **{v}** |")
     w("")
+    if devs:
+        changed = sorted({x.split(": ", 1)[-1] for d in devs for x in d["problems"]})
+        w(f"The code changed after the freeze, once: {', '.join(changed)}, logged as a deviation at each of the "
+          f"{len(devs)} stages that ran on it ({', '.join(d['stage'] for d in devs)}) and printed in the verdict. "
+          f"The reason logged: \"{devs[0]['why']}\" (data/step10/deviations.json).")
+        w("")
     w(f"At the frozen cut ({s10['cut']}), this search raised {fr['ours']['per_block']:.3g} false candidates "
       f"a block ({iv(fr['ours']['interval'])}) and turboSETI {fr['turboseti']['per_block']:.3g} "
       f"({iv(fr['turboseti']['interval'])}), against a limit of {s10['rate_limit']}. Recovery held: "
