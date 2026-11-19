@@ -29,8 +29,9 @@ TITLE = "Comparing radio-signal searches on Breakthrough Listen data"
 SUMMARY = ("Planted signals in Breakthrough Listen's Green Bank data, counted at matched false-candidate rates: "
            "a new search against turboSETI and BLISS on two sessions, the second fixed in advance, where both "
            "pipelines failed the false-candidate limit.")
+# The public versions only: 0.1 was a draft never published, and the site dates the
+# report (citation_publication_date) from the first version listed.
 REVISIONS = (
-    ("0.1", "2026-11-18", "First draft.", False),
     ("1.0", None, "First release: the signals BLISS finds and this search misses traced stage by stage, and the "
                   "detector's misses measured.", True),
 )
