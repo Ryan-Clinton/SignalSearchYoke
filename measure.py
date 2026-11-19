@@ -607,38 +607,42 @@ def setigen_check(say=print):
     round first."""
     import re
     seti.need_turboseti()
-    with tempfile.TemporaryDirectory() as tmp:
-        out = Path(tmp) / "setigen.npz"
-        done = subprocess.run([str(seti.TURBOSETI_PYTHON), "-I", str(yoke.ROOT / "tools" / "setigen_frame.py"),
-                               str(out)], capture_output=True, text=True, timeout=600)
-        if done.returncode:
-            raise yoke.Refusal("INTERNAL_ERROR", f"setigen failed: {done.stderr.strip()[-300:]}")
-        frames = dict(np.load(out))
+    variants = {}
+    for name, extra in (("truncated (setigen's default)", []), ("untruncated (trunc=False)", ["--untruncated"])):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "setigen.npz"
+            done = subprocess.run([str(seti.TURBOSETI_PYTHON), "-I", str(yoke.ROOT / "tools" / "setigen_frame.py"),
+                                   str(out), *extra], capture_output=True, text=True, timeout=600)
+            if done.returncode:
+                raise yoke.Refusal("INTERNAL_ERROR", f"setigen failed: {done.stderr.strip()[-300:]}")
+            variants[name] = dict(np.load(out))
     version = subprocess.run([str(seti.TURBOSETI_PYTHON), "-c",
                               "import importlib.metadata as m; print(m.version('setigen'))"],
                              capture_output=True, text=True).stdout.strip()
     src = (yoke.ROOT / "tools" / "setigen_frame.py").read_text(encoding="utf-8")
     df, dt = (float(x) for x in re.search(r"DF, DT, FCH1 = ([\d.]+), ([\d.]+),", src).groups())
     rows = []
-    for key, sg in frames.items():
-        c0, drift = (float(x) for x in key.split("_"))
-        sg = sg[:, ::-1]
-        ours = plant(np.zeros(sg.shape), [(c0, drift, 1.0)], dt, -df / 1e6)
-        corr = [float(np.corrcoef(a, b)[0, 1]) for a, b in zip(ours, sg)]
-        ch = np.arange(sg.shape[1])
-        cen = [float((a * ch).sum() / a.sum() - (b * ch).sum() / b.sum()) for a, b in zip(ours, sg)]
-        rows.append({"start_channel": c0, "drift_hz_s": drift, "correlation_min": round(min(corr), 4),
-                     "correlation_median": round(float(np.median(corr)), 4),
-                     "centroid_offset_channels": [round(min(cen), 3), round(max(cen), 3)],
-                     "power_ours_over_setigen": round(float(ours.sum() / sg.sum()), 4),
-                     "power_ours_over_h": round(float(ours.sum(axis=1).mean()), 4)})
-        say(f"start {c0}, {drift:+} Hz/s: profiles correlate {rows[-1]['correlation_min']} at the least; centroids "
-            f"{rows[-1]['centroid_offset_channels']} channels apart; power ours/setigen "
-            f"{rows[-1]['power_ours_over_setigen']}, ours/h {rows[-1]['power_ours_over_h']}")
+    for variant, frames in variants.items():
+        for key, sg in frames.items():
+            c0, drift = (float(x) for x in key.split("_"))
+            sg = sg[:, ::-1]
+            ours = plant(np.zeros(sg.shape), [(c0, drift, 1.0)], dt, -df / 1e6)
+            corr = [float(np.corrcoef(a, b)[0, 1]) for a, b in zip(ours, sg)]
+            ch = np.arange(sg.shape[1])
+            cen = [float((a * ch).sum() / a.sum() - (b * ch).sum() / b.sum()) for a, b in zip(ours, sg)]
+            rows.append({"variant": variant, "start_channel": c0, "drift_hz_s": drift,
+                         "correlation_min": round(min(corr), 4),
+                         "correlation_median": round(float(np.median(corr)), 4),
+                         "centroid_offset_channels": [round(min(cen), 3), round(max(cen), 3)],
+                         "power_ours_over_setigen": round(float(ours.sum() / sg.sum()), 4),
+                         "power_ours_over_h": round(float(ours.sum(axis=1).mean()), 4)})
+            say(f"{variant}: start {c0}, {drift:+} Hz/s: profiles correlate {rows[-1]['correlation_min']} at the "
+                f"least; centroids {rows[-1]['centroid_offset_channels']} channels apart; power ours/setigen "
+                f"{rows[-1]['power_ours_over_setigen']}, ours/h {rows[-1]['power_ours_over_h']}")
     record = {"setigen": version, "rows": rows, "kind": "measured",
-              "note": "setigen's sinc2_f_profile at level 1 carries about 8.5% less power than h; ours carries 0.96 "
-                      "to 1.00 of h (the sinc^2 tails beyond 4 channels are dropped): a difference of convention "
-                      "in setigen's profile, not of shape."}
+              "note": "setigen's sinc2_f_profile cuts the sinc^2 at its first zeros by default (trunc=True); "
+                      "ours keeps 4 channels of sidelobes either side (0.96 to 1.00 of h). The untruncated variant "
+                      "is the like-for-like comparison, the truncated one a control."}
     _keep("setigen", record)
     return record
 

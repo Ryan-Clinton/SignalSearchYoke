@@ -98,7 +98,7 @@ Left unexplained by the checks:
 
 ### All three ON looks, at the published cuts (this search 10, turboSETI 10, pickles level 1, its masks off)
 
-| drift (Hz/s) | S_in | Jy Hz | this search | turboSETI | pickles | here, not turboSETI | turboSETI, not here |
+| drift (Hz/s) | S_in | Jy Hz (nominal: SEFD 10 Jy assumed) | this search | turboSETI | pickles | here, not turboSETI | turboSETI, not here |
 |---|---|---|---|---|---|---|---|
 | 0.0-0.15 | 10 | 6.92 | 3/242 (0) | 0/242 (0) | 0/242 (0) | 3 | 0 |
 | 0.0-0.15 | 15 | 10.37 | 216/242 (0) | 0/242 (0) | 0/242 (0) | 216 | 0 |
@@ -162,7 +162,7 @@ Crowded blocks, every strength and drift: this search 4271/6710; turboSETI 842/6
 
 ### Three hits, at the published cuts (this search 10)
 
-| drift (Hz/s) | S_in | Jy Hz | this search |
+| drift (Hz/s) | S_in | Jy Hz (nominal: SEFD 10 Jy assumed) | this search |
 |---|---|---|---|
 | 0.0-0.15 | 10 | 6.92 | 0/242 (0) |
 | 0.0-0.15 | 15 | 10.37 | 55/242 (0) |
@@ -226,7 +226,7 @@ Crowded blocks, every strength and drift: this search 3894/6710.
 
 ### Strict (member hits), at the published cuts (this search 10, turboSETI 10, pickles level 1, its masks off)
 
-| drift (Hz/s) | S_in | Jy Hz | this search | turboSETI | pickles | here, not turboSETI | turboSETI, not here |
+| drift (Hz/s) | S_in | Jy Hz (nominal: SEFD 10 Jy assumed) | this search | turboSETI | pickles | here, not turboSETI | turboSETI, not here |
 |---|---|---|---|---|---|---|---|
 | 0.0-0.15 | 10 | 6.92 | 3/242 (0) | 0/242 (0) | 0/242 (0) | 3 | 0 |
 | 0.0-0.15 | 15 | 10.37 | 216/242 (0) | 0/242 (0) | 0/242 (0) | 216 | 0 |
@@ -290,7 +290,7 @@ Crowded blocks, every strength and drift: this search 4417/6710; turboSETI 853/6
 
 ### Lenient, at the published cuts (this search 10, turboSETI 10, pickles level 1, its masks off)
 
-| drift (Hz/s) | S_in | Jy Hz | this search | turboSETI | pickles | here, not turboSETI | turboSETI, not here |
+| drift (Hz/s) | S_in | Jy Hz (nominal: SEFD 10 Jy assumed) | this search | turboSETI | pickles | here, not turboSETI | turboSETI, not here |
 |---|---|---|---|---|---|---|---|
 | 0.0-0.15 | 10 | 6.92 | 3/242 (0) | 0/242 (0) | 0/242 (0) | 3 | 0 |
 | 0.0-0.15 | 15 | 10.37 | 216/242 (0) | 0/242 (0) | 0/242 (0) | 216 | 0 |
@@ -354,7 +354,7 @@ Crowded blocks, every strength and drift: this search 4790/6710; turboSETI 864/6
 
 ### All three ON looks, at the matched cuts (this search 30, turboSETI 30: 0.1 false candidates a block)
 
-| drift (Hz/s) | S_in | Jy Hz | this search | turboSETI | here, not turboSETI | turboSETI, not here |
+| drift (Hz/s) | S_in | Jy Hz (nominal: SEFD 10 Jy assumed) | this search | turboSETI | here, not turboSETI | turboSETI, not here |
 |---|---|---|---|---|---|---|
 | 0.0-0.15 | 10 | 6.92 | 0/242 (0) | 0/242 (0) | 0 | 0 |
 | 0.0-0.15 | 15 | 10.37 | 0/242 (0) | 0/242 (0) | 0 | 0 |
@@ -418,7 +418,7 @@ Crowded blocks, every strength and drift: this search 2235/6710; turboSETI 209/6
 
 ### Strict (member hits), at the matched cuts (this search 30, turboSETI 30: 0.1 false candidates a block)
 
-| drift (Hz/s) | S_in | Jy Hz | this search | turboSETI | here, not turboSETI | turboSETI, not here |
+| drift (Hz/s) | S_in | Jy Hz (nominal: SEFD 10 Jy assumed) | this search | turboSETI | here, not turboSETI | turboSETI, not here |
 |---|---|---|---|---|---|---|
 | 0.0-0.15 | 10 | 6.92 | 0/242 (0) | 0/242 (0) | 0 | 0 |
 | 0.0-0.15 | 15 | 10.37 | 0/242 (0) | 0/242 (0) | 0 | 0 |

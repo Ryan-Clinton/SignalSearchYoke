@@ -158,7 +158,7 @@ Left unexplained by the checks:
 
 ### All three ON looks, at the published cuts (this search 10, turboSETI 10, pickles level 1, its masks off)
 
-| drift (Hz/s) | S_in | Jy Hz | this search | turboSETI | pickles | here, not turboSETI | turboSETI, not here |
+| drift (Hz/s) | S_in | Jy Hz (nominal: SEFD 10 Jy assumed) | this search | turboSETI | pickles | here, not turboSETI | turboSETI, not here |
 |---|---|---|---|---|---|---|---|
 | 0.0-0.15 | 10 | 7.02 | 5/242 (0) | 0/242 (0) | 0/242 (1) | 5 | 0 |
 | 0.0-0.15 | 15 | 10.53 | 198/242 (0) | 0/242 (0) | 0/242 (0) | 198 | 0 |
@@ -222,7 +222,7 @@ Crowded blocks, every strength and drift: this search 3797/6710; turboSETI 678/6
 
 ### Three hits, at the published cuts (this search 10)
 
-| drift (Hz/s) | S_in | Jy Hz | this search |
+| drift (Hz/s) | S_in | Jy Hz (nominal: SEFD 10 Jy assumed) | this search |
 |---|---|---|---|
 | 0.0-0.15 | 10 | 7.02 | 0/242 (0) |
 | 0.0-0.15 | 15 | 10.53 | 48/242 (0) |
@@ -286,7 +286,7 @@ Crowded blocks, every strength and drift: this search 3334/6710.
 
 ### Strict (member hits), at the published cuts (this search 10, turboSETI 10, pickles level 1, its masks off)
 
-| drift (Hz/s) | S_in | Jy Hz | this search | turboSETI | pickles | here, not turboSETI | turboSETI, not here |
+| drift (Hz/s) | S_in | Jy Hz (nominal: SEFD 10 Jy assumed) | this search | turboSETI | pickles | here, not turboSETI | turboSETI, not here |
 |---|---|---|---|---|---|---|---|
 | 0.0-0.15 | 10 | 7.02 | 5/242 (0) | 0/242 (0) | 0/242 (1) | 5 | 0 |
 | 0.0-0.15 | 15 | 10.53 | 198/242 (0) | 0/242 (0) | 0/242 (0) | 198 | 0 |
@@ -350,7 +350,7 @@ Crowded blocks, every strength and drift: this search 3927/6710; turboSETI 685/6
 
 ### Lenient, at the published cuts (this search 10, turboSETI 10, pickles level 1, its masks off)
 
-| drift (Hz/s) | S_in | Jy Hz | this search | turboSETI | pickles | here, not turboSETI | turboSETI, not here |
+| drift (Hz/s) | S_in | Jy Hz (nominal: SEFD 10 Jy assumed) | this search | turboSETI | pickles | here, not turboSETI | turboSETI, not here |
 |---|---|---|---|---|---|---|---|
 | 0.0-0.15 | 10 | 7.02 | 5/242 (0) | 0/242 (0) | 0/242 (1) | 5 | 0 |
 | 0.0-0.15 | 15 | 10.53 | 198/242 (0) | 0/242 (0) | 0/242 (0) | 198 | 0 |

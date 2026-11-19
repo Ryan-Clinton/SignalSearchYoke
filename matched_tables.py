@@ -281,7 +281,7 @@ def _iv(x):
 
 def _rec_table(tab, ps):
     both = "turboseti" in ps and "ours" in ps
-    out = ["| drift (Hz/s) | S_in | Jy Hz | " + " | ".join(NAME[p] for p in ps)
+    out = ["| drift (Hz/s) | S_in | Jy Hz (nominal: SEFD 10 Jy assumed) | " + " | ".join(NAME[p] for p in ps)
            + (" | here, not turboSETI | turboSETI, not here |" if both else " |"),
            "|---" * (3 + len(ps) + (2 if both else 0)) + "|"]
     for row in tab["all"]:
