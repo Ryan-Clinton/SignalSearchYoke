@@ -274,31 +274,32 @@ def _sessions(rows):
 
 
 def candidates(replies, say=print):
-    """(telescope, band, session, rows, by_target) in the rule's order."""
-    order = []
-    parkes = _query(replies, telescope=TELESCOPE_FIRST)
-    by_target = parkes is None
+    """(telescope, band, session, rows, by_target) in the rule's order. The
+    telescope is each file's own listed telescope: the archive does not
+    filter by a telescope parameter (asked for Parkes, it lists Green Bank's
+    files too), so the parameter is never trusted."""
+    rows = _query(replies, telescope=TELESCOPE_FIRST)
+    by_target = not rows
     if by_target:
-        parkes = [r for t in TARGETS for r in (_query(replies, target=t, telescope=TELESCOPE_FIRST) or [])]
-    seen = {str(r.get("telescope")) for r in parkes if r.get("telescope")}
-    say(f"{TELESCOPE_FIRST}: {len(parkes)} files listed{' (by target)' if by_target else ''}", flush=True)
-    for s, rows in _sessions(parkes).items():
-        order.append((TELESCOPE_FIRST, None, s, rows, by_target))
-    gbt = _query(replies, telescope="GBT")
-    gbt_by_target = gbt is None
-    if gbt_by_target:
-        gbt = [r for t in TARGETS for r in (_query(replies, target=t) or []) if _is_gbt(r.get("telescope"))]
-    seen |= {str(r.get("telescope")) for r in gbt if r.get("telescope")}
-    say(f"Green Bank: {len(gbt)} files listed{' (by target)' if gbt_by_target else ''}", flush=True)
-    others = sorted(t for t in seen if t.lower() != TELESCOPE_FIRST.lower() and not _is_gbt(t))
-    for tel in others:
-        rows = _query(replies, telescope=tel) or []
-        for s, rs in _sessions(rows).items():
-            order.append((tel, None, s, rs, False))
+        rows = [r for t in TARGETS for r in (_query(replies, target=t) or [])]
+    else:
+        rows += _query(replies, telescope="GBT") or []
+    seen = {}
+    for r in rows:
+        seen.setdefault(r.get("url"), r)
+    rows = list(seen.values())
+    tels = sorted({str(r.get("telescope")) for r in rows if r.get("telescope")})
+    say(f"{len(rows)} files listed{' (by target)' if by_target else ''}, telescopes {tels}", flush=True)
+    first = [t for t in tels if t.lower() == TELESCOPE_FIRST.lower()]
+    others = [t for t in tels if t.lower() != TELESCOPE_FIRST.lower() and not _is_gbt(t)]
+    order = []
+    for tel in first + others:
+        for s_, rs in _sessions([r for r in rows if str(r.get("telescope")) == tel]).items():
+            order.append((tel, None, s_, rs, by_target))
+    gbt = [r for r in rows if _is_gbt(r.get("telescope"))]
     for band, _, _ in BANDS:
-        rows = [r for r in gbt if _band(r.get("center_freq")) == band]
-        for s, rs in _sessions(rows).items():
-            order.append(("GBT", band, s, rs, gbt_by_target))
+        for s_, rs in _sessions([r for r in gbt if _band(r.get("center_freq")) == band]).items():
+            order.append(("GBT", band, s_, rs, by_target))
     return order
 
 
