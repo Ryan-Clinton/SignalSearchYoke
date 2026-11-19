@@ -156,6 +156,11 @@ def detector_cause(sig, cut=10.0):
         return "found"
     if any(any(c["matching_hit_snr"] is not None for c in lk.get("raised_caps", [])) for lk in miss):
         return "the hit cap"
+    # A hit within a few channels and 0.2 Hz/s that blanked the track and is as bright: the signal itself,
+    # found but measured outside +-6 Hz and +-0.05 Hz/s.
+    if any(any(abs(h["df_channels"]) <= 10 and abs(h["drift_hz_s"] - sig["drift"]) <= 0.2 and h["snr"] >= cut
+               for h in lk["blanked_by_others"]["hits"]) for lk in miss):
+        return "found, but measured outside the tolerances"
     if any(lk["blanked_by_others"]["share"] >= 0.25 for lk in miss):
         return "blanked for a stronger hit"
     if any(lk["exact_track"]["snr"] < cut and lk["exact_track"]["block_noise_over_median"] >= 1.5 for lk in miss):
@@ -167,10 +172,29 @@ def detector_cause(sig, cut=10.0):
 
 def detector_sentence(det):
     from collections import Counter
-    c = Counter(detector_cause(s) for s in det["signals"])
+    causes = {(s["block"], s["tone"]): detector_cause(s) for s in det["signals"]}
+    c = Counter(causes.values())
     parts = ", ".join(f"{v} {k}" for k, v in c.most_common())
-    return (f"The {len(det['signals'])} signals the detector gave no matching hit for were measured through its "
-            f"stages, the detector unchanged; the first cause in each: {parts}.")
+    out = (f"The {len(det['signals'])} signals the detector gave no matching hit for were measured through its "
+           f"stages, the detector unchanged; the first cause in each: {parts}.")
+    capped = [x["matching_hit_snr"] for s in det["signals"] if causes[(s["block"], s["tone"])] == "the hit cap"
+              for lk in s["looks"] for x in lk.get("raised_caps", []) if x["matching_hit_snr"] is not None]
+    caps = [x["cap"] for s in det["signals"] if causes[(s["block"], s["tone"])] == "the hit cap"
+            for lk in s["looks"] for x in lk.get("raised_caps", []) if x["matching_hit_snr"] is not None]
+    if capped:
+        out += (f" The hit cap is the 2,000 hits kept a look: in crowded looks the signal, at S/N {min(capped):g} "
+                f"to {max(capped):g}, lies below that many stronger hits, and a cap of {min(caps):,} to "
+                f"{max(caps):,} finds it.")
+    off = [s for s in det["signals"] if causes[(s["block"], s["tone"])] == "found, but measured outside the tolerances"]
+    if off:
+        dd = [abs(h["drift_hz_s"] - s["drift"]) for s in off for lk in s["looks"] if lk["matching_hit_snr"] is None
+              for h in lk["blanked_by_others"]["hits"][:1]]
+        out += (" Those measured outside the tolerances drift fast ("
+                + " and ".join(f"{abs(s['drift']):.1f}" for s in off)
+                + " Hz/s); their measured drift was "
+                + (f"{min(dd):.2f}" if f"{min(dd):.2f}" == f"{max(dd):.2f}" else f"{min(dd):.2f} to {max(dd):.2f}")
+                + " Hz/s off, just outside the tolerance.")
+    return out + " Neither is changed here: the detector stays as step 10 ran it."
 
 
 def main():

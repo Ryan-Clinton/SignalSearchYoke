@@ -913,6 +913,20 @@ docs/results/KIC8462852-AGBT17A_999_68-bliss.md):**
   hits, spectrum by spectrum. In the summary's flags, an OFF look over
   OFF_MAX is counted only in the events built
   (`off_over_off_max_in_events`), not along every planted track.
+  **Measured, 19 November 2026** (`data/analysis/bliss_only/
+  detector_misses.json`): of the 8, **6 are the hit cap**: in crowded
+  looks (blocks 35, 128, 129) the detector keeps 2,000 hits a look,
+  strongest first, and the signal, at S/N 12.3 to 40.6 on its own track,
+  lies below that many stronger ones; with the cap at 5,000, 10,000 or
+  20,000 it is picked, matching. Its block's noise is not inflated (0.77
+  to 1.42 of the look's median) and no other hit's blanking touches it.
+  **2 are found but measured outside the tolerances** (blocks 96 and 113,
+  drifts -2.04 and 1.59 Hz/s): the detector picks the signal itself, at
+  S/N 52 and 90, 2 to 4 channels off and 0.05 Hz/s off in drift, just
+  outside ±6 Hz and ±0.05 Hz/s, so it does not count as found. Neither the
+  cap nor the drift measurement is changed: step 12 runs the detector as
+  step 10 did, and a change would be a new version with its own
+  validation.
 
 **Done when:** BLISS's false curve, matched cut and recovery by drift and
 strength are on step 4's page beside the other two, with the signals

@@ -76,6 +76,7 @@ Looked at afterwards, not one of the criteria: nearly all of this search's false
 - The 2017 session's cuts were chosen on the same blocks they were judged on. Only the 2016 session was fixed in advance, and there both false rates failed.
 - BLISS's hits through this search's test, and the same-hit control, are combinations of two pipelines, designed after the main result was seen.
 - Of the planted signals BLISS finds at S/N 10 and this search raises no candidate for, 28 were traced stage by stage. 17 are found strongly in all three ON looks and then called interference because one OFF look reaches S/N 6 to 8 along the track with no OFF transmission identified: low-level OFF evidence consistent with noise (0.66% of 10,000 random unplanted tracks reach 6; that is the test's rate on noise, not a loss rate for these signals, which were chosen because BLISS found them). 2 meet something real in an OFF look, 7 are missed by the detector (mostly in crowded blocks) and 2 are too faint. The threshold was set beforehand and is not moved for this.
+- The 8 signals the detector gave no matching hit for were measured through its stages, the detector unchanged; the first cause in each: 6 the hit cap, 2 found, but measured outside the tolerances. The hit cap is the 2,000 hits kept a look: in crowded looks the signal, at S/N 12.3 to 40.6, lies below that many stronger hits, and a cap of 5,000 to 20,000 finds it. Those measured outside the tolerances drift fast (2.0 and 1.6 Hz/s); their measured drift was 0.05 Hz/s off, just outside the tolerance. Neither is changed here: the detector stays as step 10 ran it.
 - A third session, chosen by a rule fixed in advance, is still to be measured; until it is, nothing here is claimed beyond these two sessions.
 
 ## Data and code availability
@@ -99,4 +100,5 @@ The observations are from the Breakthrough Listen Open Data Archive (Lebofsky et
 - bliss_control/block_035.json: finished 2026-11-18T15:20:01Z
 - bliss_control/block_129.json: finished 2026-11-18T15:37:02Z
 - data/analysis/bliss_only/trace_summary.json: written 2026-11-19T00:54:45Z, commit 2b1b22b
+- data/analysis/bliss_only/detector_misses.json: written 2026-11-19T02:28:46Z, commit 3fd7837
 - data/measurements/off_null.json: written 2026-11-11T02:41:54Z, commit e5f6c77
