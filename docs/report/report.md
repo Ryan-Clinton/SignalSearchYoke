@@ -1,6 +1,6 @@
 # Comparing radio-signal searches on Breakthrough Listen data
 
-Ryan Clinton. Version 1.1, 2026-11-19.
+Ryan Clinton. Version 1.2, 2026-11-19.
 
 ## Summary
 
@@ -10,7 +10,9 @@ On a 2017 session (KIC8462852), at the cut where each pipeline's measured false-
 
 On a second session, fixed in advance (HIP17147, 2016), this search again found far more than turboSETI (4,337 against 417), but both pipelines **failed** the false-candidate limit set beforehand: 39.1 and 1.27 a block against 0.1, almost all of this search's in known satellite bands. That failure is part of the result.
 
-These are two sessions from one telescope. They do not show better sensitivity in general.
+On a third session, chosen by a rule from the archive's metadata and fixed in advance (NGC6946, a galaxy, at C band in 2019), every criterion held: this search found 2,404 of 7,040 signals against turboSETI's 247, and neither raised a false candidate. That band was quiet (3 of 64 blocks crowded), and 64 blocks leave the rates' intervals reaching 0.12, above the limit.
+
+These are three sessions from one telescope. They do not show better sensitivity in general.
 
 ## The question
 
@@ -24,7 +26,7 @@ Searches for narrowband technosignatures look for a tone drifting steadily in fr
 - **False candidates** are counted by running each pipeline with the wrong looks called ON: the 19 other ways of choosing three of the six looks. Anything a pipeline keeps under a wrong choice is interference or noise. Candidates sharing a hit count once.
 - **Matched comparison.** Each pipeline's cut (its signal-to-noise threshold) is set where it gives at most 0.1 false candidates a block, and recovery is compared there.
 - **Pipelines.** turboSETI 2.3.2; BLISS at commit 2b98afe with its GPU backend and its own event stage; this search, which sums along every drift up to ±4 Hz/s with the smear removed, keeps hits from S/N 5 as shadow hits, and calls a candidate only when every ON look shows the signal and no OFF look does.
-- **The second session** used criteria frozen before its data was read, with a fingerprint of the code checked at each stage.
+- **The second and third sessions** used criteria frozen before their data was read, with a fingerprint of the code checked at each stage; the third was chosen by a rule fixed beforehand, from the archive's metadata alone.
 
 ## Results: the 2017 session (KIC8462852, AGBT17A_999_68)
 
@@ -69,15 +71,32 @@ At the frozen cut (30), this search raised 39.1 false candidates a block (13.6 t
 
 Looked at afterwards, not one of the criteria: nearly all of this search's false candidates lie in blocks overlapping known satellite bands (GNSS, Inmarsat). No band has been masked, and the test has not been changed, because that would be choosing the rule after seeing the result.
 
+## Results: the 2019 session, chosen and fixed in advance (NGC6946, AGBT19B_999_104)
+
+The session was chosen by a rule fixed before any listing was read: Breakthrough Listen's target list (Isaacson et al. 2017), telescopes and bands in a fixed order, the first session with a whole ON-OFF cadence and a file layout on which planted signals are recovered as on Green Bank's (checked on synthetic noise). No Parkes session qualified; this is Green Bank at C band, one recording node's 64 blocks, all measured. (A first run of the rule, on a shorter target list, found no session; the list was then extended once, before anything else was read.)
+
+| criterion, frozen before the data was read | result |
+|---|---|
+| this search's false rate | **holds, its interval reaching above the limit** |
+| turboSETI's false rate | **holds, its interval reaching above the limit** |
+| this search's recovery above turboSETI's | **holds** |
+| the pass's false rate | **holds, its interval reaching above the limit** |
+| the pass's curved recovery above production's | **holds** |
+| the pass loses none of production's recoveries | **holds** |
+
+The code changed after the freeze, once: tools/turbo_curves.py, logged as a deviation at each of the stages that ran on it and printed in the verdict. The reason logged: "tools/turbo_curves.py sets a 4 GB floor on blimpy's load limit, which follows free memory: with another program holding the RAM, blimpy kept files on disk and turboSETI refused them (data shape (1,)); the data read and every hit are unchanged" (data/step12/deviations.json).
+
+At the frozen cut (30), both pipelines raised 0 false candidates a block (95% interval 0 to 0.115), against a limit of 0.1: a rate of zero, but 64 blocks cannot show it below the limit. This search found 2,404 of 7,040 signals in all three ON looks, turboSETI 247. The curved pass found 1,621 of 3,840 curved signals against production's 265, losing 0. The band was quiet: 3 of 64 blocks crowded, against 184 of 304 in 2016.
+
 ## Limitations
 
-- Two observing sessions, one telescope, one recording pipeline. Nothing here speaks for Parkes, MeerKAT or another receiver, or for an interference environment unlike Green Bank's.
+- Three observing sessions, one telescope, one recording pipeline. Nothing here speaks for Parkes, MeerKAT or another receiver.
 - Steady drifts within ±4 Hz/s, plus one experiment with curved tracks; no pulsed or broadband signals.
-- The 2017 session's cuts were chosen on the same blocks they were judged on. Only the 2016 session was fixed in advance, and there both false rates failed.
+- The 2017 session's cuts were chosen on the same blocks they were judged on. The 2016 and 2019 sessions were fixed in advance: in 2016 both false rates failed, in a band crowded with satellite signals; in 2019 every criterion held, in a quiet band where the rate's interval still reaches above the limit.
 - BLISS's hits through this search's test, and the same-hit control, are combinations of two pipelines, designed after the main result was seen.
 - Of the planted signals BLISS finds at S/N 10 and this search raises no candidate for, 28 were traced stage by stage. 17 are found strongly in all three ON looks and then called interference because one OFF look reaches S/N 6 to 8 along the track with no OFF transmission identified: low-level OFF evidence consistent with noise (0.66% of 10,000 random unplanted tracks reach 6; that is the test's rate on noise, not a loss rate for these signals, which were chosen because BLISS found them). 2 meet something real in an OFF look, 7 are missed by the detector (mostly in crowded blocks) and 2 are too faint. The threshold was set beforehand and is not moved for this.
 - The 8 signals the detector gave no matching hit for were measured through its stages, the detector unchanged; the first cause in each: 6 the hit cap, 2 found, but measured outside the tolerances. The hit cap is the 2,000 hits kept a look: in crowded looks the signal, at S/N 12.3 to 40.6, lies below that many stronger hits, and a cap of 5,000 to 20,000 finds it. Those measured outside the tolerances drift fast (2.0 and 1.6 Hz/s); their measured drift was 0.05 Hz/s off, just outside the tolerance. Neither is changed here: the detector stays as step 10 ran it.
-- A third session, chosen by a rule fixed in advance, is still to be measured; until it is, nothing here is claimed beyond these two sessions.
+- BLISS's hits through this search's test, supplementary in the third session, could not be run there: the step that hands BLISS each block expects a slice width these blocks do not have, and the frozen rule records that rather than adapting it.
 
 ## Data and code availability
 
@@ -93,11 +112,13 @@ The observations are from the Breakthrough Listen Open Data Archive (Lebofsky et
 - 0.1 (2026-11-18): first draft.
 - 1.0 (2026-11-19): first release: the signals BLISS finds and this search misses traced stage by stage, and the detector's misses measured.
 - 1.1 (2026-11-19): the code's repository, now public, linked.
+- 1.2 (2026-11-19): the third session, chosen and fixed in advance (NGC 6946 at C band): every criterion held.
 
 ## Records this version was written from
 
 - data/measurements/matched-bliss.json: written 2026-11-18T13:42:14Z, commit 5fbaa17
 - data/measurements/step10.json: written 2026-11-14T09:41:25Z, commit de48e39
+- data/measurements/step12.json: written 2026-11-19T09:20:07Z, commit f161e25
 - bliss_control/block_035.json: finished 2026-11-18T15:20:01Z
 - bliss_control/block_129.json: finished 2026-11-18T15:37:02Z
 - data/analysis/bliss_only/trace_summary.json: written 2026-11-19T00:54:45Z, commit 2b1b22b

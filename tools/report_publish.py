@@ -34,7 +34,9 @@ SUMMARY = ("Planted signals in Breakthrough Listen's Green Bank data, counted at
 REVISIONS = (
     ("1.0", "2026-11-19", "First release: the signals BLISS finds and this search misses traced stage by stage, "
                           "and the detector's misses measured.", True),
-    ("1.1", None, "The code's repository, now public, linked.", True),
+    ("1.1", "2026-11-19", "The code's repository, now public, linked.", True),
+    ("1.2", None, "The third session, chosen and fixed in advance (NGC 6946 at C band): every criterion held.",
+     True),
 )
 CHROME = (Path("C:/Program Files/Google/Chrome/Application/chrome.exe"),
           Path("C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"))

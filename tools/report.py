@@ -21,12 +21,14 @@ ROOT = Path(__file__).resolve().parents[1]
 DATA = Path(os.environ.get("SSY_DATA") or ROOT / "data")
 OUT = ROOT / "docs" / "report" / "report.md"
 
-VERSION = "1.1"
+VERSION = "1.2"
 DATE = "2026-11-19"
 REVISIONS = (("0.1", "2026-11-18", "first draft."),
              ("1.0", DATE, "first release: the signals BLISS finds and this search misses traced stage by "
                          "stage, and the detector's misses measured."),
-             ("1.1", DATE, "the code's repository, now public, linked."))
+             ("1.1", DATE, "the code's repository, now public, linked."),
+             ("1.2", DATE, "the third session, chosen and fixed in advance (NGC 6946 at C band): every "
+                           "criterion held."))
 
 
 def load(path):
@@ -201,6 +203,12 @@ def detector_sentence(det):
 def main():
     b = load("measurements/matched-bliss.json")
     s10 = load("measurements/step10.json")
+    s12_path = DATA / "measurements" / "step12.json"
+    s12 = json.loads(s12_path.read_text(encoding="utf-8")) if s12_path.exists() else None
+    dev12_path = DATA / "step12" / "deviations.json"
+    devs12 = json.loads(dev12_path.read_text(encoding="utf-8")) if dev12_path.exists() else []
+    bliss12_path = DATA / "step12" / "bliss_status.json"
+    bliss12 = json.loads(bliss12_path.read_text(encoding="utf-8")) if bliss12_path.exists() else None
     control_dir = DATA / "matched" / f"{b['target']}-{b['session']}" / "bliss_control"
     control = [json.loads(p.read_text(encoding="utf-8")) for p in sorted(control_dir.glob("block_*.json"))]
     trace_path = DATA / "analysis" / "bliss_only" / "trace_summary.json"
@@ -256,7 +264,23 @@ def main():
       f"{fr['turboseti']['per_block']:.3g} a block against {s10['rate_limit']}, almost all of this search's "
       f"in known satellite bands. That failure is part of the result.")
     w("")
-    w("These are two sessions from one telescope. They do not show better sensitivity in general.")
+    if s12:
+        f12, r12 = s12["false_rate"], s12["recovery_three_looks"]
+        held = all(v.startswith("holds") for v in s12["criteria"].values())
+        w(f"On a third session, chosen by a rule from the archive's metadata and fixed in advance "
+          f"({s12['target']}, a galaxy, at C band in 2019), {'every criterion held' if held else 'not every criterion held'}: "
+          f"this search found {n(r12['ours']['recovered'])} of {n(r12['ours']['of'])} signals against turboSETI's "
+          f"{n(r12['turboseti']['recovered'])}, and "
+          + ("neither raised a false candidate" if f12['ours']['per_block'] == 0 == f12['turboseti']['per_block']
+             else f"they raised {f12['ours']['per_block']:.3g} and {f12['turboseti']['per_block']:.3g} false "
+                  "candidates a block")
+          + ". That band was quiet "
+          f"({s12['of']['crowded']} of {s12['blocks']} blocks crowded), and {s12['blocks']} blocks leave the "
+          f"rates' intervals reaching {f12['ours']['interval'][1]:.2g}, above the limit.")
+        w("")
+        w("These are three sessions from one telescope. They do not show better sensitivity in general.")
+    else:
+        w("These are two sessions from one telescope. They do not show better sensitivity in general.")
     w("")
     w("## The question")
     w("")
@@ -287,8 +311,9 @@ def main():
       "backend and its own event stage; this search, which sums along every drift up to ±4 Hz/s with the "
       "smear removed, keeps hits from S/N 5 as shadow hits, and calls a candidate only when every ON look "
       "shows the signal and no OFF look does.")
-    w("- **The second session** used criteria frozen before its data was read, with a fingerprint of the "
-      "code checked at each stage.")
+    w("- **The second and third sessions** used criteria frozen before their data was read, with a fingerprint "
+      "of the code checked at each stage; the third was chosen by a rule fixed beforehand, from the archive's "
+      "metadata alone.")
     w("")
     w(f"## Results: the 2017 session ({b['target']}, {b['session']})")
     w("")
@@ -365,14 +390,56 @@ def main():
       "blocks overlapping known satellite bands (GNSS, Inmarsat). No band has been masked, and the test has "
       "not been changed, because that would be choosing the rule after seeing the result.")
     w("")
+    if s12:
+        f12, r12 = s12["false_rate"], s12["recovery_three_looks"]
+        cp = s12["curved_pass"]
+        ck_ = [k for k in cp["recovery_three_looks_curved"] if k != "production"][0]
+        w(f"## Results: the 2019 session, chosen and fixed in advance ({s12['target']}, {s12['session']})")
+        w("")
+        w(f"The session was chosen by a rule fixed before any listing was read: Breakthrough Listen's target list "
+          f"(Isaacson et al. 2017), telescopes and bands in a fixed order, the first session with a whole ON-OFF "
+          f"cadence and a file layout on which planted signals are recovered as on Green Bank's (checked on "
+          f"synthetic noise). No Parkes session qualified; this is Green Bank at C band, one recording node's "
+          f"{s12['blocks']} blocks, all measured. (A first run of the rule, on a shorter target list, found no "
+          f"session; the list was then extended once, before anything else was read.)")
+        w("")
+        w("| criterion, frozen before the data was read | result |")
+        w("|---|---|")
+        for k, v in s12["criteria"].items():
+            w(f"| {k} | **{v}** |")
+        w("")
+        if devs12:
+            changed = sorted({x.split(": ", 1)[-1] for d in devs12 for x in d["problems"]})
+            w(f"The code changed after the freeze, once: {', '.join(changed)}, logged as a deviation at each of the "
+              f"stages that ran on it and printed in the verdict. The reason logged: \"{devs12[0]['why']}\" "
+              f"(data/step12/deviations.json).")
+            w("")
+        w(f"At the frozen cut ({s12['cut']}), both pipelines raised {f12['ours']['per_block']:.3g} false "
+          f"candidates a block (95% interval {iv(f12['ours']['interval'])}), against a limit of "
+          f"{s12['rate_limit']}: a rate of zero, but {s12['blocks']} blocks cannot show it below the limit. "
+          f"This search found {n(r12['ours']['recovered'])} of {n(r12['ours']['of'])} signals in all three ON "
+          f"looks, turboSETI {n(r12['turboseti']['recovered'])}. The curved pass found "
+          f"{n(cp['recovery_three_looks_curved'][ck_]['recovered'])} of "
+          f"{n(cp['recovery_three_looks_curved'][ck_]['of'])} curved signals against production's "
+          f"{n(cp['recovery_three_looks_curved']['production']['recovered'])}, losing "
+          f"{n(cp['production_recoveries_lost'])}. The band was quiet: {s12['of']['crowded']} of "
+          f"{s12['blocks']} blocks crowded, against {s10['of']['crowded']} of "
+          f"{s10['of']['crowded'] + s10['of']['clean']} in 2016.")
+        w("")
     w("## Limitations")
     w("")
-    w("- Two observing sessions, one telescope, one recording pipeline. Nothing here speaks for Parkes, "
-      "MeerKAT or another receiver, or for an interference environment unlike Green Bank's.")
+    w(f"- {'Three' if s12 else 'Two'} observing sessions, one telescope, one recording pipeline. Nothing here "
+      "speaks for Parkes, MeerKAT or another receiver.")
     w("- Steady drifts within ±4 Hz/s, plus one experiment with curved tracks; no pulsed or broadband "
       "signals.")
-    w("- The 2017 session's cuts were chosen on the same blocks they were judged on. Only the 2016 session "
-      "was fixed in advance, and there both false rates failed.")
+    if s12:
+        w("- The 2017 session's cuts were chosen on the same blocks they were judged on. The 2016 and 2019 "
+          "sessions were fixed in advance: in 2016 both false rates failed, in a band crowded with satellite "
+          "signals; in 2019 every criterion held, in a quiet band where the rate's interval still reaches above "
+          "the limit.")
+    else:
+        w("- The 2017 session's cuts were chosen on the same blocks they were judged on. Only the 2016 session "
+          "was fixed in advance, and there both false rates failed.")
     w("- BLISS's hits through this search's test, and the same-hit control, are combinations of two "
       "pipelines, designed after the main result was seen.")
     if trace:
@@ -390,8 +457,13 @@ def main():
           f"{tc['faint']} are too faint. The threshold was set beforehand and is not moved for this.")
     if det:
         w("- " + detector_sentence(det))
-    w("- A third session, chosen by a rule fixed in advance, is still to be measured; until it is, nothing "
-      "here is claimed beyond these two sessions.")
+    if not s12:
+        w("- A third session, chosen by a rule fixed in advance, is still to be measured; until it is, nothing "
+          "here is claimed beyond these two sessions.")
+    elif bliss12 and bliss12.get("not_possible"):
+        w("- BLISS's hits through this search's test, supplementary in the third session, could not be run "
+          "there: the step that hands BLISS each block expects a slice width these blocks do not have, and the "
+          "frozen rule records that rather than adapting it.")
     w("")
     w("## Data and code availability")
     w("")
@@ -416,7 +488,10 @@ def main():
     w("")
     w("## Records this version was written from")
     w("")
-    for name, r in (("data/measurements/matched-bliss.json", b), ("data/measurements/step10.json", s10)):
+    for name, r in (("data/measurements/matched-bliss.json", b), ("data/measurements/step10.json", s10),
+                    ("data/measurements/step12.json", s12)):
+        if r is None:
+            continue
         pv = r.get("provenance", {})
         w(f"- {name}: written {pv.get('created_utc', r.get('written_utc'))}, commit "
           f"{str(pv.get('git_commit', ''))[:7]}")

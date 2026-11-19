@@ -1121,7 +1121,42 @@ block when a session has no more than 121, and fills a shortfall of
 clean blocks with crowded ones (step 10's choice never reached either).
 BLISS through this search's test runs after the verdict, supplementary.
 
+**Run, 19 November 2026; the verdict: every criterion holds**
+(docs/results/NGC6946-AGBT19B_999_104-step12.md, as generated;
+data/measurements/step12.json). At SNR 30 over the 64 blocks, both
+pipelines raised no false candidate (0 a block, 95% interval 0 to
+0.115: "holds, its interval reaching above the limit", since 64 blocks
+cannot show a rate below 0.1); this search found 2,404 of 7,040 planted
+signals in all three ON looks, turboSETI 247 (paired, +0.306, 0.302 to
+0.311); the curved pass found 1,621 of 3,840 curved signals against
+production's 265, losing none, with no false candidates. The band is
+quiet: 3 of 64 blocks crowded, against 184 of 304 in step 10's L band.
+So the method held in a clean environment as fixed beforehand; it is
+not evidence that it holds in a crowded one, where step 10 failed.
+
+Three things went wrong in the running, none in the measurement:
+- the runner started the curved pass with the measurement, before the
+  measurement had written its block list, and the curved shards stopped
+  at once (5dd0ec2: the curved pass now waits for it);
+- another project's jobs in WSL took most of the RAM, and blimpy, which
+  sizes what it loads by free memory, kept turboSETI's files on disk, so
+  turboSETI saw one spectrum and refused them (block 31, and the
+  regression). Fixed by a 4 GB floor on that limit in
+  tools/turbo_curves.py (f161e25), which changes no data or hit; as a
+  frozen file changed, every stage after it ran with the reason logged
+  as a deviation (data/step12/deviations.json, printed in the verdict),
+  and the regression against step 10 passed again with it;
+- the measurement and the curved pass were then run one after the other,
+  three workers each (237e569).
+
+**The supplementary BLISS measurement could not be run:** the step that
+hands BLISS a block (tools/bliss_curves.py) pads each slice to one coarse
+channel and expects 1,048,575 channels; this session's saved slices have
+1,048,574 or 1,048,576. By the frozen rule that is recorded
+(data/step12/bliss_status.json) and not adapted.
+
 **Done when:** its verdict is published beside step 10's, as generated.
+**Done, 19 November 2026.**
 
 ## 3. What this plan does not do
 
