@@ -113,7 +113,10 @@ def main():
     run("independent.py", "--step", "12", "check")
     run("independent.py", "--step", "12", "sweep")
     run("independent.py", "--step", "12", "choose")
-    parallel("measure", "curved")
+    # One stage at a time: six workers at once left too little free memory for blimpy, which then loads
+    # one spectrum of a file and turboSETI refuses it (block 31, 19 Nov).
+    parallel("measure")
+    parallel("curved")
     run("independent.py", "--step", "12", "verdict")
     bliss()
     say("step 12: done")
