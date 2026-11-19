@@ -25,8 +25,8 @@ owner's go.
 | vetting | ten checks after blc1, with chance rates | blc1 by hand; SETI@home and UCLA by filters and scores |
 | completeness | 3,257 planted, end to end, by drift | SETI@home: birdies through the back end; UCLA: 10,000 chirps in voltages; BL: none in Price 2020 |
 | discovery completeness (does a planted signal rank high enough to be looked at?) | step 5: ranked first among this sweep's 11 for 94-100% of kept birdies (87-95% in bands near zero drift); a low bar: held-out wrong-cadence candidates marked only for crowding outrank 44% | SETI@home: top-100 rank, power at 80% uncovered |
-| pipelines compared at matched sensitivity | against turboSETI, one session (step 4: 4,520 against 442 of 13,310 at about matched wrong-cadence rates); step 10 tests another | UCLA: equal injected power and tolerances |
-| **against the pipelines made to improve on turboSETI** | **not run: BLISS, hyperseti** (step 11) | UCLA against turboSETI only (Margot 2023) |
+| pipelines compared at matched sensitivity | against turboSETI, one session (step 4: 4,520 against 442 of 13,310 at about matched wrong-cadence rates); step 10 tested another, fixed in advance: both failed its false-candidate limit | UCLA: equal injected power and tolerances |
+| **against the pipelines made to improve on turboSETI** | **BLISS run** (step 11): as published it reached the matched rate at no cut tested; its hits through this search's ON/OFF test found 4,048 of 13,310. **hyperseti not run** | UCLA against turboSETI only (Margot 2023) |
 | **interference history across sessions** | **one cadence's OFF looks** | SETI@home: 14 years of frequency zones; Price: like events at other stars |
 | **chance rates** | **check 6: each file's hits near the candidate; checks 7, 8: uniform** | SETI@home: empirical score distributions |
 | flux scale | SEFD measured, 10.65 Jy (step 2, 3C295) | assumed (Price, Lebofsky); 12.5 Jy from the Proposer's Guide |
