@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DATA = Path(os.environ.get("SSY_DATA") or ROOT / "data")
 OUT = ROOT / "docs" / "report" / "report.md"
 
-VERSION = "1.4"
+VERSION = "1.5"
 DATE = "2026-11-19"
 REVISIONS = (("0.1", "2026-11-18", "first draft."),
              ("1.0", DATE, "first release: the signals BLISS finds and this search misses traced stage by "
@@ -35,7 +35,9 @@ REVISIONS = (("0.1", "2026-11-18", "first draft."),
                            "whole pipelines do and do not measure."),
              ("1.4", DATE, "recovery weighted to each session's share of crowded and clean blocks beside the "
                            "sample's; the neighbouring-block check made over consecutive blocks of the session; "
-                           "the matched cut by one rule throughout; the blocks of each session stated."))
+                           "the matched cut by one rule throughout; the blocks of each session stated."),
+             ("1.5", DATE, "checks of the planted signals: a tone in the voltages, finer sampling, the DC bin and "
+                           "a fixed flux, none of which moves recovery."))
 
 
 def load(path):
@@ -216,6 +218,11 @@ def main():
     devs12 = json.loads(dev12_path.read_text(encoding="utf-8")) if dev12_path.exists() else []
     bliss12_path = DATA / "step12" / "bliss_status.json"
     bliss12 = json.loads(bliss12_path.read_text(encoding="utf-8")) if bliss12_path.exists() else None
+    inj = {}
+    for name in ("voltage", "substeps", "dc", "flux"):
+        pth = DATA / "analysis" / f"injection_{name}.json"
+        if pth.exists():
+            inj[name] = json.loads(pth.read_text(encoding="utf-8"))
     ops_path = DATA / "analysis" / "operating_points.json"
     ops = json.loads(ops_path.read_text(encoding="utf-8")) if ops_path.exists() else None
     control_dir = DATA / "matched" / f"{b['target']}-{b['session']}" / "bliss_control"
@@ -315,6 +322,25 @@ def main():
       "Each look's signal is scaled to that look's own measured noise, so a signal has the same S_in in every "
       "ON look: this measures recovery at a controlled signal-to-noise, not of a transmitter of fixed flux "
       "whose signal-to-noise would vary from look to look.")
+    if len(inj) == 4:
+        def moved(rec):
+            ks = list(rec["totals"])
+            a, b = rec["totals"][ks[0]], rec["totals"][ks[1]]
+            return max(abs(a[k] - b[k]) for k in a if k != "signals"), a["signals"]
+        mv = {k: moved(inj[k]) for k in ("voltage", "dc", "flux")}
+        vt = inj["voltage"]["totals"]
+        mv["voltage"] = (max(abs(vt["voltage, 51 FFTs"][k] - vt["power, 32 sub-steps (in use)"][k])
+                             for k in vt["voltage, 51 FFTs"] if k != "signals"), vt["voltage, 51 FFTs"]["signals"])
+        w("- **The planting, checked** (separately, both pipelines, recovery at SNR 10 and 30): a tone added "
+          "to synthetic voltages before they are squared, as a receiver sees it, against power added to the "
+          f"spectra (at most {mv['voltage'][0]} of {n(mv['voltage'][1])} signals apart); finer sampling of the "
+          "drift within a spectrum (the same recoveries); signals crossing the DC bin planted before its "
+          f"blanking, as the sky's would be, against after (at most {mv['dc'][0]} of {n(mv['dc'][1])}; only "
+          f"{sum(c['crossing_dc_in_an_on_look'] for c in inj['dc']['census'].values())} planted signals in all "
+          "three sessions cross a DC bin); and one flux in all three ON looks against one S_in, on real blocks "
+          f"(at most {mv['flux'][0]} of {n(mv['flux'][1])}). None changes either pipeline's recovery, or one "
+          "against the other. Flux in Jy Hz on the results pages is nominal, from an assumed SEFD of 10 Jy "
+          "measured at L and S band only.")
     w(f"- **Found** means detected in all three ON looks within ±{m['tol_hz']:g} Hz and ±{m['tol_drift']:g} Hz/s "
       "of the planted signal (the tolerances of Margot et al. 2023).")
     w(f"- **False candidates** are counted by running each pipeline with the wrong looks called ON: the {m['wrong']} "
@@ -564,6 +590,7 @@ def main():
     for c in control:
         w(f"- bliss_control/block_{c['block']:03d}.json: finished {c['finished_utc']}")
     for name, r in (("data/analysis/operating_points.json", ops),
+                    *((f"data/analysis/injection_{k}.json", v) for k, v in inj.items()),
                     ("data/analysis/bliss_only/trace_summary.json", trace),
                     ("data/analysis/bliss_only/detector_misses.json", det),
                     ("data/measurements/off_null.json", off_null)):

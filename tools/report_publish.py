@@ -40,8 +40,10 @@ REVISIONS = (
     ("1.3", "2026-11-19", "Recovery at every tested cut for all three sessions; step 12 described as meeting its "
                           "criteria at the point estimate; what the injections and the false-candidate control "
                           "measure.", True),
-    ("1.4", None, "Recovery weighted to each session's crowded and clean blocks beside the sample's; the "
-                  "neighbouring-block check over consecutive blocks; one rule for the matched cut.", True),
+    ("1.4", "2026-11-19", "Recovery weighted to each session's crowded and clean blocks beside the sample's; "
+                          "the neighbouring-block check over consecutive blocks; one rule for the matched cut.", True),
+    ("1.5", None, "Checks of the planted signals (a tone in the voltages, finer sampling, the DC bin, a fixed "
+                  "flux): none moves recovery.", True),
 )
 CHROME = (Path("C:/Program Files/Google/Chrome/Application/chrome.exe"),
           Path("C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"))
