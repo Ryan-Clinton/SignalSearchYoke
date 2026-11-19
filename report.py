@@ -753,11 +753,11 @@ def markdown(r):
     lines += other_pipelines(r)
     lines += ["## How", "",
               "Runs that made the current results (from the store's `runs` table):", "",
-              "| run | started (UTC) | commit | uncommitted | host | python | libraries |", "|---|---|---|---|---|---|---|"]
+              "| run | started (UTC) | commit | uncommitted | python | libraries |", "|---|---|---|---|---|---|"]
     for run in r["runs"]:
         libs = json.loads(run["libraries"] or "{}")
         lines.append(f"| {run['run_id']} | {run['started_utc']} | `{(run['git_commit'] or '')[:10]}` | "
-                     f"{'yes' if run['uncommitted_changes'] else 'no'} | {run['host']} | {run['python']} | "
+                     f"{'yes' if run['uncommitted_changes'] else 'no'} | {run['python']} | "
                      + ", ".join(f"{k} {v}" for k, v in libs.items()) + " |")
     lines += ["", "To repeat it: clone the repository at the commit above, `pip install -r requirements.txt`, "
               f"then `seti.py sweep {r['target']} --blocks {r['blocks_total']}`, `check.py`, `seti.py report "

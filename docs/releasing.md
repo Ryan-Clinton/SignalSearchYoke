@@ -8,6 +8,8 @@ below is the last time it was run.
 
 ## Before the repository is public
 
+Made public on 19 November 2026, after the checks below.
+
 | Check | How | State, 19 November 2026 |
 |---|---|---|
 | A licence for the project's own code | `LICENSE` at the root, named in `pyproject.toml` and `CITATION.cff` | MIT, 19 November 2026. The two BLISS-derived files stay under BLISS's BSD 3-Clause licence (THIRD_PARTY_NOTICES.md) |
@@ -16,7 +18,7 @@ below is the last time it was run.
 | What the history says about the author | the scan's commit identities; old versions of the docs | three identities: the author's name with a personal e-mail address (the commits up to 19 November 2026), and two GitHub noreply addresses; this repository commits under the noreply address from then on. Kept: the author judged the exposure small against breaking the commit IDs the docs and records cite. Old versions of HANDOVER.md, docs/multiuser.md and docs/publishing.md describe the author's work server and the site's posting in general terms (no address or credential); the current ones do not. Rewriting history would change every commit ID the docs and records cite (step 10's deviation log among them); **the author's decision** |
 | The offline tests pass | GitHub Actions, `tests` (read-only token) | Linux on Python 3.11, 3.12 and 3.13, Windows and macOS on 3.12 |
 | A newcomer's first steps work | `python tests/integration_quickstart.py`, or the `quick start` workflow by hand (Linux and Windows): `find`, then the README's 3 MHz search, against the hits it gave | 19 November: 10 hits, 271 shadow hits, the strongest at 2250.146695 MHz, 100 MB read. 18 November: the quick start on a copy with no `data/` and a new environment |
-| Private vulnerability reporting, which SECURITY.md points to | Settings, Code security | GitHub offers it only on public repositories: switched on right after the switch |
+| Private vulnerability reporting, which SECURITY.md points to | Settings, Code security | switched on 19 November 2026, when the repository was made public |
 | A version to point at | a tag, `v0.1.0`, and a CHANGELOG from it | after the switch |
 | Pushes to `main` | a ruleset requiring the `tests` checks, with the owner able to bypass | the author's choice after the switch: the project is worked on by pushing to `main` directly, which a rule without a bypass would stop |
 
