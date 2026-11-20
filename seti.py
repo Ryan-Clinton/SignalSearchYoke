@@ -618,6 +618,13 @@ def sweep(target, count=1, say=print, get=requests.get, files=None):
         db = store.connect()
         session, urls, scans = _cadence_files(db, target, get, say, files)
         indexes = reading.prepare(urls)
+        # One cadence a session in this store (until cadences have ids): refused before any file is registered,
+        # so a refused cadence leaves nothing behind that would stop the session's own from resuming.
+        held = [r[0] for r in db.execute("SELECT url FROM files WHERE session=? AND cadence_position IS NOT NULL"
+                                         " ORDER BY cadence_position", (session,))]
+        if held and held != list(urls):
+            raise yoke.Refusal("INVALID_REQUEST", f"session {session} already holds another cadence in the store; "
+                                                  "a second cadence of a session needs cadence ids (planned)")
         file_ids = [store.upsert_file(db, index, session=session,
                                       target=(scans[i]["target"] if scans else None), cadence_target=target,
                                       position=i, is_on=i % 2 == 0) for i, index in enumerate(indexes)]

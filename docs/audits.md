@@ -849,3 +849,9 @@ found is real in the schema and now guarded; nothing has been overwritten
 | F24-08: recurrence visits every file per candidate | medium | **agreed; planned**: a benchmark, then set-based retrieval with the same matching. |
 | F24-09: no resource budget | medium | **agreed; planned** (about 92 GB and 1.9 hours a 2017-like cadence, measured here). |
 | F24-10: the survey's objective | medium | **agreed; planned**: fixed before the first survey observation. |
+
+### 24, re-audited at 3f3d39f, 20 November 2026
+
+| Finding | Severity | Verdict and what was done |
+|---|---|---|
+| The sweep registered a second cadence's files before the guard refused it, which would then block the session's own cadence | high | **confirmed; fixed.** The sweep now refuses a second cadence of a session before any file is registered; the three sessions' own cadences pass the check unchanged. |
