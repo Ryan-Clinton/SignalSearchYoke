@@ -566,7 +566,7 @@ not measured, and now is in part: `tools/coverage_checks.py` plants seven
 kinds through the search and cadence test unchanged, on synthetic cadences
 (noise only; Green Bank's channel width and sampling), six signals a
 cadence, three cadences, at S_in 30, 60 and 120, cut 10. Signals recovered
-in all three ON looks on their straight track, of 18 each:
+in all three ON looks on their straight track, of 18 each (a first pass, superseded by the corrected measurement in the re-audit below: its hop and wide signals were looked for on the straight track, and its "candidate within 200 Hz" was too loose):
 
 | kind | S_in 30 | S_in 60 | S_in 120 |
 |---|---|---|---|
