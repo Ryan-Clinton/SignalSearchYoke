@@ -522,8 +522,20 @@ def _cpu_seconds():
     return t.user + t.system
 
 
+def dc_rule():
+    """Where the DC bins are blanked: "coarse channel" (the instrument's, from 20 Nov 2026) or "storage
+    chunk" (reads before it, kept by SSY_DC_BY_CHUNK=1 to remake their records)."""
+    return "storage chunk" if os.environ.get("SSY_DC_BY_CHUNK") == "1" else "coarse channel"
+
+
+def dc_rules_differ(indexes):
+    """Whether the two DC rules blank different channels in these files (their storage chunks are not
+    their coarse channels, as in 2016); where not, searches made under either agree."""
+    return any(coarse_width(ix["attrs"], ix["chunk_shape"][2]) != ix["chunk_shape"][2] for ix in indexes)
+
+
 def search_params():
-    return {"snr_min": SNR_MIN, "shadow_min": searching.SHADOW_MIN, "max_drift_hz_s": MAX_DRIFT, "block": BLOCK,
+    return {"dc_bins": dc_rule(), "snr_min": SNR_MIN, "shadow_min": searching.SHADOW_MIN, "max_drift_hz_s": MAX_DRIFT, "block": BLOCK,
             "window_channels": WINDOW_CHANNELS, "edge_fraction": EDGE_FRACTION, "cadence_days": CADENCE_DAYS,
             "threads": reading.threads(), "method": searching.METHOD, "sk_flag": searching.SK_FLAG,
             "wide_level": searching.WIDE_LEVEL, "wide_min": searching.WIDE_MIN, "max_hits": searching.MAX_HITS,
@@ -610,8 +622,12 @@ def sweep(target, count=1, say=print, get=requests.get, files=None):
                                       target=(scans[i]["target"] if scans else None), cadence_target=target,
                                       position=i, is_on=i % 2 == 0) for i, index in enumerate(indexes)]
         block_list = blocks(indexes[0])
-        # Blocks searched by an older version of the search come first, then new ones.
+        # Blocks searched by an older version of the search come first, then new ones. Where the two DC
+        # rules blank different channels, a block counts as done only if read under the rule in force.
         done = store.done_blocks(db, session, SEARCH_VERSION)
+        if dc_rules_differ(indexes):
+            done = {k: b for k, b in done.items() if store.run_params(db, b["run_id"]).get("dc_bins", "storage chunk")
+                    == dc_rule()}
         older = [k for k in store.done_blocks(db, session) if k not in done]
         todo = (older + [k for k in range(len(block_list)) if k not in done and k not in older])[:count]
         run_id = store.start_run(db, f"sweep {target} --blocks {count} --threads {reading.threads()}", search_params(),

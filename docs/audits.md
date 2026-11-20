@@ -548,6 +548,15 @@ rest on it. Step 10's records stand as made; its verdict is frozen.
 | A14-06: damaged spectra enter the search | medium | **built in part.** A look with any non-finite sample is now refused rather than searched (audit 9 found one NaN empties a search; tested). Zero-filled and dropped-data checks stay in `instrument.dropped`, run apart. |
 | A14-07: no reader regression tests | medium | **built in part**: `tests/test_reading_integrity.py`; local against web byte for byte on a fixture is **planned**. |
 
+### 14, re-audited at fc76dd2, 20 November 2026
+
+| Finding | Severity | Verdict and what was done |
+|---|---|---|
+| A14-02 should not wait for the survey | high | **agreed; built.** `store.upsert_file` now refuses a file whose ETag or size differs from the store's (SOURCE_CHANGED): its hits and blocks belong to the version recorded, and a changed file has to be kept apart rather than relabelled (tested). |
+| The DC switch was not recorded, and the 2016 reread did not choose it | high | **confirmed; fixed.** Every run's parameters now record `dc_bins` (coarse channel, or storage chunk under the switch); where the two rules differ for a session's files (its chunks are not its coarse channels, as in 2016), a sweep resumes only blocks read under the rule in force. The search version is unchanged: for 2017 and 2019 the rules agree, and bumping it would have thrown away their current blocks. `tools/rfi2016.py` and `tools/regress_step10.py` now choose the old rule explicitly, since they check step 10's records (tested). |
+| The 2016 effect needs a comparison, not only the false candidates' frequencies | medium | **agreed; queued**: `tools/dc_checks.py` reads eight 2016 blocks (four crowded, four clean, seed 12) both ways and compares false candidates, planted signals found and hits. |
+| End-to-end reader tests | medium | **planned**: local against web on a fixture, and a source changed between runs. |
+
 ## 15. Astronomical signal coverage: 20 November 2026
 
 **Verdict:** the findings are about coverage, not defects: the published

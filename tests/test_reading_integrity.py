@@ -48,5 +48,35 @@ class Reading(unittest.TestCase):
         self.assertFalse(reading.direct_ready(dict(base, filters=[(2, 0, [4]), (1, 0, [4])])))
 
 
+    def test_dc_rule_recorded_and_switchable(self):
+        import os
+        old = os.environ.pop("SSY_DC_BY_CHUNK", None)
+        try:
+            self.assertEqual(seti.search_params()["dc_bins"], "coarse channel")
+            os.environ["SSY_DC_BY_CHUNK"] = "1"
+            self.assertEqual(seti.search_params()["dc_bins"], "storage chunk")
+        finally:
+            os.environ.pop("SSY_DC_BY_CHUNK", None)
+            if old is not None:
+                os.environ["SSY_DC_BY_CHUNK"] = old
+        ix16 = {"attrs": {"telescope_id": 6, "foff": -2.835503418452676e-06}, "chunk_shape": [1, 1, 1 << 20]}
+        ix17 = {"attrs": {"telescope_id": 6, "foff": -2.7939677238464355e-06}, "chunk_shape": [1, 1, 1 << 20]}
+        self.assertTrue(seti.dc_rules_differ([ix16]))
+        self.assertFalse(seti.dc_rules_differ([ix17]))
+
+    def test_a_changed_source_is_refused(self):
+        import store
+        db = store.connect()
+        index = {"url": "https://example.invalid/a.h5", "etag": "\"v1\"", "size": 100, "shape": [16, 1, 64],
+                 "attrs": {"tstart": 57000.0, "fch1": 1500.0, "foff": -2.79e-6, "tsamp": 18.25, "nchans": 64}}
+        store.upsert_file(db, index)
+        store.upsert_file(db, index)                                   # the same version again: fine
+        with self.assertRaises(yoke.Refusal):
+            store.upsert_file(db, dict(index, etag="\"v2\""))
+        with self.assertRaises(yoke.Refusal):
+            store.upsert_file(db, dict(index, size=101))
+        db.close()
+
+
 if __name__ == "__main__":
     unittest.main()

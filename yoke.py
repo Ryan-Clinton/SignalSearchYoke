@@ -25,6 +25,7 @@ ERRORS = {
     "NOT_FOUND": (False, "Run the step it names first."),
     "NOT_CHECKED": (False, "Run check.py on the store's candidates first."),
     "NOT_MEASURED": (False, "Run the measurement it names first."),
+    "SOURCE_CHANGED": (False, "The archive file changed since its results were made: keep them apart (a new session in the store) or recover the version recorded."),
 }
 
 

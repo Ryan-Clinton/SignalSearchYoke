@@ -294,10 +294,26 @@ def _coordinate(v):
     return _num(v)
 
 
+
+
+def run_params(db, run_id):
+    """A run's recorded parameters ({} if none)."""
+    row = db.execute("SELECT params FROM runs WHERE run_id=?", (run_id,)).fetchone()
+    return json.loads(row["params"]) if row and row["params"] else {}
+
+
 def upsert_file(db, index, session=None, target=None, cadence_target=None, position=None, is_on=None):
-    """The file's row, from its chunk index; its id."""
+    """The file's row, from its chunk index; its id. A file already in the store whose ETag or size has
+    changed is refused (yoke.Refusal SOURCE_CHANGED): its hits and blocks were made from the version
+    recorded, and are not to be mixed with or relabelled as another."""
     a = index["attrs"]
     url = index["url"]
+    old = db.execute("SELECT etag, size FROM files WHERE url=?", (url,)).fetchone()
+    if old is not None:
+        for k in ("etag", "size"):
+            if old[k] is not None and index.get(k) is not None and old[k] != index.get(k):
+                raise yoke.Refusal("SOURCE_CHANGED", f"{url}: its {k} is now {index.get(k)!r}, the store's "
+                                                     f"{old[k]!r}; its results are of the version recorded")
     scan = url.rsplit("_", 1)[-1].split(".")[0] if "_" in url else None
     row = (index.get("etag"), index.get("size"), session, scan, target, cadence_target, position,
            None if is_on is None else int(is_on), _num(a.get("tstart")), _num(a.get("fch1")), _num(a.get("foff")),

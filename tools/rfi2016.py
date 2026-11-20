@@ -50,6 +50,11 @@ made again when it differs.
 
 Writes data/analysis/rfi2016_records.json and rfi2016_reread.json.
 """
+import os
+
+# Remakes step 10's blocks and checks them against its records: the DC bins blanked as those reads
+# did, by storage chunk (seti.dc_rule).
+os.environ.setdefault("SSY_DC_BY_CHUNK", "1")
 import hashlib
 import json
 import sys
