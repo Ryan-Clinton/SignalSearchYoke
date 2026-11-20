@@ -195,7 +195,8 @@ def vet_from_store(db, e, looks, session, target, own=(), on_positions=None, hit
                        occupancy=occupancy.load(db, session), own_mhz=own_f)
 
 
-def check_event(db, row, say=print, report_dir=REPORTS):
+def check_event(db, row, say=print, report_dir=None):
+    report_dir = REPORTS if report_dir is None else report_dir    # read when called, so a test can move it
     session, block_idx = row["session"], row["block_idx"]
     looks, where, by_pos = _cadence(db, session, block_idx)
     e = _event(db, row, where)

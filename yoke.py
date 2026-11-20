@@ -85,7 +85,10 @@ def main(command, work, as_json=False):
 def provenance(record_version=1):
     """What made a record: the code's commit, whether any tracked file
     (code, config, patch, environment list) differed from it and a hash of
-    how, the libraries, the time."""
+    how (the diff itself kept under data/provenance/diffs/, so a record made
+    with local changes can be made again exactly), the command and a hash of
+    the script it ran (which may not be committed yet), the libraries, the
+    time."""
     diff_sha = None
     try:
         sha = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"], capture_output=True, text=True,
@@ -96,8 +99,19 @@ def provenance(record_version=1):
             diff = subprocess.run(["git", "-C", str(ROOT), "diff", "HEAD", "--binary"], capture_output=True,
                                   timeout=30).stdout
             diff_sha = hashlib.sha256(diff).hexdigest()
+            kept = DATA / "provenance" / "diffs" / f"{diff_sha}.patch"
+            if not kept.exists():
+                kept.parent.mkdir(parents=True, exist_ok=True)
+                kept.write_bytes(diff)
     except (OSError, subprocess.SubprocessError):
         sha, changed = None, None
+    script = Path(sys.argv[0]) if sys.argv and sys.argv[0] else None
+    try:
+        where = str(script.resolve().relative_to(ROOT)).replace("\\", "/") if script else None
+    except ValueError:
+        where = script.name
+    script_sha = (hashlib.sha256(script.read_bytes()).hexdigest()
+                  if script is not None and script.is_file() else None)
     libraries = {}
     for name in ("numpy", "h5py", "hdf5plugin", "requests"):
         try:
@@ -112,6 +126,7 @@ def provenance(record_version=1):
     except ImportError:
         pass
     return {"git_commit": sha, "uncommitted_changes": changed, "uncommitted_diff_sha256": diff_sha,
+            "command": ([where] + [str(a) for a in sys.argv[1:]]) if where else None, "script_sha256": script_sha,
             "schema_version": SCHEMA_VERSION,
             "record_version": record_version, "python": platform.python_version(), "libraries": libraries,
             "created_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}

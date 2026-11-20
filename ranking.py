@@ -3,6 +3,7 @@
 would look at it (comparable.md step 5).
 
     python ranking.py offnull               the OFF looks' S/N on random tracks (the OFF term's chance)
+    python ranking.py offnull --session S   the same on session S's own searched blocks, read again
     python ranking.py rank                  every current candidate of the store, ranked
     python ranking.py birdies [--runs N]    signals planted in the saved cadences, checked as a sweep's
                                             candidates are, scored and ranked against the real ones
@@ -111,30 +112,72 @@ def _log(p):
 
 # --- what the terms are measured against -------------------------------------
 
-def off_null(say=print):
+OFF_NULL_BLOCKS = 5                     # a session's own blocks the OFF null is measured on (offnull --session)
+
+
+def null_path(session=None):
+    """Where a session's OFF null is kept: its own file when one was measured on its blocks, otherwise the
+    saved cadences' (off_null.json, the 2017 session's reference blocks)."""
+    own = _p(f"off_null-{session}.json") if session else None
+    return own if own is not None and own.exists() else _p("off_null.json")
+
+
+def _session_cadences(session, n_blocks, seed):
+    """Up to n_blocks of the session's searched blocks (chosen by seed), each read again as the sweep read it:
+    a cadence of six looks a block, in cadence order."""
+    import seti
+    db = store.connect()
+    urls = [r["url"] for r in db.execute("SELECT url FROM files WHERE session=? AND cadence_position IS NOT NULL"
+                                         " ORDER BY cadence_position", (session,))]
+    done = sorted(store.done_blocks(db, session).items())
+    db.close()
+    if len(urls) != 6 or not done:
+        raise yoke.Refusal("NOT_FOUND", f"session {session}: no searched cadence in the store to measure on")
+    rng = np.random.default_rng(seed)
+    pick = sorted(rng.choice(len(done), size=min(n_blocks, len(done)), replace=False))
+    for i in pick:
+        k, b = done[int(i)]
+        slices = seti.read_looks(urls, min(b["f_lo_mhz"], b["f_hi_mhz"]), max(b["f_lo_mhz"], b["f_hi_mhz"]))
+        yield f"{session} block {k}", [{"s": slices[u], "raw": slices[u]["spectra"],
+                                        "sigma": measure.channel_noise(slices[u]["spectra"])} for u in urls]
+
+
+def off_null(say=print, session=None, n_blocks=OFF_NULL_BLOCKS, seed=5, tracks=OFF_NULL_TRACKS):
     """The OFF test's S/N on random tracks, unplanted, in each saved cadence:
-    OFF_NULL_TRACKS a cadence, measured as onoff.judge measures an event's."""
+    OFF_NULL_TRACKS a cadence, measured as onoff.judge measures an event's.
+    With `session`, on n_blocks of that session's own searched blocks, read
+    again (kept apart, in off_null-SESSION.json): the chance the ranking
+    gives a session's candidates is then its own looks' (ranking.context
+    refuses one measured elsewhere)."""
     values, per = [], []
-    for k, files in enumerate(measure.cadences()):
-        cad = injection.load(files)
+    if session:
+        source = _session_cadences(session, n_blocks, seed)
+    else:
+        source = ((Path(files[0]).name, injection.load(files)) for files in measure.cadences())
+    for k, (name, cad) in enumerate(source):
         _, _, looks = injection.trial(cad, [], keep_looks=True)
-        null = onoff.null_off(looks, n=OFF_NULL_TRACKS, seed=1000 + k)
+        null = onoff.null_off(looks, n=tracks, seed=1000 + k)
         got = [x for x in null["off_snr_max"] if x is not None]
         values += got
-        per.append({"cadence": Path(files[0]).name, "tracks": null["tracks"], "measured": len(got),
+        per.append({"cadence": name, "tracks": null["tracks"], "measured": len(got),
                     "over_off_max": null["over_off_max"], "median": float(np.median(got)) if got else None})
-        say(f"{Path(files[0]).name}: {len(got)} random tracks, median OFF S/N {per[-1]['median']:.2f}, "
-            f"{null['over_off_max']} over {onoff.OFF_MAX:g}", flush=True)
+        median = "-" if per[-1]["median"] is None else f"{per[-1]['median']:.2f}"
+        say(f"{name}: {len(got)} random tracks, median OFF S/N {median}, {null['over_off_max']} over "
+            f"{onoff.OFF_MAX:g}")
         for lk in looks:
             lk.flat = None
-    record = {"values": sorted(values), "cadences": per, "tracks_per_cadence": OFF_NULL_TRACKS, "kind": "measured"}
-    yoke.write(_p("off_null.json"), record, stamp=True)
+    record = {"values": sorted(values), "cadences": per, "tracks_per_cadence": tracks, "kind": "measured"}
+    if session:
+        record.update(session=session, seed=seed, blocks_asked=n_blocks)
+    yoke.write(_p(f"off_null-{session}.json") if session else _p("off_null.json"), record, stamp=True)
     return record
 
 
 def null_applies(rec, db, session):
     """The OFF null was measured on this session's cadences: their names hold its target and the MJD day
-    of one of its files."""
+    of one of its files; or it was measured on the session's own blocks (offnull --session)."""
+    if rec.get("session") is not None:
+        return rec["session"] == session
     files = db.execute("SELECT target, cadence_target, tstart_mjd FROM files WHERE session=? AND is_on=1",
                        (session,)).fetchall()
     names = {f["cadence_target"] or f["target"] for f in files}
@@ -156,14 +199,14 @@ def context(db, session, partial=False):
     in_band = sum(max(0.0, min(hi, b_hi) - max(lo, b_lo)) for lo, hi in blocks for b_lo, b_hi, _ in vetting.BANDS)
     grid = np.concatenate([np.arange(lo, hi, GRID_MHZ) for lo, hi in blocks]) if blocks else np.array([])
     counts = np.sort(np.searchsorted(freqs, grid + CROWD_MHZ, "right") - np.searchsorted(freqs, grid - CROWD_MHZ))
-    null_path = _p("off_null.json")
-    null_rec = json.loads(null_path.read_text(encoding="utf-8")) if null_path.exists() else None
+    npath = null_path(session)
+    null_rec = json.loads(npath.read_text(encoding="utf-8")) if npath.exists() else None
     if null_rec is not None and not null_applies(null_rec, db, session):
         null_rec = None                      # measured on another session's cadences: not this one's chance
     if null_rec is None and not partial:
-        raise yoke.Refusal("NOT_FOUND", "No OFF null for this session (data/measurements/off_null.json, measured on "
-                                        "its own cadences): run `ranking.py offnull`, or `ranking.py rank --partial`, "
-                                        "which leaves the OFF term out")
+        raise yoke.Refusal("NOT_FOUND", f"No OFF null for this session (data/measurements/off_null-{session}.json, "
+                                        f"measured on its own cadences): run `ranking.py offnull --session {session}`, "
+                                        "or `ranking.py rank --partial`, which leaves the OFF term out")
     null = np.array(null_rec["values"]) if null_rec else None
     calibration = {
         "ranking_version": VERSION, "checks_version": vetting.VERSION, "cap": CAP,
@@ -173,8 +216,8 @@ def context(db, session, partial=False):
                               "crowding_window_mhz": CROWD_MHZ, "grid_mhz": GRID_MHZ,
                               "bands": "vetting.BANDS"},
         "off_null": None if not null_rec else {
-            "file": "data/measurements/off_null.json",
-            "sha256": hashlib.sha256(null_path.read_bytes()).hexdigest(),
+            "file": f"data/measurements/{npath.name}",
+            "sha256": hashlib.sha256(npath.read_bytes()).hexdigest(),
             "tracks": len(null), "cadences": [c["cadence"] for c in null_rec.get("cadences", [])],
             "measured": null_rec.get("_stamp", {}).get("utc") if isinstance(null_rec.get("_stamp"), dict) else None}}
     return {"session": session, "hits": hits, "freqs": freqs, "span_mhz": span, "band_share": in_band / span,
@@ -512,7 +555,9 @@ def ablation(rows, real_ranked, held):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("offnull")
+    o = sub.add_parser("offnull")
+    o.add_argument("--session", help="measure on this session's own searched blocks, read again (its own file)")
+    o.add_argument("--blocks", type=int, default=OFF_NULL_BLOCKS)
     rk = sub.add_parser("rank")
     rk.add_argument("--partial", action="store_true",
                     help="rank without the OFF null (the OFF term left out; the record says partial)")
@@ -523,7 +568,7 @@ def main(argv=None):
     sub.add_parser("tables")
     a = ap.parse_args(argv)
     if a.cmd == "offnull":
-        off_null()
+        off_null(session=a.session, n_blocks=a.blocks)
     elif a.cmd == "rank":
         rank(partial=a.partial)
     elif a.cmd == "birdies":

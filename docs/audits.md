@@ -1,6 +1,6 @@
 # Audit plan
 
-Twenty-four audits of the project, set on 19 November 2026 at commit
+Twenty-four audits of the project (two more added on 20 November), set on 19 November 2026 at commit
 5c3fd08 (report version 1.2, steps 4 to 12 done), ordered so that the
 questions the results rest on come first. Each audit reads the code, not
 only the docs; checks the science against published work; gives concrete
@@ -24,11 +24,11 @@ answered it.
 | # | Audit | Phase | Priority | Status |
 |---|---|---|---|---|
 | 1 | Scientific methodology | 1 | critical | **done** (19 Nov 2026), re-audited the same day; see below |
-| 2 | Signal injection accuracy | 1 | critical | **re-audited** (20 Nov 2026): paired reruns running; see below |
+| 2 | Signal injection accuracy | 1 | critical | **re-audited** (20 Nov 2026): the paired reruns finished, no change to either pipeline's recovery beyond 2 signals in 880; see below |
 | 3 | turboSETI comparison fairness | 1 | critical | **re-audited** (20 Nov 2026): the experiment corrected, 16 blocks queued; see below |
 | 4 | False-positive methodology | 1 | critical | **in progress** (20 Nov 2026): record-based checks done, the time-order test queued; see below |
 | 5 | The 2016 interference failure | 1 | critical | **in progress** (20 Nov 2026): records analysed, blocks read again queued; see below |
-| 6 | Detector completeness and missed signals | 1 | high | to do |
+| 6 | Detector completeness and missed signals | 1 | high | **in progress** (20 Nov 2026): the cap, crowding, close pairs and offsets measured from the records and synthetic data; the 2016 false candidates shown not to be the cap's in the first two blocks read again; the strong misses and shadow refresh read again, queued; see below |
 | 7 | BLISS comparison | 1 | high | **in progress** (20 Nov 2026): provenance enforced, two-ON split measured, wider same-hit control queued; see below |
 | 8 | Statistical analysis and uncertainty | 1 | high | **done** (20 Nov 2026): `tools/statistical_checks.py` on all three sessions; see below |
 | 9 | Core narrowband detection algorithm (`searching.py`) | 2 | high | **in progress** (20 Nov 2026): four findings confirmed with the search's own code, the blocks queued; see below |
@@ -45,8 +45,10 @@ answered it.
 | 20 | Parallel processing and performance | 4 | high | **in progress** (20 Nov 2026): every record written whole, broken records set aside; the shared scheduler planned; see below |
 | 21 | Database and evidence storage | 4 | medium | **in progress** (20 Nov 2026): checks saved whole, six looks required, source versions kept, content hashed, integrity checked, indexes added; evidence revisions planned; see below |
 | 22 | Distributed volunteer computing (`docs/multiuser.md`) | 4 | high | **in progress** (20 Nov 2026): the plan's constraints written in; occupancy's cache follows the store, a block's scans required; the system itself not built; see below |
-| 23 | Testing and regression coverage | 4 | high | **in progress** (20 Nov 2026): tests isolated from any real data folder, the old-version comparison required in CI; the whole-pipeline and reader tests planned; see below |
+| 23 | Testing and regression coverage | 4 | high | **in progress** (20 Nov 2026): tests isolated from any real data folder, the old-version comparison required in CI; the whole-pipeline test built (it found the OFF null could be measured only for the 2017 session), the reader tests planned; see below |
 | 24 | Large-scale survey strategy | 4 | medium | **in progress** (20 Nov 2026): a second cadence of a session refused until cadences have ids; coverage searched and searched completely kept apart; the survey protocol planned; see below |
+| 25 | Diagnostic and measuring tools | 5 | critical | **in progress** (20 Nov 2026): results' provenance now keeps the command, the script's hash and any uncommitted diff; the evidence ledger checked by `tools/ledger.py`; planted-fault tests for each diagnostic being added; see below |
+| 26 | Following up a real candidate | 5 | high | **planned** (20 Nov 2026): the steps from a top-ranked candidate to one others can check, and what is kept for it; see below |
 
 ## What each audit covers
 
@@ -128,6 +130,24 @@ answered it.
     completeness and bias; candidate priority; the resources the wider
     archive needs.
 
+**Phase 5: the measuring tools and what follows a detection** (added 20 November 2026)
+
+25. **Diagnostic and measuring tools.** Every tool under `tools/` that
+    measures the pipeline: independence from the code it measures, its
+    matching against the truth, its provenance, and whether it fails on an
+    implementation known to be wrong (a planted fault), not only passes on
+    the right one. Six of the re-audits found faults in these tools
+    themselves (equal totals taken as the same signals, turboSETI's event
+    rows grouped by hit number, the wrong event credited, ON looks assumed
+    at even positions, recovery by frequency alone, intervals of different
+    quantities compared).
+26. **Following up a real candidate.** What happens when a candidate ranks
+    high: the evidence kept for it, the checks others can repeat, a repeat
+    observation and other pointings, other instruments where possible,
+    terrestrial interference, independent review. A planted signal shows
+    the detector works; it cannot show a real signal is from the sky, let
+    alone from a transmitter.
+
 ## The status review before the audits (19 November 2026)
 
 | Finding | Verdict |
@@ -136,6 +156,26 @@ answered it.
 | The evidence package predates step 12 | **built**: the package now takes data/step12 (its choices, deviations and saved archive replies) and makes the operating-point record again. Built afresh at c35afe3 (3,181 records and the store, 238 MB) and reproduced from a clean checkout at that commit: 8 table commands, 70 pages and records the same, none different (docs/releasing.md) |
 | Nobody else has reproduced the tables | **not done**: needs a second person; stays on docs/releasing.md as the step before the DOI is announced |
 | No formal release (tag, GitHub release, Zenodo) | **not done**: waits for the Zenodo account (put off by Ryan on 19 Nov), so that the release is archived when it is made |
+
+## The review of the plan, 20 November 2026
+
+A review of this file and the commits to 865d3e0, judged point by point
+against the repo and the job log.
+
+| Point | Verdict and what was done |
+|---|---|
+| 2 audits done, 21 open, 1 not started | **correct.** Audit 6 had been skipped between 5 and 7. Its first measurements had run (`tools/completeness_checks.py`, 749c7c2) but were never written up; now they are (section 6). |
+| Audit 6 first: the 2,000-hit cap and crowded misses | **correct; done in part** (section 6). The first two 2016 blocks read again with the cap at 20,000 keep 779 of 783 and 728 of 733 false candidates: in those two the cap is not their cause. |
+| Finish the prepared experiments for 2, 3, 4, 5, 7, 9, 10, 11 and 14 before re-auditing their code | **correct.** Audit 2's reruns have finished (section 2, results). The rest are running or queued in order: turboSETI's 16 blocks (running), the time-order test, the BLISS control, the detector and curved blocks, the DC comparison; in the second lane the 2016 reread (2 of 23 blocks), then the strong misses and shadow refresh. Their results go in each audit's section and in the ledger as they land. |
+| A11-01 (blind OFF looks), CD-01 (first hypothesis wins), F12-03 (checks go stale) | **correct; already recorded** as confirmed with their measurements queued; nothing new. |
+| Leave 1 and 8 until the measurements; revisit 1, 4, 8 and 18 together afterwards | **agreed.** |
+| A new audit of the diagnostic tools, each shown to fail on a known-bad implementation | **correct**: audit 25. |
+| A new audit of following up a real candidate | **correct in part**: audit 26. The checks, evidence and procedure are this project's to build; a repeat observation needs telescope time, which is the person's to ask for. |
+| 23: a whole-pipeline test | **correct; built** (section 23). It found a real gap at once: the OFF null could only be measured on the 2017 session's saved cadences, so no other session could be ranked in full. |
+| 16: replaying observations on another computer | **correct; planned.** A fresh clone with a fresh environment on this PC, replaying one block from the archive against its record, is the part that can be done here; another machine is the person's. |
+| 24: cadence ids and a migration before any survey | **correct; planned** as the next store change. The guard stays until then. |
+| 4: independent, time-ordered negative-control observations | **correct; planned**: the controls chosen from the archive's listing and recorded here before any of their spectra are read. |
+| A commit, command, result file and verdict for each material finding | **correct; built**: the ledger below, checked by `tools/ledger.py`. Doing it showed that results did not record their command, and that results made with uncommitted changes kept only a hash of the diff; both are now kept (audit 25). |
 
 ## 1. Scientific methodology: done, 19 November 2026
 
@@ -212,6 +252,24 @@ addressed with limits). Six new points, each checked before building:
 | C4: "fixed flux" is constant injected power in uncalibrated units, on the first four blocks of each class | medium | **built; running.** Renamed throughout (`injection_checks.py power`, `injection_power.json`, "one injected power in all three ON looks"); the blocks are now four crowded and four clean drawn at random (seed 12). |
 | The DC census assumed the coarse channel's size and the DC bin's place | low | **built.** The census now reads each session's DC bins from its own header (fch1, foff, the HDF5 chunk) and each signal's frequency through each ON look from its record, a channel either side: **2, 4 and 2 signals, as before**. |
 | The macOS CI job was cancelled before it ran | — | **done**: rerun requested (`gh run rerun --failed`). |
+
+### 2, the paired reruns' results, 20 November 2026
+
+All four finished; each compares the same 880 (or 96) planted signals
+signal by signal, both found, the first only, the second only, neither.
+
+| Comparison | This search, SNR 10 / 30 | turboSETI, SNR 10 / 30 | Result |
+|---|---|---|---|
+| Power at 32 against 51 sub-steps (`injection_voltage.json`) | 580 both, 0 apart / 305, 0 | 389, 0 / 212, 0 | identical signal by signal |
+| Power against a tone in the voltages (the cross term) | 570 both, 10 and 11 apart / 299, 6 and 8 | 368, 21 and 23 / 205, 7 and 8 | totals within 2; about 2% of signals swap each way, so equal totals did hide different signals (C2) |
+| The same with two polarizations summed | 585, 9 and 10 / 306, 4 and 4 | 355, 25 and 13 / 202, 10 and 7 | within 1 for this search; turboSETI finds 12 fewer at SNR 10 with voltages (380 against 368) |
+| Blanked then planted (in use) against planted then blanked (`injection_dc.json`) | 70, 1 and 0 / 37, 1 and 0 of 96 | 52, 0 / 26, 2 and 0 | in use finds at most 2 more, all at the DC bin |
+| Fixed S_in against one injected power (`injection_power.json`) | 588, 6 and 5 / 300, 2 and 4 | 121, 1 and 0 / 28, 2 and 0 | within 2 |
+
+So the planting's simplifications move neither pipeline's recovery by more
+than 2 signals in 96 to 880, except turboSETI with two polarizations at SNR
+10 (12 of 880, 1.4%), and never one pipeline against the other. The
+results stand as a measure of recovery at a controlled signal-to-noise.
 
 ## 3. turboSETI comparison fairness: 20 November 2026
 
@@ -320,6 +378,27 @@ and the records (`tools/rfi2016.py records`; the blocks read again are queued).
 | The blocks read again were reused whatever code made them | medium | **built**: each holds a fingerprint of the code and is made again when it differs; at OFF_MAX 6 each block must give its record's own false and found counts (`reproduces_record`), and the run says whether all did. |
 | The record took its session from the block choice, which does not hold it | low | **built**: from `matched_tables.load`. |
 | Tests for the analysis | — | **built**: `tests/test_rfi2016.py`. |
+
+## 6. Detector completeness and missed signals: 20 November 2026
+
+**Verdict:** the hit cap costs recovery in crowded looks and hides signals
+below 2,000 stronger hits, but in the 2016 blocks read again so far it is
+not what makes the false candidates; close signals at fast drift are lost
+beside each other far more than the grid of planted signals shows. Every
+number is from the block records or from the search's own code
+(`tools/completeness_checks.py`, its diagnostic copy identical to the search
+at its defaults, tested; `tools/detector_misses.py`; `tools/rfi2016.py`).
+The search is frozen: what these suggest is a new detector version.
+
+| Finding | Severity | Verdict and what was done |
+|---|---|---|
+| A6-01: the 2,000-hit cap costs recovery | high | **measured.** Planted signals recovered at SNR 30, blocks with an ON look stopped at the cap against blocks complete: 2016 **23.2% (587 of 2,530) against 34.8%** (3,750 of 10,780); 2017 30.0% (429 of 1,430) against 34.5%; 2019 had no capped look. By the block's hits at the sweep's cut, 2016 blocks over 1,000 hits recover 22.7%, those with 5 to 20 hits 35.2%. Of the 8 signals BLISS found and this search missed for a reason in the detector, **6 are the cap**: S/N 12.3 to 40.6 on their own tracks, below 2,000 stronger hits, picked once the cap is 5,000 or more, their noise not inflated (0.77 to 1.42 of the look's median) and untouched by other hits' blanking (`detector_misses.json`). |
+| A6-02: the cap as the cause of 2016's false candidates | high | **not the cause in the two blocks read so far.** 3,899 of 3,938 false candidates at SNR 30 lie in blocks with a capped ON look (169.5 a block, against 0.40 in complete blocks), which made the cap the first suspect. With the cap at 20,000, block 195 keeps 779 of 783 (4 gone, none new) and block 59 keeps 728 of 733 (5 gone, 24 new, so 752). In block 59 all 753 have a hit in an OFF look within 3 kHz and 717 a hit drifting alike there: the OFF looks hold related hits that the OFF test does not connect. The other 21 blocks are running (`rfi2016.py reread`). |
+| A6-03: crowding and close pairs | high | **measured.** Two signals 1 to 100 channels apart at 2 to 4 Hz/s, the second found alone in 425 of 864 cases: **177 of those (42%) are lost beside the first**, nearly all within 16 channels (8 of 52 at 32, 3 of 58 at 64, 5 of 51 at 100). Without the corridor of excluded line starts 73 of the 177 are found; refreshing the scores after shadow hits finds 4 (`completeness_pairs.json`). The planted grid keeps its signals apart, so the recovery tables do not include this loss; it is a limit stated with them. |
+| A6-04: a global cap against a budget a region | medium | **measured** (scaled: 200 hits a slice of 262,144 channels). A lone signal far from a crowd is found under the global cap up to a crowd of 250 and lost at 400 and 800; with the same budget a region it is found at every size (`completeness_cluster.json`). A per-region budget is **planned** for the next detector version. |
+| A6-05: frequency and drift accuracy | medium | **measured.** Recovered signals' nearest event member is well inside the tolerances (6 Hz, 0.05 Hz/s) at every drift: 99th percentile 1.6 to 3.6 Hz and 0.011 to 0.028 Hz/s, largest 5.6 Hz and 0.038 Hz/s (2016, 2 to 4 Hz/s). Missed signals have no near miss: their nearest event is a median 25 to 33 kHz away. Two of BLISS's 8 are the exception: found at S/N 52 and 90 but 2 to 4 channels and 0.05 Hz/s off at about 2 Hz/s, just outside. At fast drift a 6 Hz tolerance is about two channels, so tolerances that grow with drift are **planned** for the comparison, not for the frozen results. |
+| A6-06: blanking | medium | **measured in part.** No other hit's blanking touched the six capped misses. The re-sum's reach after a pick (F9-01) is the related fault, measured in audit 9. |
+| A6-07: failure modes not yet seen | medium | **in part.** A non-finite sample is now refused when a look is read, not left to end its search silently (F9-04). The whole-pipeline test (audit 23) is the guard for faults between the stages. The strong 2017 misses at 2 to 4 Hz/s, traced stage by stage, are queued (`completeness_checks.py strong`), and shadow refresh on four crowded 2016 blocks after them (`shadow`). |
 
 ## 7. BLISS comparison: 20 November 2026
 
@@ -830,6 +909,28 @@ real run's of 03:46).
 |---|---|---|
 | T23-01: the guard accepted any folder under the temporary directory | medium | **confirmed; fixed.** tests/synth.py now refuses if a project module was loaded before it at all, so the tests' folder is always their own (checked: importing yoke first is refused); the isolation test also checks the folder is the one set for this run. CI run 87 ran 145 tests a job, the old-onoff comparison and the four-process writers among them. |
 
+### 23, the whole-pipeline test, 20 November 2026
+
+T23-03 is **built**: `tests/test_whole_pipeline.py` runs in CI, about a
+minute. Six synthetic files of Green Bank's layout (two chunks of 16,384
+channels, 16 spectra) are served over HTTP by a local server that answers
+byte ranges and If-Match as the archive does, so the reader runs as it does
+on the archive. Two tones are planted in the ON looks only, one in all six
+looks and one in the ON looks and an OFF look. The test then runs the sweep
+(every hit and event into the store), a second sweep (it resumes, searching
+nothing again), `check.py`, the session's OFF null, the ranking, and
+`check.py` again (nothing is checked twice). It checks that both ON-only
+tones are the only candidates, the all-looks tone is interference, each
+candidate has all ten checks and a report, both are ranked with the
+session's own OFF null, the store passes its integrity checks and the sweep
+record matches the store.
+
+| Finding | Severity | Verdict and what was done |
+|---|---|---|
+| The OFF null could be measured only on the 2017 session's saved cadences | high | **found by the test; fixed.** `ranking.off_null` always read `data/reference`'s cadences, and `ranking.context` rightly refuses an OFF null from another session, so no other session could be ranked in full, only with `--partial`. `ranking.py offnull --session S` now measures it on the session's own searched blocks (five by default, chosen by seed, read again) and keeps it apart (`off_null-S.json`); the 2017 record is unchanged. |
+| A report folder fixed at import | low | **fixed.** `check.check_event` reads `check.REPORTS` when called, so a test can keep its reports out of `docs/leads`. |
+| One test's store leaking into another's | medium | **found; fixed.** All tests share one data folder; `test_evidence` leaves a minimal store there, which the new test then found. The new test uses a data folder of its own. |
+
 ## 24. Large-scale survey strategy: 20 November 2026
 
 **Verdict:** the next step is a small survey pilot fixed in advance, not a
@@ -857,3 +958,57 @@ found is real in the schema and now guarded; nothing has been overwritten
 | The sweep registered a second cadence's files before the guard refused it, which would then block the session's own cadence | high | **confirmed; fixed.** The sweep now refuses a second cadence of a session before any file is registered; the three sessions' own cadences pass the check unchanged. |
 | Unknown completeness counted as complete | medium | **confirmed; fixed.** A sweep counts a block as searched completely only when it is known to be; `save_block` records a block's completeness as unknown when any look's is missing (tested: true, false, missing and null). |
 | `check.run` waited on any refusal | medium | **confirmed; fixed.** Only the missing OFF null is waited for; any other refusal still fails the run. The cadence check is `store.cadence_conflict`, tested: its own cadence passes, another of the session is refused, a new session is free. |
+
+## 25. Diagnostic and measuring tools: 20 November 2026
+
+**Verdict:** started. The aim is that every diagnostic is shown to catch a
+planted fault in what it measures, not only to agree with the current code.
+
+| Finding | Severity | Verdict and what was done |
+|---|---|---|
+| D25-01: a result could not be tied to the command that made it | high | **confirmed; fixed.** `yoke.provenance` now records the command and a hash of the script it ran. A new tool can be run before it is committed, and then its commit says nothing about its code. |
+| D25-02: a result made with uncommitted changes kept only a hash of the diff | high | **confirmed; fixed.** The diff itself is now kept under `data/provenance/diffs/` (by its hash), so such a result can be made again exactly. Of the result files behind the ledger below, 7 were made with local changes before this; the ledger marks them "diff not kept". |
+| D25-03: no check that the evidence named for a finding exists and is what it claims | high | **built.** `tools/ledger.py` checks each row of the ledger against its result file's own provenance: the file there, the commit, the commit in this checkout's history, the state, the command. `tests/test_ledger.py` shows each kind of wrong row failing. |
+| D25-04: diagnostics tested only on right inputs | critical | **in progress.** Planted-fault tests, tool by tool: totals equal but signals different (`injection_checks.paired`, done in audit 2), candidates moved beyond the tolerances (`rfi2016.match_groups`, done in audit 5), event rows grouped by hit number, the wrong event credited, ON looks at other positions, recovery by frequency alone, intervals of different quantities. |
+
+## 26. Following up a real candidate: 20 November 2026
+
+**Planned.** What exists: the ten checks and their report for every
+candidate (`docs/leads/`), the stamps of the six looks kept in the store,
+the ranking, and `pipelines.py followup` (pickles' windows and turboSETI's
+own noise at a candidate). What the audit is to settle: the evidence frozen
+for a candidate the moment it ranks high (its looks' raw slices, the code
+and records that judged it, with hashes), checks someone else can repeat
+from that alone, the other sessions and pointings of the same target in
+the archive, interference databases, and what would justify asking for a
+repeat observation, which is the person's to ask for.
+
+## Evidence for the material findings
+
+Each material finding with the result it rests on: the file under `data/`,
+the commit it was made at and whether the code had local changes, and the
+command. `python tools/ledger.py` checks every row against the file's own
+provenance. Results still running are not listed until they finish.
+
+| Finding | Audit | Result | Made at | Command |
+|---|---|---|---|---|
+| The hit cap costs recovery in crowded looks; offsets of found and missed signals | 6 | `data/analysis/completeness_records.json` | `34ed0ed`, clean | `tools/completeness_checks.py records` |
+| 42% of close second signals at fast drift lost beside the first | 6 | `data/analysis/completeness_pairs.json` | `c6388b4`, local changes (diff not kept) | `tools/completeness_checks.py pairs` |
+| A lone signal lost under a global cap, found under a budget a region | 6 | `data/analysis/completeness_cluster.json` | `749c7c2`, clean | `tools/completeness_checks.py cluster` |
+| 6 of BLISS's 8 detector misses are the hit cap, 2 just outside the tolerances | 6, 7 | `data/analysis/bliss_only/detector_misses.json` | `3fd7837`, clean | `tools/detector_misses.py` |
+| The voltage cross term and two polarizations move recovery by at most 12 of 880 | 2 | `data/analysis/injection_voltage.json` | `865d3e0`, clean | `tools/injection_checks.py voltage` |
+| Planting after DC blanking finds at most 2 more of 96 | 2 | `data/analysis/injection_dc.json` | `03f5836`, clean | `tools/injection_checks.py dc` |
+| Fixed S_in against one injected power: within 2 of 880 | 2 | `data/analysis/injection_power.json` | `8477399`, clean | `tools/injection_checks.py power` |
+| The step 10 records made again match the evidence package | 17 | `data/analysis/regress_step10.json` | `ea81329`, clean | `tools/regress_step10.py` |
+| The false rate's combined interval, mended | 4, 8 | `data/analysis/false_interval.json` | `ea81329`, clean | `tools/false_checks.py interval` |
+| One wrong choice against the union of 19 | 4 | `data/analysis/false_assignments.json` | `8477399`, clean | `tools/false_checks.py assignments` |
+| What changes identity under other rules of one signal | 4 | `data/analysis/false_grouping.json` | `8477399`, clean | `tools/false_checks.py grouping` |
+| The rate's interval with windows of consecutive blocks | 4, 8 | `data/analysis/false_windows.json` | `8477399`, clean | `tools/false_checks.py windows` |
+| Intervals' limits on all three sessions | 8 | `data/analysis/statistical_checks.json` | `8eed705`, local changes (diff not kept) | `tools/statistical_checks.py all` |
+| 2016's false candidates: one hit and two tracks, crowded, capped | 5 | `data/analysis/rfi2016_records.json` | `f3f50bb`, local changes (diff not kept) | `tools/rfi2016.py records` |
+| All 11 candidates' verdicts and checks unchanged under checks version 5 | 12 | `data/analysis/vetting_checks.json` | `342045e`, local changes (diff not kept) | `tools/vetting_checks.py` |
+| turboSETI's reported frequency and drift on synthetic tones | 3 | `data/analysis/turbo_reference.json` | `5e29bbd`, clean | `tools/turbo_checks.py reference` |
+| Seven kinds of signal through the unchanged search | 15 | `data/analysis/coverage_checks.json` | `b567c6e`, local changes (diff not kept) | `tools/coverage_checks.py` |
+| The detector's refresh reach, noise spread and non-finite input, synthetic | 9 | `data/analysis/detector_checks_synthetic.json` | `8199c56`, local changes (diff not kept) | `tools/detector_checks.py synthetic` |
+| The cadence test's asymmetry, blind OFF looks and weak ON looks, synthetic | 11 | `data/analysis/onoff_checks_synthetic.json` | `5de5877`, clean | `tools/onoff_checks.py synthetic` |
+| BLISS's runs match their pins (all 242) | 7 | `data/analysis/bliss_pins.json` | `749c7c2`, local changes (diff not kept) | `tools/bliss_checks.py pins` |
