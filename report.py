@@ -52,26 +52,33 @@ def _crossing(rates, level):
 
 # --- which calibration records apply to a session (docs/audits.md 13) -------------------
 
-def sefd_applies(rec, lo_mhz, hi_mhz):
-    """The SEFD record covers the session's band: its 50 MHz bins span [lo, hi]."""
-    bins = (rec or {}).get("by_50_mhz") or []
+def sefd_applies(rec, lo_mhz, hi_mhz, notch=NOTCH_MHZ):
+    """The SEFD record was measured over the session's whole band: a measured 50 MHz bin for every 50 MHz
+    the band touches, bar bins the receiver's notch overlaps (searched, not counted). The record is of
+    Green Bank's S-band receiver (3C295 through it); a band beyond its bins is not covered."""
+    bins = {int(b["from_mhz"]) for b in (rec or {}).get("by_50_mhz") or []}
     if not bins or lo_mhz is None:
         return False
-    a = min(b["from_mhz"] for b in bins)
-    z = max(b["from_mhz"] for b in bins) + 50
-    return a <= lo_mhz and hi_mhz <= z
+    need = range(int(lo_mhz // 50) * 50, int(hi_mhz), 50)
+    return all(b in bins or max(b, notch[0]) < min(b + 50, notch[1]) for b in need)
+
+
+_SCAN = __import__("re").compile(r"guppi_(\d+)_(\d+)_")
 
 
 def completeness_applies(rec, target, files):
-    """The completeness record was measured on this session's cadence: its files name the target and
-    one of the session's files' MJD days (guppi_<MJD>)."""
+    """The completeness record was measured on this session's own scans: every scan its file names
+    identify (guppi_<MJD>_<seconds>) is one of the session's files', and it names at least one."""
     paths = [str(x) for x in (rec or {}).get("cadences", [])]
-    days = {int(f["tstart_mjd"]) for f in files if f.get("tstart_mjd")}
-    return any(target in x and any(f"guppi_{d}_" in x for d in days) for x in paths)
+    theirs = {m.group(0) for x in paths for m in [_SCAN.search(x)] if m}
+    ours = {m.group(0) for f in files for m in [_SCAN.search(str(f.get("url") or f.get("name") or ""))] if m}
+    return bool(theirs) and theirs <= ours and any(target in x for x in paths)
 
 
 def response_applies(rec, width_hz, tsamp):
-    """The channel response was measured with this product's channel width and sampling."""
+    """The channel response was measured with this product's channel width and sampling (Voyager 1's
+    file, 2016). Only those two are checked: the spectrometer's set-up is not in the files' headers, so
+    the response is the same product's, not shown to be this session's."""
     return bool(rec) and abs(rec.get("channel_hz", 0) - width_hz) < 1e-6 and abs(rec.get("tsamp_s", 0) - tsamp) < 1e-6
 
 
@@ -216,7 +223,8 @@ def build(target, session):
         "cwtfm_90": (zeta * sens[0]["eirp_90_w"] / nu_rel if t and nu_rel and sens and sens[0]["how_90"] != "above"
                      else None),
         "transmitter_rate": 1 / nu_rel if nu_rel else None,
-        "completeness": comp["tables"], "false_summary": comp.get("false_summary"),
+        "completeness": comp["tables"] if comp_ok else None,
+        "false_summary": comp.get("false_summary") if comp_ok else None,
         "completeness_provenance": comp.get("provenance"),
         "voyager": voyager and {k: voyager.get(k) for k in ("rows", "earth_drift_hz_s", "hits_at_cut", "sha256")},
         "price": price and [{"session": s["session"], "turboseti_events": s["turboseti_events"],
@@ -676,41 +684,48 @@ def markdown(r):
               "and intermodulation, crowding, the report; each marked shown, indicated or coincidence "
               "possible with its chance. None deletes a candidate.", ""]
     lines += search_space(r)
-    lines += ["## What it achieved", "",
-              "### Completeness through the whole pipeline", "",
-              "Signals planted as the sky makes them in the ON looks of five saved cadences of this session "
-              "(3,257 signals; docs/seti.md, \"Completeness through the whole pipeline\") and followed through "
-              "search, cadence test and checks. Kept: a candidate the checks do not call interference.", "",
-              "| drift (Hz/s) | " + " | ".join(f"S_in {s} ({flux(s, r):.0f} Jy Hz)" for s in (15, 30, 60, 120)) + " |",
-              "|---|---|---|---|---|"]
-    for d in sorted({tuple(c["drift_hz_s"]) for c in r["completeness"]["by_cell"]}):
-        cells = {c["s_in"]: c for c in r["completeness"]["by_cell"] if tuple(c["drift_hz_s"]) == d}
-        lines.append(f"| {d[0]:g} to {d[1]:g} | " + " | ".join(
-            f"{cells[s]['kept_rate'] * 100:.0f}% ({cells[s]['kept_interval'][0] * 100:.0f}-"
-            f"{cells[s]['kept_interval'][1] * 100:.0f})" if s in cells else "" for s in (15, 30, 60, 120)) + " |")
-    ia = r["completeness"]["in_all"]
-    fs = r["false_summary"] or {}
-    lines += ["", f"Interference planted in all six looks: {ia['kept_as_candidate']} of {ia['found_in_a_look']} "
-              f"found kept as candidates. False candidates (each cadence judged with the 19 wrong choices of ON "
-              f"looks): {fs.get('distinct_signals')} distinct in {fs.get('cadences')} cadences, "
-              f"{fs.get('per_cadence')} a block's cadence (95% {fs.get('per_cadence_interval')}), none "
-              f"unexplained. The OFF test's veto rate on random tracks in this sweep: "
-              f"{r['off_null']['vetoed']} of {r['off_null']['tracks']:,} "
-              f"({100 * r['off_null']['vetoed'] / max(r['off_null']['tracks'], 1):.2f}%; "
-              f"{r['off_null']['over_off_max']} by S/N 6 along the track, the rest by a hit there); "
-              f"on planted signals, 0.5%.", "",
-              "The completeness was measured with search version 3; version 4 changed how hits join "
-              "(no event changed on the planted cadences) and check 6, which the planted trials do not reach.", "",
-              *candidate_sensitivity(r),
-              "### Sensitivity", "",
-              f"S_min = S_in × SEFD / √(n_pol Δν τ) × Δν / √n: a signal of strength S_in gives SNR ≈ S_in at zero "
-              f"drift. EIRP_min = 4π d² S_min at {t.get('distance_pc', '?')} pc; for a transmitter 1 Hz wide "
-              f"or narrower (wider ones spread over channels and are not modelled).", "",
-              "| drift (Hz/s) | 50% kept: S_in, flux, EIRP | 90% kept: S_in, flux, EIRP |", "|---|---|---|"]
-    for s in r["sensitivity"]:
-        cell = lambda p: (f"{'≤' if s[f'how_{p}'] == 'at or below' else '>' if s[f'how_{p}'] == 'above' else ''}"  # noqa: E731
-                          f"{s[f's_in_{p}']:g}, {s[f'flux_{p}_jy_hz']:.0f} Jy Hz, {_w(s.get(f'eirp_{p}_w'))}")
-        lines.append(f"| {s['drift_hz_s'][0]:g} to {s['drift_hz_s'][1]:g} | {cell(50)} | {cell(90)} |")
+    lines += ["## What it achieved", ""]
+    if r.get("completeness") is None:
+        lines += ["### Completeness through the whole pipeline", "",
+                  "Not measured for this session: the completeness measurement (five saved 2017 cadences of "
+                  "KIC 8462852) does not apply to it, so no completeness, candidate sensitivity or sensitivity "
+                  "in physical units is given here.", ""]
+    else:
+        lines += [
+                  "### Completeness through the whole pipeline", "",
+                  "Signals planted as the sky makes them in the ON looks of five saved cadences of this session "
+                  "(3,257 signals; docs/seti.md, \"Completeness through the whole pipeline\") and followed through "
+                  "search, cadence test and checks. Kept: a candidate the checks do not call interference.", "",
+                  "| drift (Hz/s) | " + " | ".join(f"S_in {s} ({flux(s, r):.0f} Jy Hz)" for s in (15, 30, 60, 120)) + " |",
+                  "|---|---|---|---|---|"]
+        for d in sorted({tuple(c["drift_hz_s"]) for c in r["completeness"]["by_cell"]}):
+            cells = {c["s_in"]: c for c in r["completeness"]["by_cell"] if tuple(c["drift_hz_s"]) == d}
+            lines.append(f"| {d[0]:g} to {d[1]:g} | " + " | ".join(
+                f"{cells[s]['kept_rate'] * 100:.0f}% ({cells[s]['kept_interval'][0] * 100:.0f}-"
+                f"{cells[s]['kept_interval'][1] * 100:.0f})" if s in cells else "" for s in (15, 30, 60, 120)) + " |")
+        ia = r["completeness"]["in_all"]
+        fs = r["false_summary"] or {}
+        lines += ["", f"Interference planted in all six looks: {ia['kept_as_candidate']} of {ia['found_in_a_look']} "
+                  f"found kept as candidates. False candidates (each cadence judged with the 19 wrong choices of ON "
+                  f"looks): {fs.get('distinct_signals')} distinct in {fs.get('cadences')} cadences, "
+                  f"{fs.get('per_cadence')} a block's cadence (95% {fs.get('per_cadence_interval')}), none "
+                  f"unexplained. The OFF test's veto rate on random tracks in this sweep: "
+                  f"{r['off_null']['vetoed']} of {r['off_null']['tracks']:,} "
+                  f"({100 * r['off_null']['vetoed'] / max(r['off_null']['tracks'], 1):.2f}%; "
+                  f"{r['off_null']['over_off_max']} by S/N 6 along the track, the rest by a hit there); "
+                  f"on planted signals, 0.5%.", "",
+                  "The completeness was measured with search version 3; version 4 changed how hits join "
+                  "(no event changed on the planted cadences) and check 6, which the planted trials do not reach.", "",
+                  *candidate_sensitivity(r),
+                  "### Sensitivity", "",
+                  f"S_min = S_in × SEFD / √(n_pol Δν τ) × Δν / √n: a signal of strength S_in gives SNR ≈ S_in at zero "
+                  f"drift. EIRP_min = 4π d² S_min at {t.get('distance_pc', '?')} pc; for a transmitter 1 Hz wide "
+                  f"or narrower (wider ones spread over channels and are not modelled).", "",
+                  "| drift (Hz/s) | 50% kept: S_in, flux, EIRP | 90% kept: S_in, flux, EIRP |", "|---|---|---|"]
+        for s in r["sensitivity"]:
+            cell = lambda p: (f"{'≤' if s[f'how_{p}'] == 'at or below' else '>' if s[f'how_{p}'] == 'above' else ''}"  # noqa: E731
+                              f"{s[f's_in_{p}']:g}, {s[f'flux_{p}_jy_hz']:.0f} Jy Hz, {_w(s.get(f'eirp_{p}_w'))}")
+            lines.append(f"| {s['drift_hz_s'][0]:g} to {s['drift_hz_s'][1]:g} | {cell(50)} | {cell(90)} |")
     if r["sefd_measured"]:
         lines += ["", f"With the SEFD's bracket ({r['sefd_bracket_jy'][0]:g} to {r['sefd_bracket_jy'][1]:g} Jy, "
                   "above), every flux and EIRP in this table lies between "
@@ -722,19 +737,23 @@ def markdown(r):
               f"{_w(r['cut_eirp_w'])}. The strengths between "
               "the four planted are interpolated (in log S_in); \"≤\" means already reached at the faintest "
               "planted, \">\" not reached at the brightest.", "",
-              f"For comparison with published searches only: CWTFM {r['cwtfm']:.3g} at the nominal threshold, as "
-              f"published searches quote it (Enriquez et al. 2017, Eq. 11; N_star 1, ν_rel {r['nu_rel']:.3f} from "
-              f"the usable {r['usable_mhz']:.1f} MHz)"
-              + (f", {r['cwtfm_90']:.3g} at the measured 90% EIRP for slow drifts" if r.get("cwtfm_90") else "")
-              + f"; transmitter rate {r['transmitter_rate']:.2f}. No limit "
-              "on the share of stars with transmitters is drawn from one star: at best 0.95/(η·D) at 95% "
-              "confidence (Margot et al. 2023), which says nothing.", "",
-              f"In context: Harp et al. 2016 (ATA, 1 to 10 GHz, Oct to Nov 2015) set narrowband limits of "
-              f"{HARP_2016_W[0]:.0e} to {HARP_2016_W[1]:.0e} W at 454 pc (drifts to ±1 Hz/s); here, at 90% kept "
-              f"for drifts under {r['sensitivity'][0]['drift_hz_s'][1]:g} Hz/s, about "
-              f"{HARP_2016_W[0] / (r['sensitivity'][0].get('eirp_90_w') or 1):.0f} to "
-              f"{HARP_2016_W[1] / (r['sensitivity'][0].get('eirp_90_w') or 1):.0f} times deeper, over the usable "
-              f"part of {r['from_mhz']:.0f} to {r['to_mhz']:.0f} MHz only; less at faster drifts (the table).", ""]
+              (f"For comparison with published searches only: CWTFM {r['cwtfm']:.3g} at the nominal threshold, as "
+               f"published searches quote it (Enriquez et al. 2017, Eq. 11; N_star 1, ν_rel {r['nu_rel']:.3f} from "
+               f"the usable {r['usable_mhz']:.1f} MHz)"
+               + (f", {r['cwtfm_90']:.3g} at the measured 90% EIRP for slow drifts" if r.get("cwtfm_90") else "")
+               + f"; transmitter rate {r['transmitter_rate']:.2f}. No limit "
+               "on the share of stars with transmitters is drawn from one star: at best 0.95/(η·D) at 95% "
+               "confidence (Margot et al. 2023), which says nothing."
+               if r.get("cwtfm") is not None else
+               "No CWTFM or EIRP: the target's distance is not in the report's table of targets."), "",
+              (f"In context: Harp et al. 2016 (ATA, 1 to 10 GHz, Oct to Nov 2015) set narrowband limits of "
+               f"{HARP_2016_W[0]:.0e} to {HARP_2016_W[1]:.0e} W at 454 pc (drifts to ±1 Hz/s); here, at 90% kept "
+               f"for drifts under {r['sensitivity'][0]['drift_hz_s'][1]:g} Hz/s, about "
+               f"{HARP_2016_W[0] / (r['sensitivity'][0].get('eirp_90_w') or 1):.0f} to "
+               f"{HARP_2016_W[1] / (r['sensitivity'][0].get('eirp_90_w') or 1):.0f} times deeper, over the usable "
+               f"part of {r['from_mhz']:.0f} to {r['to_mhz']:.0f} MHz only; less at faster drifts (the table)."
+               if r["sensitivity"] and r["sensitivity"][0].get("eirp_90_w") else
+               "No comparison with Harp et al. 2016: no measured EIRP for this session."), ""]
     lines += ["## Validation", ""]
     if r["voyager"]:
         v = r["voyager"]

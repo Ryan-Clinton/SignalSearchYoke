@@ -515,6 +515,15 @@ covers, which the report states and later work extends.
 | 6: the fine-channel response from one Voyager 1 file | medium | **agreed; stated** (reduced χ² 3.72, wings above sinc²); a second carrier is **planned**. |
 | 7: frequency dependence of the SEFD | medium | **agreed; planned**: the measured 50 MHz values (9.97 to 13.5 Jy) used where measured. |
 
+### 13, re-audited at 342045e, 20 November 2026
+
+| Finding | Severity | Verdict and what was done |
+|---|---|---|
+| A report without applicable completeness crashed, and still showed 2017's completeness | high | **confirmed; fixed.** The completeness, candidate sensitivity and sensitivity sections are written only where the completeness record applies; otherwise the report says it was not measured for the session. Building the 2019 C-band report end to end also hit an older crash (the CWTFM and the Harp et al. comparison need a target distance and a measured EIRP), now guarded. The 2017 report comes out as committed, bar its header's date and checks version. |
+| The SEFD counted as covering the band if its end bins did | high | **confirmed; fixed.** Every 50 MHz the band touches must have a measured bin, bar the notch (2,300 to 2,360 MHz, searched but not counted); a gap anywhere refuses it (tested). The 2017 band (1,818 to 2,721 MHz) is covered bin by bin. |
+| Completeness matched by target and day | high | **confirmed; fixed.** It now needs every scan its files name (guppi_<MJD>_<seconds>) to be one of the session's own; another scan of the same target on the same day is refused (tested). On the store: 2017 applies, 2016 and 2019 do not. |
+| The channel response matched by width and sampling only | medium | **agreed; stated.** The spectrometer's set-up is not in the files' headers; the response is recorded as the same product's (Voyager 1, 2016), not shown to be the session's. |
+
 ## 14. Data acquisition and integrity: 20 November 2026
 
 **Verdict:** A14-01 was worse than stated, and it is fixed. The 2016 session's
