@@ -134,7 +134,7 @@ def run(target, count=None, say=print):
                       "pickles": {"commit": PICKLES_COMMIT, "sha256": source_sha, **pk, "run_s": round(t2 - t1, 1)},
                       "fetch_s": fetch_s, "finished_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
             # Written last: its presence marks the block done.
-            (out / "block.json").write_text(json.dumps(record, indent=1), encoding="utf-8")
+            yoke.write(out / "block.json", record, indent=1)
             line = (f"block {k} {low:.3f}-{high:.3f} MHz: turboSETI {hits} hits, {len(events)} event(s) "
                     f"({record['turboseti']['run_s']} s); pickles level 2 {pk['masked']['level2']} masked, "
                     f"{pk['unmasked']['level2']} unmasked (level 0 {pk['unmasked']['level0']}; "

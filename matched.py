@@ -495,6 +495,12 @@ def session_target(db, session):
     return {"name": on["cadence_target"] or on["target"], "ra_hours": on["ra_hours"], "dec_deg": on["dec_degrees"]}
 
 
+def _record_ok(rec, block):
+    """A block record whole enough to count as done: this block's, with its format and its signals."""
+    return isinstance(rec, dict) and all(k in rec for k in ("format", "block", "tones")) and int(rec["block"]) == int(block) \
+        and len(rec["tones"]) > 0
+
+
 def run(target, count=None, say=print, choice=None, shard=(0, 1), made_with=None):
     """choice: the blocks chosen elsewhere ({"chosen": {block: class},
     "of": {class: blocks swept}, and how they were chosen}), written as the
@@ -528,14 +534,14 @@ def run(target, count=None, say=print, choice=None, shard=(0, 1), made_with=None
     if made_with is not None:
         # made_with (independent.made_with): written into each new record; a record made with something else is
         # not taken as done (records from before it was written carry none, and stand as they were made)
-        other = [b for b in chosen if (base / f"block_{b:03d}.json").exists()
+        other = [b for b in chosen if yoke.whole(base / f"block_{b:03d}.json", lambda r, b=b: _record_ok(r, b))
                  and json.loads((base / f"block_{b:03d}.json").read_text(encoding="utf-8")).get("made_with", made_with)
                  != made_with]
         if other:
             raise yoke.Refusal("INVALID_REQUEST", f"{len(other)} block record(s) made with another config, code or DC "
                                                   f"rule (blocks {other[:10]}): measure them apart, not mixed in")
     todo_all = [b for i, b in enumerate(chosen) if i % shard[1] == shard[0]
-                and not yoke.whole(base / f"block_{b:03d}.json")]
+                and not yoke.whole(base / f"block_{b:03d}.json", lambda r, b=b: _record_ok(r, b))]
     todo = todo_all if count is None else todo_all[:count]
     say(f"{target} {session}: {len(chosen)} blocks chosen ({sum(v == 'crowded' for v in chosen.values())} crowded), "
         f"{len(chosen) - len(todo_all)} done before, {len(todo)} to run")

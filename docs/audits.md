@@ -741,6 +741,17 @@ equivalence tests.
 | P20-08: the queue rewrites jobs.txt in place | medium | **agreed; planned.** |
 | P20-09: no scheduler fault tests | high | **agreed; planned** with the scheduler. |
 
+### 20, re-audited at 135c2b0, 20 November 2026
+
+| Finding | Severity | Verdict and what was done |
+|---|---|---|
+| A broken record stopped the run before it could be set aside | high | **confirmed; fixed.** Both runners now test each record first (`yoke.whole`), then check provenance on the whole ones. |
+| A record that parses counted as done | high | **confirmed; fixed.** A record counts only if it is this block's, with its format and its signals (`_record_ok`); otherwise it is set aside and the block made again (tested). None of the records on disk would be set aside. |
+| The concurrency test missed failed writers | medium | **confirmed; fixed.** It collects every thread's failure, and a second test writes one record from four processes; no failure, no temporary file left. |
+| The curved pass rewrote its run metadata each time | medium | **confirmed; fixed.** It writes `blocks.json` only when it differs, and refuses another choice or settings once blocks exist, as `matched.run` does. |
+| Quarantine names could collide; unreadable taken for broken | medium | **confirmed; fixed.** Names carry a random suffix; a record that cannot be read at all raises rather than being moved. |
+| `pipelines.py` still wrote its block record directly | medium | **confirmed; fixed** (`yoke.write`). |
+
 ## 21. Database and evidence storage: 20 November 2026
 
 **Verdict:** the lifecycle defects are real in the code and fixed where they

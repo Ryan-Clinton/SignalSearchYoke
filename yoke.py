@@ -117,19 +117,24 @@ def provenance(record_version=1):
             "created_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
 
 
-def whole(path):
-    """Whether a record is there and parses whole. One that is there but does not parse (a write cut off
-    before records were written whole) is moved aside to <name>.bad-<utc>, so its block is made again
-    and the broken bytes are kept to look at."""
+def whole(path, valid=None):
+    """Whether a record is there, parses whole and (with `valid`, a test of the record) is complete. One
+    that does not parse, or fails `valid`, is moved aside to <name>.bad-<utc>-<random>, so its block is made
+    again and the bytes are kept to look at. One that cannot be read at all (locked, unreadable) is not
+    moved: the error is raised."""
     path = Path(path)
     if not path.exists():
         return False
+    raw = path.read_bytes()                     # an OSError here is raised, not taken for a broken record
     try:
-        json.loads(path.read_text(encoding="utf-8"))
-        return True
-    except (OSError, ValueError):
-        path.replace(path.with_name(f"{path.name}.bad-{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())}"))
-        return False
+        rec = json.loads(raw.decode("utf-8"))
+        ok = valid is None or bool(valid(rec))
+    except (ValueError, UnicodeDecodeError, AttributeError, KeyError, TypeError):
+        ok = False
+    if not ok:
+        path.replace(path.with_name(f"{path.name}.bad-{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())}-"
+                                    f"{os.urandom(3).hex()}"))
+    return ok
 
 
 def write(path, record, stamp=False, record_version=1, indent=1):

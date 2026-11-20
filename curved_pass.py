@@ -333,6 +333,12 @@ def folder(target, session):
     return ROOT / f"{target}-{session}"
 
 
+def _record_ok(rec, block):
+    """A block record whole enough to count as done: this block's, with its format and its signals."""
+    return isinstance(rec, dict) and all(k in rec for k in ("format", "block", "tones")) and int(rec["block"]) == int(block) \
+        and len(rec["tones"]) > 0
+
+
 def run(target, count=None, say=print, shard=(0, 1), made_with=None):
     """shard (i, n): only every n-th chosen block from the i-th, so n
     processes can share the run (each block has its own seed, so the
@@ -346,17 +352,24 @@ def run(target, count=None, say=print, shard=(0, 1), made_with=None):
     block_list = seti.blocks(seti.reading.prepare(urls[:1])[0])
     base = folder(target, session)
     base.mkdir(parents=True, exist_ok=True)
-    yoke.write(base / "blocks.json", {"chosen": chosen, "of": totals, "a_max": A_MAX, "accels": ACCELS,
-                                      "strengths": STRENGTHS, "cuts": CUTS, "seed": SEED}, indent=1)
+    meta = {"chosen": chosen, "of": totals, "a_max": A_MAX, "accels": ACCELS, "strengths": STRENGTHS, "cuts": CUTS,
+            "seed": SEED}
+    meta_path = base / "blocks.json"
+    if meta_path.exists():
+        before = json.loads(meta_path.read_text(encoding="utf-8"))
+        if json.loads(json.dumps(meta)) != before and list(base.glob("block_*.json")):
+            raise yoke.Refusal("INVALID_REQUEST", f"{base} was begun with another choice of blocks or settings.")
+    if not meta_path.exists() or json.loads(meta_path.read_text(encoding="utf-8")) != json.loads(json.dumps(meta)):
+        yoke.write(meta_path, meta, indent=1)
     if made_with is not None:
-        other = [b for b in chosen if (base / f"block_{b:03d}.json").exists()
+        other = [b for b in chosen if yoke.whole(base / f"block_{b:03d}.json", lambda r, b=b: _record_ok(r, b))
                  and json.loads((base / f"block_{b:03d}.json").read_text(encoding="utf-8")).get("made_with", made_with)
                  != made_with]
         if other:
             raise yoke.Refusal("INVALID_REQUEST", f"{len(other)} block record(s) made with another config, code, DC "
                                                   f"rule or source (blocks {other[:10]}): measure them apart")
     todo_all = [b for i, b in enumerate(chosen) if i % shard[1] == shard[0]
-                and not yoke.whole(base / f"block_{b:03d}.json")]
+                and not yoke.whole(base / f"block_{b:03d}.json", lambda r, b=b: _record_ok(r, b))]
     todo = todo_all if count is None else todo_all[:count]
     say(f"{target} {session}: {len(chosen)} blocks, {len(chosen) - len(todo_all)} done before, {len(todo)} to run",
         flush=True)
