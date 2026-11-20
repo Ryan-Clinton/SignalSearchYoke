@@ -486,6 +486,13 @@ def block(k, cls, slices, urls, work, source, vet, rng):
             "finished_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
 
 
+def session_target(db, session):
+    """The cadence's ON target as the store has it, for the checks (check 5's
+    expected drift needs its place on the sky): {name, ra_hours, dec_deg}."""
+    on = db.execute("SELECT * FROM files WHERE session=? AND cadence_position=0", (session,)).fetchone()
+    return {"name": on["cadence_target"] or on["target"], "ra_hours": on["ra_hours"], "dec_deg": on["dec_degrees"]}
+
+
 def run(target, count=None, say=print, choice=None, shard=(0, 1)):
     """choice: the blocks chosen elsewhere ({"chosen": {block: class},
     "of": {class: blocks swept}, and how they were chosen}), written as the
@@ -504,6 +511,7 @@ def run(target, count=None, say=print, choice=None, shard=(0, 1)):
     else:
         chosen = {int(b): c for b, c in choice["chosen"].items()}
         meta = dict(choice, chosen=chosen, seed=SEED)
+    target_meta = session_target(db, session)
     db.close()
     block_list = seti.blocks(seti.reading.prepare(urls[:1])[0])
     base, work_root = folder(target, session), ROOT / f"work_{shard[0]}"
@@ -521,7 +529,7 @@ def run(target, count=None, say=print, choice=None, shard=(0, 1)):
     say(f"{target} {session}: {len(chosen)} blocks chosen ({sum(v == 'crowded' for v in chosen.values())} crowded), "
         f"{len(chosen) - len(todo_all)} done before, {len(todo)} to run")
     source, _ = pipelines.pickles_source()
-    vet = measure.vet_hook()
+    vet = measure.vet_hook(target=target_meta)
 
     def fetch(k):
         started = time.monotonic()

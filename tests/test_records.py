@@ -69,5 +69,29 @@ class Store(unittest.TestCase):
         self.assertNotEqual(store.path().resolve().parent, (synth.ROOT / "data").resolve())
 
 
+
+class SessionTarget(unittest.TestCase):
+    """matched.run vets each session's candidates at its own target's place on the sky."""
+
+    def test_each_session_gets_its_own_target(self):
+        import sqlite3
+        import matched
+        db = sqlite3.connect(":memory:")
+        db.row_factory = sqlite3.Row
+        db.execute("CREATE TABLE files (session TEXT, cadence_position INTEGER, cadence_target TEXT, target TEXT, "
+                   "ra_hours REAL, dec_degrees REAL)")
+        db.execute("INSERT INTO files VALUES ('A', 0, 'KIC8462852', 'KIC8462852', 20.104292, 44.456833)")
+        db.execute("INSERT INTO files VALUES ('A', 1, NULL, 'OFF1', 1.0, 2.0)")
+        db.execute("INSERT INTO files VALUES ('B', 0, 'HIP17147', 'HIP17147', 3.67, 42.58)")
+        a, b = matched.session_target(db, "A"), matched.session_target(db, "B")
+        self.assertEqual((a["name"], a["ra_hours"]), ("KIC8462852", 20.104292))
+        self.assertEqual((b["name"], b["ra_hours"], b["dec_deg"]), ("HIP17147", 3.67, 42.58))
+
+    def test_gps_l3_is_an_annotation_not_a_band(self):
+        import vetting
+        self.assertIn("GPS L3", vetting.known_rfi(1378.5))
+        self.assertFalse(any(lo <= 1378.5 <= hi for lo, hi, _ in vetting.BANDS))
+
+
 if __name__ == "__main__":
     unittest.main()

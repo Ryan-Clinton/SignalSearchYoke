@@ -71,6 +71,21 @@ BANDS = [
     (2300.0, 2360.0, "the GBT S-band notch filter (satellite radio, SDARS 2320-2345 MHz)"),
     (2400.0, 2483.5, "Wi-Fi and the ISM band"), (2483.5, 2500.0, "Globalstar downlinks")]
 
+# Known interference outside BANDS, kept apart from them: an annotation for
+# describing candidates, never a mask or a check's verdict.
+KNOWN_RFI = [
+    # NRAO's VLA and VLBA RFI tables list 1376-1386 MHz as GPS L3, intermittent; no Green Bank table
+    # with it was found, so at the GBT it is a likely source, not a measured one.
+    (1376.0, 1386.0, "GPS L3 (1381.05 MHz), intermittent (NRAO's VLA and VLBA RFI tables)",
+     "https://science.nrao.edu/facilities/vla/docs/manuals/obsguide/rfi"),
+]
+
+
+def known_rfi(f_mhz):
+    """KNOWN_RFI's description for a frequency, or None (an annotation only)."""
+    return next((what for lo, hi, what, _ in KNOWN_RFI if lo <= f_mhz <= hi), None)
+
+
 CHECKLIST = [  # blc1's ten steps: what this project does for each
     (1, "instruments working", "automated (check 1)"),
     (2, "not in the OFF looks below the threshold", "automated (check 2)"),
