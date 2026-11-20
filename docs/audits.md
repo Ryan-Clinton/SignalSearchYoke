@@ -37,7 +37,7 @@ answered it.
 | 12 | Candidate vetting and ranking | 2 | high | **in progress** (20 Nov 2026): five defects fixed as checks version 5, no recorded verdict changed; the ranking challenge planned; see below |
 | 13 | Instrument calibration and sensitivity | 2 | high | **in progress** (20 Nov 2026): calibration records used only where they apply; the coarse-channel response and band-wide sensitivity planned; see below |
 | 14 | Data acquisition and integrity | 2 | high | **in progress** (20 Nov 2026): the 2016 DC bins found misplaced and fixed (no false candidate rested on them); refusals added; source versions planned; see below |
-| 15 | Astronomical signal coverage | 2 | medium | to do |
+| 15 | Astronomical signal coverage | 2 | medium | **in progress** (20 Nov 2026): seven kinds of signal measured through the unchanged search; pulses, faster drifts and eccentric orbits planned; see below |
 | 16 | End-to-end reproducibility | 3 | critical | to do |
 | 17 | Experiment freezing and scientific provenance | 3 | high | to do |
 | 18 | The report and its claims | 3 | high | to do |
@@ -547,3 +547,40 @@ rest on it. Step 10's records stand as made; its verdict is frozen.
 | A14-05: no ETag means no If-Match | medium | **agreed; planned.** Every file read so far had one; refusing a file without one would stop the 3C295 calibration files, so the total length is to be checked instead. |
 | A14-06: damaged spectra enter the search | medium | **built in part.** A look with any non-finite sample is now refused rather than searched (audit 9 found one NaN empties a search; tested). Zero-filled and dropped-data checks stay in `instrument.dropped`, run apart. |
 | A14-07: no reader regression tests | medium | **built in part**: `tests/test_reading_integrity.py`; local against web byte for byte on a fixture is **planned**. |
+
+## 15. Astronomical signal coverage: 20 November 2026
+
+**Verdict:** the findings are about coverage, not defects: the published
+completeness is for continuous narrowband signals on straight tracks within
+±4 Hz/s, and the report says so. What the search does with other kinds was
+not measured, and now is in part: `tools/coverage_checks.py` plants seven
+kinds through the search and cadence test unchanged, on synthetic cadences
+(noise only; Green Bank's channel width and sampling), six signals a
+cadence, three cadences, at S_in 30, 60 and 120, cut 10. Signals recovered
+in all three ON looks on their straight track, of 18 each:
+
+| kind | S_in 30 | S_in 60 | S_in 120 |
+|---|---|---|---|
+| continuous (as the completeness plants them) | 18 | 18 | 18 |
+| on for half of each ON look | 10 | 18 | 18 |
+| on for a quarter of each ON look | 0 | 10 | 18 |
+| missing from one ON look | 0 | 0 | 0 |
+| hopping 100 Hz at each ON look | 0 | 0 | 0 (no candidate near either) |
+| wandering 0.5 Hz a spectrum about its drift | 18 | 18 | 18 |
+| 16 channels wide, same power | 0 | 0 | 1 (a candidate within 200 Hz of all 18) |
+
+So a signal on for part of each look needs the strength its duty cycle
+takes away (half the time, about twice the strength); a signal absent from
+one ON look, or hopping beyond the matching tolerance, is never a candidate
+by design; a wide signal is found at S_in 120 but not on its own track. Kinds
+not planted are untested, not missed.
+
+| Finding | Severity | Verdict and what was done |
+|---|---|---|
+| A15-01: intermittent and partial-look signals | high | **measured** (above). Every ON look must show the signal, by design; what that costs is now a number. |
+| A15-02: pulses and periodic trains | high | **agreed; outside this search.** 18.25 s spectra cannot show sub-second structure; a periodic search on another product (0001, 349.5 μs) is a separate search, **planned**. |
+| A15-03: broadband and modulated signals | medium | **measured in part** (16 channels, above); wider and modulated ones **planned**. |
+| A15-04: drift beyond ±4 Hz/s | high | **agreed; planned**: recovery at 10, 20 and 50 Hz/s on the medium-resolution product, with its own completeness; the published limit stays ±4 Hz/s. |
+| A15-05: the curved pass needs two straight hits | high | **agreed**; audit 10 measures it (CD-03). |
+| A15-06: eccentric orbits, hopping, wandering | medium | **measured in part** (hopping and wandering, above); eccentric orbits **planned**. |
+| A15-07: one table of what is covered | medium | **built** here; it goes into the report's next revision. |
