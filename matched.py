@@ -39,9 +39,10 @@ done, so a run that stops goes on where it stopped.
 import argparse
 import itertools
 import json
-import os
 import math
+import os
 import shutil
+import subprocess
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -762,6 +763,20 @@ def _bliss_tool(out, which, paths, tones=None, cuts=CUTS_BLISS, shuffles=None):
 
 
 BLISS_ATTEMPTS = 2
+# The adapter's refusals of a slice's layout (bliss_curves.padded's asserts, pad.pad_to_coarse's ValueError):
+# permanent, so recorded at once as incompatible input, not tried again as a failure to run.
+INCOMPATIBLE = ("channels, not one coarse channel less one", "channels into its coarse channel",
+                "into a coarse channel of")
+
+
+def failure_kind(e):
+    """'incompatible_input' (the slice's layout, permanent), 'timeout' or 'failed_to_run'."""
+    if isinstance(e, subprocess.TimeoutExpired):
+        return "timeout"
+    text = str(e)
+    if ("AssertionError" in text or "ValueError" in text) and any(m in text for m in INCOMPATIBLE):
+        return "incompatible_input"
+    return "failed_to_run"
 
 
 def bliss_done(path, config):
@@ -775,7 +790,11 @@ def bliss_done(path, config):
         return False
     if r.get("config") != config:
         return False
-    return r.get("attempts", 1) >= BLISS_ATTEMPTS if "failed" in r else len(r.get("tones", [])) == TONES
+    if "failed" in r:
+        return r.get("failed_kind") == "incompatible_input" or r.get("attempts", 1) >= BLISS_ATTEMPTS
+    pv = r.get("provenance") or {}
+    return (len(r.get("tones", [])) == TONES
+            and all(not bliss_pins_problems(pv.get(k) or {}) for k in ("plain", "planted")))
 
 
 def _run_lock(path):
@@ -814,7 +833,9 @@ def _bliss_on_hits(rec, t_f, drift, cut, which="hits"):
 
 
 def bliss_folder(target, session):
-    return folder(target, session) / "bliss"
+    """The 2017 adapter's records in bliss/; the general adapter's (SSY_BLISS_GENERAL=1), a separate
+    experiment, in bliss_general/, so neither overwrites the other."""
+    return folder(target, session) / ("bliss_general" if BLISS_GENERAL else "bliss")
 
 
 def add_bliss(target, say=print, shard=(0, 1), count=None):
@@ -911,7 +932,8 @@ def add_bliss(target, say=print, shard=(0, 1), count=None):
                 except (OSError, ValueError):
                     tries = 0
                 yoke.write(out / p.name, {"format": FORMAT, "block": rec["block"], "class": rec["class"],
-                                          "config": config, "failed": str(e)[-600:], "attempts": tries + 1,
+                                          "config": config, "failed": str(e)[-600:], "failed_kind": failure_kind(e),
+                                          "attempts": tries + 1,
                                           "finished_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())},
                            indent=None)
                 log(f"block {rec['block']} ({rec['class']}): BLISS FAILED (attempt {tries + 1} of "
@@ -1023,6 +1045,21 @@ def judge_folder(target, session):
     return folder(target, session) / "bliss_judge"
 
 
+# Earlier onoff.py versions whose records stay valid: hash -> the commit holding it. Each judges the matched
+# pipeline's cadences exactly as the current one (tests/test_onoff_equivalent.py runs both on all 20 choices).
+# 542079aac47fa883: 3ed45b4 changed only which looks the DOT score pairs, and our_events always lays the looks
+# out ON, OFF, ON, OFF, ON, OFF, so the pairs are the same.
+ONOFF_EQUIVALENT = {"542079aac47fa883": "3ed45b4~1"}
+
+
+def same_judge_config(recorded, config):
+    """A record's configuration is this one, an equivalent earlier onoff.py allowed."""
+    if recorded == config:
+        return True
+    return (isinstance(recorded, dict) and recorded.get("onoff") in ONOFF_EQUIVALENT
+            and dict(recorded, onoff=config.get("onoff")) == config)
+
+
 def judge_whole(r, config):
     """A bliss-judge record made with this configuration and with every field
     the tables read: TONES signals, each judged at every cut, and the 19
@@ -1030,7 +1067,7 @@ def judge_whole(r, config):
     cuts = [ck(c) for c in CUTS_OURS]
     wrong = {str(o) for o in itertools.combinations(range(6), 3) if o != TRUE}
     try:
-        return (r.get("config") == config and len(r["tones"]) == TONES
+        return (same_judge_config(r.get("config"), config) and len(r["tones"]) == TONES
                 and all(c in t["judged"] and "three_looks" in t["judged"][c] for t in r["tones"] for c in cuts)
                 and all(set(r["false"].get(c, {})) == wrong and c in r["true_plain"] for c in cuts))
     except (KeyError, TypeError, AttributeError):

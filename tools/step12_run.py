@@ -16,6 +16,7 @@ each picks up where it stopped, so a restart runs this again from the top.
     python tools/step12_run.py
 """
 import json
+import os
 import subprocess
 import sys
 import time
@@ -92,27 +93,31 @@ def game_running():
 
 
 def bliss():
-    status = yoke.DATA / "step12" / "bliss_status.json"
+    """BLISS's stages on step 12's session. The 2017 adapter's status and the general adapter's
+    (SSY_BLISS_GENERAL=1) are kept apart. Recorded as not possible only when every block's record says
+    its input is a layout the adapter does not take (matched.failure_kind); any other failure is left
+    not done, to be tried again."""
+    general = os.environ.get("SSY_BLISS_GENERAL") == "1"
+    status = yoke.DATA / "step12" / ("bliss_general_status.json" if general else "bliss_status.json")
     if status.exists() and json.loads(status.read_text(encoding="utf-8")).get("done"):
         return
     while game_running():
         say("the game is running: BLISS (GPU) waits")
         time.sleep(600)
-    rec = {"target": TARGET}
+    rec = {"target": TARGET, "adapter": "general" if general else "2017"}
+    sub = "bliss_general" if general else "bliss"
     for stage in ("bliss", "bliss-judge"):
         code = subprocess.run([PY, "-u", "matched.py", stage, TARGET], cwd=ROOT).returncode
         rec[stage] = code
         if code:
-            # An input BLISS's adapter does not take is permanent and recorded as such; anything else (a crash,
-            # WSL stopping) is not done, so the job is tried again rather than marked not possible.
-            folder = yoke.DATA / "matched"
-            errors = [json.loads(f.read_text(encoding="utf-8")).get("failed", "") for f in folder.glob(f"{TARGET}-*/bliss/block_*.json")]
-            incompatible = [e for e in errors if "coarse channel" in e]
-            rec["errors_seen"] = len(errors)
-            if errors and len(incompatible) == len(errors):
+            recs = [json.loads(f.read_text(encoding="utf-8"))
+                    for f in (yoke.DATA / "matched").glob(f"{TARGET}-*/{sub}/block_*.json")]
+            kinds = [r.get("failed_kind") for r in recs]
+            rec["failures"] = {k: kinds.count(k) for k in set(kinds) if k}
+            if recs and all(k == "incompatible_input" for k in kinds):
                 rec["done"] = True
-                rec["not_possible"] = (f"matched.py {stage} exited {code}: every block's slice is a layout BLISS's adapter "
-                                       "does not take (incompatible input, not a failure to run)")
+                rec["not_possible"] = (f"matched.py {stage} exited {code}: every block's slice is a layout the "
+                                       "adapter does not take (incompatible input, not a failure to run)")
                 yoke.write(status, rec, indent=1, stamp=True)
                 say(rec["not_possible"])
                 return

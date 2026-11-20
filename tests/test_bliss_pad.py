@@ -46,5 +46,41 @@ class Pad(unittest.TestCase):
             pad_to_coarse(self.rng.normal(size=(16, 1, PER)), 3, PER)
 
 
+class Records(unittest.TestCase):
+    def test_failure_kinds(self):
+        import subprocess
+        import matched
+        import yoke
+        self.assertEqual(matched.failure_kind(yoke.Refusal("INTERNAL_ERROR", "bliss_curves.py failed: AssertionError: "
+                                                           "x.h5: 1048574 channels, not one coarse channel less one")),
+                         "incompatible_input")
+        self.assertEqual(matched.failure_kind(yoke.Refusal("INTERNAL_ERROR", "ValueError: 5 channels from 3 into a "
+                                                           "coarse channel of 4: past its end")), "incompatible_input")
+        self.assertEqual(matched.failure_kind(yoke.Refusal("INTERNAL_ERROR", "CUDA error: out of memory")),
+                         "failed_to_run")
+        self.assertEqual(matched.failure_kind(subprocess.TimeoutExpired("wsl", 1)), "timeout")
+
+    def test_done_needs_the_pins(self):
+        import json
+        import tempfile
+        import matched
+        config = {"x": 1}
+        rec = {"config": config, "tones": [{}] * matched.TONES,
+               "provenance": {"plain": dict(matched.BLISS_PINS), "planted": dict(matched.BLISS_PINS)}}
+        with tempfile.TemporaryDirectory() as d:
+            f = Path(d) / "block_000.json"
+            f.write_text(json.dumps(rec), encoding="utf-8")
+            self.assertTrue(matched.bliss_done(f, config))
+            rec["provenance"]["planted"]["response_sha"] = "0000000000000000"
+            f.write_text(json.dumps(rec), encoding="utf-8")
+            self.assertFalse(matched.bliss_done(f, config))
+            f.write_text(json.dumps({"config": config, "failed": "x", "failed_kind": "incompatible_input"}),
+                         encoding="utf-8")
+            self.assertTrue(matched.bliss_done(f, config))
+            f.write_text(json.dumps({"config": config, "failed": "x", "failed_kind": "failed_to_run", "attempts": 1}),
+                         encoding="utf-8")
+            self.assertFalse(matched.bliss_done(f, config))
+
+
 if __name__ == "__main__":
     unittest.main()
