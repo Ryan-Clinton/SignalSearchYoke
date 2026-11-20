@@ -42,7 +42,7 @@ answered it.
 | 17 | Experiment freezing and scientific provenance | 3 | high | **in progress** (20 Nov 2026): frozen configs pinned, deviation history kept, block provenance and the step 12 checks enforced; see below |
 | 18 | The report and its claims | 3 | high | **in progress** (20 Nov 2026): version 1.6 written with what the audits found; record checks planned; see below |
 | 19 | Public repository and release readiness | 3 | high | **in progress** (20 Nov 2026): documents brought into line with the code, a consistency test; the release, tag and Zenodo deposit left for Ryan's go; see below |
-| 20 | Parallel processing and performance | 4 | high | to do |
+| 20 | Parallel processing and performance | 4 | high | **in progress** (20 Nov 2026): every record written whole, broken records set aside; the shared scheduler planned; see below |
 | 21 | Database and evidence storage | 4 | medium | to do |
 | 22 | Distributed volunteer computing (`docs/multiuser.md`) | 4 | high | to do |
 | 23 | Testing and regression coverage | 4 | high | to do |
