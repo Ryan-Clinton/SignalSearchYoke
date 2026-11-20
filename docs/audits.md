@@ -25,7 +25,7 @@ answered it.
 |---|---|---|---|---|
 | 1 | Scientific methodology | 1 | critical | **done** (19 Nov 2026), re-audited the same day; see below |
 | 2 | Signal injection accuracy | 1 | critical | **re-audited** (20 Nov 2026): paired reruns running; see below |
-| 3 | turboSETI comparison fairness | 1 | critical | to do |
+| 3 | turboSETI comparison fairness | 1 | critical | **in progress** (20 Nov 2026): findings judged, block experiments queued; see below |
 | 4 | False-positive methodology | 1 | critical | to do |
 | 5 | The 2016 interference failure | 1 | critical | to do |
 | 6 | Detector completeness and missed signals | 1 | high | to do |
@@ -212,4 +212,30 @@ addressed with limits). Six new points, each checked before building:
 | C4: "fixed flux" is constant injected power in uncalibrated units, on the first four blocks of each class | medium | **built; running.** Renamed throughout (`injection_checks.py power`, `injection_power.json`, "one injected power in all three ON looks"); the blocks are now four crowded and four clean drawn at random (seed 12). |
 | The DC census assumed the coarse channel's size and the DC bin's place | low | **built.** The census now reads each session's DC bins from its own header (fch1, foff, the HDF5 chunk) and each signal's frequency through each ON look from its record, a channel either side: **2, 4 and 2 signals, as before**. |
 | The macOS CI job was cancelled before it ran | — | **done**: rerun requested (`gh run rerun --failed`). |
+
+## 3. turboSETI comparison fairness: 20 November 2026
+
+**Verdict:** a fair comparison of two whole pipelines on the same data and
+signals; not yet a controlled comparison of the detectors. Each finding
+was checked against turboSETI 2.3.2's own source as installed here.
+
+| Finding | Severity | Verdict and what was done |
+|---|---|---|
+| F3-01: turboSETI never searches the zero-drift trial | high | **confirmed; measurement queued.** `FindDoppler` defaults to `min_drift=1e-5` and both its search loops test `abs(drift_rate) > fd.min_drift`; it also refuses a negative `min_drift` (its line 151), so the trial cannot be switched on from the call. `check_zero_drift` in the event stage cannot bring back hits never found. turbo_curves.py and turbo_events.py said zero drift was kept: corrected. `tools/turbo_diag.py` runs a variant with `min_drift` set to -1 on the object after it is made; `tools/turbo_checks.py blocks` compares it with the published run, paired, by drift. |
+| F3-02: the OFF vetoes differ (this search's at S/N 6 along the track and shadow hits from 5; turboSETI's from its hits over the cut in a frequency window), so the false-candidate curves compare cadence tests as well as detectors | high | **built; queued.** The crossed experiment on 16 real blocks (8 of 2017, 8 of 2016, crowded and clean at random): turboSETI's hits through this search's cadence test (its hits from SNR 5 as shadow hits), and this search's hits through turboSETI's event stage (written as turboSETI writes its own, the top-hit window as freq_start/freq_end), beside both as published; paired, signal by signal. |
+| F3-03: turboSETI's event table can drop a look's row when two looks' hits share a TopHitNum, and recovery is credited from its event and its hit tables together | medium | **built; queued.** For each signal credited, whether its event has a row in each ON look and whether the hit matched in each hit table is the event's own (the same TopHitNum in that look). |
+| F3-04: where turboSETI loses signals | high | **built; queued.** The first stage lost: no hit at SNR 5; another hit in its top-hit window (2 * ceil(max drift / drift step) channels, about 2.3 kHz here, confirmed in `tophitsearch`); found at SNR 5 but measured outside the tolerances; a matching hit only under the cut; vetoed by an OFF hit in the window; not associated; a false association; by class, drift and S_in. |
+| Searching once at the lowest cut and cutting the tables is the same as searching at each cut | — | **built; queued.** turboSETI's search at SNR 30 itself against the SNR 5 search cut to > 30: hits and event rows compared. |
+| The frequency reference correction | — | **built and measured** (`turbo_checks.py reference`, 102 strong synthetic tones over -4 to +4 Hz/s and six places within a channel). turboSETI finds every one, but at fast drifts reports the frequency up to 36 Hz from where the comparison matches it (the first spectrum's middle) and the drift up to 0.23 Hz/s off: the published +-6 Hz, +-0.05 Hz/s credit **5 of 60 at 2 to 4 Hz/s and 15 of 24 at 1 to 2 Hz/s**, all at 0.5 Hz/s and under; matching along the track instead credits 7 and 19. So the tolerances are part of why turboSETI finds little at fast drifts in the comparison. The block experiment scores both pipelines also with tolerances that scale with drift, the same for each (+-max(6 Hz, 10 s x drift), +-max(0.05, 0.08 x drift)), beside the published ones. |
+
+On one block (2017, a smoke run before the queue), at SNR 10 of 110
+signals: this search as published 75, turboSETI 17; turboSETI's hits
+through this search's test 19, this search's hits through turboSETI's test
+48; the zero-drift trial changed nothing; with the scaled tolerances this
+search 82, turboSETI 18. turboSETI's losses there: 82 with no hit at SNR 5
+within its window, 8 under the cut, 3 found but measured outside the
+tolerances. None of turboSETI's credited events had a row in each ON look,
+but where a row was there it was the hit the tables matched. Searching at
+30 gave the same hits as the cut tables. These are one block's numbers;
+the 16-block results follow.
 
