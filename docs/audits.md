@@ -29,7 +29,7 @@ answered it.
 | 4 | False-positive methodology | 1 | critical | **in progress** (20 Nov 2026): record-based checks done, the time-order test queued; see below |
 | 5 | The 2016 interference failure | 1 | critical | **in progress** (20 Nov 2026): records analysed, blocks read again queued; see below |
 | 6 | Detector completeness and missed signals | 1 | high | to do |
-| 7 | BLISS comparison | 1 | high | to do |
+| 7 | BLISS comparison | 1 | high | **in progress** (20 Nov 2026): provenance enforced, two-ON split measured, wider same-hit control queued; see below |
 | 8 | Statistical analysis and uncertainty | 1 | high | to do |
 | 9 | Core narrowband detection algorithm (`searching.py`) | 2 | high | to do |
 | 10 | Curved Doppler search | 2 | high | to do |
@@ -321,3 +321,23 @@ and the records (`tools/rfi2016.py records`; the blocks read again are queued).
 | The record took its session from the block choice, which does not hold it | low | **built**: from `matched_tables.load`. |
 | Tests for the analysis | — | **built**: `tests/test_rfi2016.py`. |
 
+## 7. BLISS comparison: 20 November 2026
+
+**Verdict:** the comparison stands as measured: BLISS's own event stage
+reaches no cut at 0.1 false a block on the 2017 session, and its hits under
+this search's cadence test recover 4,048 planted signals against this
+search's 4,520. Two points were defects and are fixed (the pins were
+recorded, not enforced; the loss table claimed causes). The two-ON rule was
+measured and does not explain BLISS's failure. Checked against the upstream
+event stage as ported (`tools/bliss/bliss_events.py`), the records and the
+adapter.
+
+| Finding | Severity | Verdict and what was done |
+|---|---|---|
+| BL-01: BLISS keeps an event with hits in two ON looks; this search's recovery needs three | high | **confirmed and measured** (`tools/bliss_checks.py events`, from the records; members are one hit per ON look). False a block, all / exactly two ON / three ON: at 30, 19.70 / 12.71 / 7.28; at 50, 14.99 / 9.25 / 5.94; at 100, 4.54 / 3.02 / 1.61. Counting only three-ON events, BLISS still reaches no cut near 0.1, so the two-ON rule is not why it fails. Planted signals are credited only by three-ON events already, so recovery is the same either way. The published comparison is unchanged. |
+| BL-02: the port was checked against upstream without the production preprocessing | high | **confirmed as a limit; stated.** `port_vs_bliss.py` compares every event's members on the hits it gives both, on CPU segments without normalization, equalization, sigma clipping or the hit filter, and with other kurtosis settings. It shows the event code agrees on the hits supplied, not that the whole production chain does. A run with the production steps on segments is **planned** (it needs the patched CPU build in BLISS's environment); whole crowded blocks do not fit upstream's event stage, which is said wherever the port is described. |
+| BL-03: the pinned BLISS commit and response file were recorded but not enforced | high | **confirmed; built.** `matched.BLISS_PINS` (checkout 2b98afe, local change 6d80c82f, response file 143f61d1) is checked before any BLISS record is written (the comparison, the hybrid and the same-hit control); a run that differs is refused. `tools/bliss_checks.py pins`: all 242 recorded runs (121 blocks, plain and planted) match. |
+| BL-04: the 2019 BLISS run was blocked by the adapter's 2017 layout, and any failure was recorded as not possible | high | **confirmed; built.** `tools/bliss/pad.py` pads any slice inside one coarse channel; it gives the same array as the published padding on the 2017 layout (`tests/test_bliss_pad.py`). It runs through `tools/bliss/run_general.py` with `SSY_BLISS_GENERAL=1`, whose hashes join the configuration, so the 2017 records keep theirs (checked). `step12_run.py` now records only an input the adapter does not take as not possible; any other failure is left not done and tried again. The 2019 BLISS run is a supplementary experiment for later; step 12's verdict is frozen. |
+| BL-05: hit order: three shuffles, and the shuffle seed depends on the cut | medium | **confirmed; planned.** The seed is `[shuffle, cut]`, so orders differ between cuts. More orders on crowded blocks, with a seed fixed across cuts, are planned as a robustness check; the sorted order stays the reference. |
+| BL-06: the same-hit control covered two blocks chosen for their false candidates | medium | **confirmed; running.** The control is queued on eight blocks chosen beforehand by seed 12 (49, 79, 131, 139, 166, 185, 221, 231), clean and crowded. The hybrid stays an exploratory combination. |
+| BL-07: the BLISS loss table called its categories causes | medium | **confirmed; corrected.** The table and `_bliss_loss` now say first failure seen in the order checked, not a cause shown; the report's detector sentence likewise. |
