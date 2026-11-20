@@ -188,7 +188,7 @@ def detector_sentence(det):
     c = Counter(causes.values())
     parts = ", ".join(f"{v} {k}" for k, v in c.most_common())
     out = (f"The {len(det['signals'])} signals the detector gave no matching hit for were measured through its "
-           f"stages, the detector unchanged; the first cause in each: {parts}.")
+           f"stages, the detector unchanged; the first failure seen in each: {parts}.")
     capped = [x["matching_hit_snr"] for s in det["signals"] if causes[(s["block"], s["tone"])] == "the hit cap"
               for lk in s["looks"] for x in lk.get("raised_caps", []) if x["matching_hit_snr"] is not None]
     caps = [x["cap"] for s in det["signals"] if causes[(s["block"], s["tone"])] == "the hit cap"

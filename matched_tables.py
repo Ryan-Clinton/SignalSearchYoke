@@ -424,7 +424,11 @@ def _bliss_loss(t, cut):
     """Where a planted signal BLISS did not recover in all three ON looks
     was lost: flagged (most of its track in some ON look under BLISS's
     flags), not found by its search, removed by its hit filter, or found
-    in all three looks but not made an event."""
+    in all three looks but not made an event. These are the first failure
+    seen in that order of checks, not a cause shown: a signal put under
+    "hit filter" had matching hits in each ON look before the filter and
+    not after, which says where it was lost, not that the filter alone lost
+    it."""
     c = matched.ck(cut)
     if t["bliss"][c].get("three_looks") == "recovered":
         return "recovered"
@@ -610,7 +614,8 @@ def markdown_bliss(r):
         out.append("Not made: no pipeline has a matched cut.")
     out += ["", "At each pipeline's SNR 10: " + "; ".join(f"{nm[p]} {n}" for p, n in r["totals_published"].items())
             + " (not at a matched rate).", "", "## Where BLISS loses planted signals", "",
-            "Each planted signal BLISS did not recover in all three ON looks, by the first stage that explains it: "
+            "Each planted signal BLISS did not recover in all three ON looks, by the first failure seen when its stages "
+            "are checked in this order (where it was lost, not a cause shown: no stage was changed to test it): "
             "flagged (more than half its track in some ON look under its spectral-kurtosis or sigma-clip flags), "
             "its search (no matching hit in all three ON looks before its hit filter), its hit filter (matching "
             "hits before it, not after) or its event stage (matching hits in all three, no event).", "",

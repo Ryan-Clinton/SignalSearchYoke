@@ -103,11 +103,23 @@ def bliss():
         code = subprocess.run([PY, "-u", "matched.py", stage, TARGET], cwd=ROOT).returncode
         rec[stage] = code
         if code:
-            rec["done"] = True
-            rec["not_possible"] = f"matched.py {stage} exited {code}: recorded as not possible on this session"
+            # An input BLISS's adapter does not take is permanent and recorded as such; anything else (a crash,
+            # WSL stopping) is not done, so the job is tried again rather than marked not possible.
+            folder = yoke.DATA / "matched"
+            errors = [json.loads(f.read_text(encoding="utf-8")).get("failed", "") for f in folder.glob(f"{TARGET}-*/bliss/block_*.json")]
+            incompatible = [e for e in errors if "coarse channel" in e]
+            rec["errors_seen"] = len(errors)
+            if errors and len(incompatible) == len(errors):
+                rec["done"] = True
+                rec["not_possible"] = (f"matched.py {stage} exited {code}: every block's slice is a layout BLISS's adapter "
+                                       "does not take (incompatible input, not a failure to run)")
+                yoke.write(status, rec, indent=1, stamp=True)
+                say(rec["not_possible"])
+                return
+            rec["done"] = False
+            rec["failed_to_run"] = f"matched.py {stage} exited {code}; not marked done, to be tried again"
             yoke.write(status, rec, indent=1, stamp=True)
-            say(rec["not_possible"])
-            return
+            raise SystemExit(rec["failed_to_run"])
     rec["done"] = True
     yoke.write(status, rec, indent=1, stamp=True)
 

@@ -39,6 +39,7 @@ done, so a run that stops goes on where it stopped.
 import argparse
 import itertools
 import json
+import os
 import math
 import shutil
 import sys
@@ -667,6 +668,23 @@ BLISS_COMMIT = "2b98afe960f13ee7e467aca499576d87ee7502f5"
 BLISS_FORMAT = 2                # 2: configuration and provenance kept; flags and the hit filter on planted tracks
 CUTS_BLISS = CUTS_TURBO
 BLISS_TOOLS = ("tools/bliss_curves.py", "tools/bliss/bliss_events.py", "tools/bliss/event_search_off_hits_once.patch")
+# What a BLISS run must have been made with, checked before its record is written (every 2017 record has these):
+# the pinned checkout, the local change (event_search_off_hits_once.patch, as `git diff` gives it) and the
+# Green Bank response file.
+BLISS_PINS = {"bliss_checkout": BLISS_COMMIT, "bliss_local_changes_sha": "6d80c82ff7e030bd",
+              "response_sha": "143f61d192b112d9"}
+
+
+def bliss_pins_problems(provenance):
+    """Where a BLISS run's provenance differs from BLISS_PINS ([] when it does not)."""
+    return [f"{k}: {provenance.get(k)!r}, pinned {v!r}" for k, v in BLISS_PINS.items() if provenance.get(k) != v]
+
+
+def _check_pins(*provenances):
+    for pv in provenances:
+        bad = bliss_pins_problems(pv or {})
+        if bad:
+            raise yoke.Refusal("INVALID_REQUEST", "BLISS did not run as pinned: " + "; ".join(bad))
 # ... and where it runs (settings, not part of the comparison): the WSL distribution, the Python with
 # BLISS's module, and the libraries it needs. Unset, the last two are under ~/ssy in the distribution
 # (docs/reproducing-results.md). bliss_curves.py takes BLISS_PYTHON_DIR, BLISS_RESPONSE and BLISS_DEVICE
@@ -704,11 +722,23 @@ def bliss_where():
     return _bliss_where
 
 
+# SSY_BLISS_GENERAL=1: BLISS runs through tools/bliss/run_general.py, bliss_curves.py with its slice padding made
+# general (pad.py) for sessions not laid out as the 2017 one; those files' hashes join the configuration, so these
+# records are their own experiment and the 2017 records keep theirs.
+BLISS_GENERAL = os.environ.get("SSY_BLISS_GENERAL") == "1"
+BLISS_GENERAL_TOOLS = ("tools/bliss/run_general.py", "tools/bliss/pad.py")
+
+
 def bliss_config():
     import hashlib
-    return {"bliss_format": BLISS_FORMAT, "bliss_commit": BLISS_COMMIT, "cuts": list(CUTS_BLISS),
-            "tools": {t: hashlib.sha256((yoke.ROOT / t).read_bytes().replace(b"\r\n", b"\n")).hexdigest()[:16]
-                      for t in BLISS_TOOLS}}
+
+    def sha(t):
+        return hashlib.sha256((yoke.ROOT / t).read_bytes().replace(b"\r\n", b"\n")).hexdigest()[:16]
+    out = {"bliss_format": BLISS_FORMAT, "bliss_commit": BLISS_COMMIT, "cuts": list(CUTS_BLISS),
+           "tools": {t: sha(t) for t in BLISS_TOOLS}}
+    if BLISS_GENERAL:
+        out["general_adapter"] = {t: sha(t) for t in BLISS_GENERAL_TOOLS}
+    return out
 
 
 def _wsl_path(p):
@@ -722,7 +752,8 @@ def _bliss_tool(out, which, paths, tones=None, cuts=CUTS_BLISS, shuffles=None):
     env = [] if shuffles is None else [f"BLISS_SHUFFLES={shuffles}"]
     python, ld = bliss_where()
     done = subprocess.run(["wsl", "-d", BLISS_DISTRO, "--", "env", f"LD_LIBRARY_PATH={ld}", *env, python,
-                           _wsl_path(yoke.ROOT / "tools" / "bliss_curves.py"), *extra, _wsl_path(out),
+                           _wsl_path(yoke.ROOT / "tools" / ("bliss/run_general.py" if BLISS_GENERAL else "bliss_curves.py")),
+                           *extra, _wsl_path(out),
                            ",".join(map(str, cuts)), which, *map(_wsl_path, paths)],
                           capture_output=True, text=True, timeout=BLISS_TIMEOUT_S)
     if done.returncode:
@@ -922,6 +953,7 @@ def add_bliss(target, say=print, shard=(0, 1), count=None):
                      for c in CUTS_BLISS for s in [_status({j: where(cad, t, j)[1] for j in TRUE}, t["drift"],
                                                            pp[ck(c)], tp[ck(c)])]}
                     for t in rec["tones"]]}
+            _check_pins(plain["provenance"], bp["provenance"])
             res = {"format": FORMAT, "block": rec["block"], "class": rec["class"], "config": config,
                    "provenance": {"plain": plain["provenance"], "planted": bp["provenance"]},
                    "false": false,
@@ -1094,6 +1126,7 @@ def add_bliss_judge(target, say=print):
                               "judged": {ck(c): _status(t_f, tn["drift"], true_planted[str(c)], true_plain[ck(c)])
                                          for c in CUTS_OURS}})
         times["block_s"] = round(time.monotonic() - started, 1)
+        _check_pins(hp["provenance"], hb["provenance"])
         res = {"format": FORMAT, "block": rec["block"], "class": rec["class"], "config": config,
                "provenance": {"plain": hp["provenance"], "planted": hb["provenance"]},
                "hits": {"plain": [len(x) for x in hp["hits"][str(BLISS_HIT_CUT)]],
@@ -1176,6 +1209,7 @@ def bliss_control(target, blocks, say=print):
                        for k, v in h["hits"].items()}
         native = json.loads((bliss_folder(target, session) / f"block_{b:03d}.json").read_text(encoding="utf-8"))
         judged = json.loads((judge_folder(target, session) / f"block_{b:03d}.json").read_text(encoding="utf-8"))
+        _check_pins(h["provenance"])
         res = {"block": b, "class": rec["class"], "cut": CONTROL_CUT, "config": bliss_judge_config(),
                "provenance": h["provenance"], "hits_fingerprint": fingerprint,
                "hits": {k: [len(x) for x in v] for k, v in h["hits"].items()},

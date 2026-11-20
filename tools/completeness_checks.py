@@ -18,8 +18,10 @@ from tools/search_variants.py, a diagnostic copy of the search.
 - **pairs**: two signals close in frequency at 2, 3 and 4 Hz/s, the same,
   opposite and a little different in drift, 1 to 100 channels apart, the
   second weaker (1, 1/2, 1/4), two places in a channel, in noise. Whether
-  the second is found by the search as it is, with the corridor of excluded
-  starts off, and with the scores refreshed after shadow hits too.
+  the second is found alone (the control), beside the first by the search as
+  it is, with the corridor of excluded starts off, and with the scores
+  refreshed after shadow hits too; losses counted only where it is found
+  alone.
 - **cluster**: a lone signal at the far end of a slice from a crowd of strong
   ones; the crowd grown until the cap is spent (the cap scaled down with the
   slice); found under the global cap and under a budget a region.
@@ -175,29 +177,39 @@ def pairs(say=_say):
                             h1 = 60 * sigma / 4
                             p = measure.plant(noise, [(x1, d1, h1), (x2, d2, h1 * ratio)], TSAMP, FOFF)
                             f2 = FCH1 + x2 * FOFF
-                            got = {}
+                            # The control: the second signal alone, in the same noise.
+                            alone = _found(sv.search_variant(measure.plant(noise, [(x2, d2, h1 * ratio)], TSAMP, FOFF),
+                                                             FOFF, TSAMP, FCH1), f2, d2)
+                            got = {"alone": alone}
                             for name, kw in (("as is", {}), ("no corridor", {"corridor": False}),
                                              ("shadow refresh", {"refresh_shadow": True})):
                                 got[name] = _found(sv.search_variant(p, FOFF, TSAMP, FCH1, **kw), f2, d2)
                             rows.append({"drift": d1, "relative": rel, "second_drift": round(d2, 3), "channels_apart": sep,
                                          "ratio": ratio, "phase": phase, **got})
-    lost = [r for r in rows if not r["as is"]]
-    rec = {"cases": len(rows), "second_lost_as_is": len(lost),
+    lost = [r for r in rows if r["alone"] and not r["as is"]]
+    rec = {"cases": len(rows), "second_found_alone": sum(r["alone"] for r in rows),
+           "found_alone_but_lost_beside_the_first": len(lost),
            "of_those_found_without_the_corridor": sum(r["no corridor"] for r in lost),
            "of_those_found_with_shadow_refresh": sum(r["shadow refresh"] for r in lost),
            "found_as_is_but_lost_without_the_corridor": sum(r["as is"] and not r["no corridor"] for r in rows),
-           "by_separation": {str(s): {"cases": sum(r["channels_apart"] == s for r in rows),
-                                      "lost_as_is": sum(r["channels_apart"] == s and not r["as is"] for r in rows),
-                                      "lost_without_corridor": sum(r["channels_apart"] == s and not r["no corridor"]
-                                                                   for r in rows)}
+           "by_separation": {str(s): {"found_alone": sum(r["channels_apart"] == s and r["alone"] for r in rows),
+                                      "lost_beside_the_first": sum(r["channels_apart"] == s and r["alone"]
+                                                                   and not r["as is"] for r in rows),
+                                      "lost_without_the_corridor": sum(r["channels_apart"] == s and r["alone"]
+                                                                       and not r["no corridor"] for r in rows)}
                              for s in (1, 2, 4, 8, 16, 32, 64, 100)},
-           "by_relative_drift": {rel: {"cases": sum(r["relative"] == rel for r in rows),
-                                       "lost_as_is": sum(r["relative"] == rel and not r["as is"] for r in rows)}
+           "by_relative_drift": {rel: {"found_alone": sum(r["relative"] == rel and r["alone"] for r in rows),
+                                       "lost_beside_the_first": sum(r["relative"] == rel and r["alone"] and not r["as is"]
+                                                                    for r in rows)}
                                  for rel in ("same", "opposite", "0.3 Hz/s apart")},
+           "by_ratio": {str(q): {"found_alone": sum(r["ratio"] == q and r["alone"] for r in rows),
+                                 "lost_beside_the_first": sum(r["ratio"] == q and r["alone"] and not r["as is"] for r in rows)}
+                        for q in (1.0, 0.5, 0.25)},
            "rows": rows, "kind": "measured",
            "note": "the second signal at S_in 60 x ratio, the first at 60; in noise, one look; found within the tolerances"}
     yoke.write(OUT / "completeness_pairs.json", rec, indent=1, stamp=True)
-    say(f"pairs: {len(rows)} cases, second lost as is {len(lost)}; of those found without the corridor "
+    say(f"pairs: {len(rows)} cases, second found alone {rec['second_found_alone']}, of those lost beside the first "
+        f"{len(lost)}; of the lost, found without the corridor "
         f"{rec['of_those_found_without_the_corridor']}, with shadow refresh {rec['of_those_found_with_shadow_refresh']}")
     say(f"  by separation: {rec['by_separation']}")
     return rec

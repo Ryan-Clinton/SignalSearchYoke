@@ -13,6 +13,7 @@ ELSEWHERE = {
     "tools/bliss_curves.py": "BLISS's environment (pybliss, WSL)",
     "tools/bliss/backend_components.py": "BLISS's environment (pybliss)",
     "tools/bliss/port_vs_bliss.py": "BLISS's environment (pybliss)",
+    "tools/bliss/run_general.py": "BLISS's environment (pybliss, through bliss_curves.py)",
     "tools/turbo_curves.py": "turboSETI's environment",
     "tools/turbo_events.py": "turboSETI's environment",
     "tools/turbo_local.py": "turboSETI's environment",
