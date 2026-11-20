@@ -280,3 +280,15 @@ cadences. Every finding was checked against the code and the records.
 | The new records in the evidence package | — | **planned at the next build**: data/analysis is in the package and its records carry the commit that made them. |
 | Independent negative-control cadences | — | **planned** (control B), as before: the rearranged looks of one cadence are not a substitute. |
 
+### 4, re-audited again at 4f3ff26, 20 November 2026
+
+R4-01 accepted as fixed. Remaining points:
+
+| Finding | Severity | Verdict and what was done |
+|---|---|---|
+| R4-03: "wider than a joint 95% interval by construction" is not guaranteed: marginal intervals added are not a joint 95% interval, and the exact Poisson part assumes a count model correlated interference breaks | medium | **built**: the conservative interval is now described as an exploratory envelope whose coverage depends on the interference and is measured, not assumed; the simulations above are that measurement. |
+| An end-to-end test of the time-order control | — | **built**: `tests/test_false_checks.py` makes a synthetic cadence with a tone in looks 1, 3 and 5 only and runs this search and its cadence test both ways: called ON as (1, 3, 5), the published ON, OFF pairs and time order keep the same one candidate with the same member hits (in looks 1, 3 and 5); called ON as (0, 2, 4), neither keeps it. |
+| The DOT diagnostic paired stamps by positions 0, 2 and 4 | low | **built**: `onoff.judge` now pairs each ON look with the OFF look just after it by the looks' own flags; in the published ON, OFF pairs that selects exactly positions 0, 2 and 4, as before. It is recorded, not part of the verdict. |
+| The new records in the evidence package | — | **planned**: built and reproduced when the queued runs finish. |
+| Independent negative controls | — | **planned**, a new experiment. |
+

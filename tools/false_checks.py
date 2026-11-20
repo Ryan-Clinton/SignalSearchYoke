@@ -17,9 +17,10 @@ unchanged; these read the same block records.
   unless every class is empty. Two replacements, both supplementary: a
   hybrid (a class with none drawn from the flat-prior posterior of a Poisson
   rate, Gamma(1, 1/blocks); a class with some bootstrapped), exploratory, as
-  it is neither a confidence nor a credible interval; and a conservative one
-  (each class's interval the wider of its bootstrap and the exact Poisson
-  interval of its total, weighted and added end to end). A coverage
+  it is neither a confidence nor a credible interval; and an exploratory
+  conservative envelope (each class's interval the wider of its bootstrap and
+  the exact Poisson interval of its total, weighted and added end to end), not
+  a guaranteed 95% interval either. A coverage
   simulation (rare, concentrated and correlated candidates in the sessions'
   layouts) gives how often each holds the true rate.
 - **assignments**: the published rate is distinct candidates over all 19
@@ -111,9 +112,12 @@ def class_interval(n, rng, boot=BOOT):
 
 
 def conservative_interval(counts, weights, rng, boot=BOOT):
-    """The weighted rate and a conservative interval: each class's interval
-    (class_interval) weighted and added, ends to ends. Wider than a joint 95%
-    interval by construction; its coverage is measured, not assumed."""
+    """The weighted rate and an exploratory conservative envelope: each class's
+    interval (class_interval) weighted and added, ends to ends. Marginal class
+    intervals added this way are not guaranteed to cover the weighted rate 95%
+    of the time, and the exact Poisson part assumes a count model that
+    overdispersed, correlated interference breaks: its coverage depends on the
+    interference and is measured (coverage), not assumed."""
     est = sum(weights[c] * (np.mean(n) if len(n) else 0.0) for c, n in counts.items())
     lo = hi = 0.0
     for c, n in counts.items():

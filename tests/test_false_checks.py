@@ -104,5 +104,40 @@ class Records(unittest.TestCase):
         self.assertAlmostEqual(hi, 3.689 / 50, delta=0.002)
 
 
+
+class TimeOrderEndToEnd(unittest.TestCase):
+    """A synthetic cadence with a tone in looks 1, 3 and 5 only: called ON as
+    (1, 3, 5), the published ON, OFF pairs and time order must keep the same
+    candidate with the same member hits; called ON as (0, 2, 4), neither keeps it."""
+
+    def test_both_orders_keep_the_same_candidates(self):
+        import math
+        import matched
+        import measure
+        cad = synth.cadence(5)
+        sigma = float(np.median(cad[1]["sigma"]))
+        planted = []
+        for j, c in enumerate(cad):
+            raw = c["raw"]
+            if j in (1, 3, 5):
+                dt = (c["s"]["tstart"] - cad[0]["s"]["tstart"]) * 86400
+                x = 8000.3 + 0.2 * dt / (c["s"]["foff"] * 1e6)
+                raw = measure.plant(raw, [(x, 0.2, 60 * sigma / math.sqrt(raw.shape[0]))], c["s"]["tsamp"],
+                                    c["s"]["foff"])
+            planted.append(dict(c, raw=raw, spectra=raw, s=dict(c["s"], spectra=raw)))
+        searched = matched.our_search(planted)
+
+        def kept(f, ons):
+            looks, events, order = f(planted, searched, ons, 10, [{} for _ in range(6)])
+            return sorted(sorted(matched._hit_key(m) for m in ev["members"])
+                          for ev in matched._our_kept(looks, events, order))
+        pairs = kept(matched.our_events, (1, 3, 5))
+        time_order = kept(fc._judge_in_time_order, (1, 3, 5))
+        self.assertEqual(len(pairs), 1)
+        self.assertEqual(pairs, time_order)
+        self.assertEqual(sorted(k[0] for k in pairs[0]), [1, 3, 5])
+        self.assertEqual(kept(matched.our_events, (0, 2, 4)), [])
+        self.assertEqual(kept(fc._judge_in_time_order, (0, 2, 4)), [])
+
 if __name__ == "__main__":
     unittest.main()

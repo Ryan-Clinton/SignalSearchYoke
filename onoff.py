@@ -374,8 +374,10 @@ def judge(looks):
         step = ltop.step
         spread = (max(drifts) - min(drifts)) / step if len(drifts) > 1 else 0.0
         dot = []
-        for p in (0, 2, 4):
-            if p + 1 < len(stamps):
+        # Each ON look against the OFF look just after it (by the looks' own ON flags: in the published
+        # ON, OFF pairs these are positions 0, 2 and 4, as before; in time order they need not be).
+        for p in range(len(stamps) - 1):
+            if looks[p].on and not looks[p + 1].on:
                 a, b = stamps[p] - stamps[p].mean(), stamps[p + 1] - stamps[p + 1].mean()
                 na, nb = np.linalg.norm(a), np.linalg.norm(b)
                 if na > 0 and nb > 0:
