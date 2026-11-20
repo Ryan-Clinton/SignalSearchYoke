@@ -691,6 +691,13 @@ results", each finding that does, and fixes the wording points.
 | F18-08: the report's records not checked against each other | medium | **agreed; planned**: a check of each record's session, provenance and counts before writing, with tests that mix records. |
 | F18-09: references and Figure 1's axis | low | **done in part**: Enriquez et al. 2017, Isaacson et al. 2017, turboSETI 2.3.2 and BLISS at 2b98afe added; the axis is described in the caption. |
 
+### 18, re-audited at 5f1b83d, 20 November 2026
+
+| Finding | Severity | Verdict and what was done |
+|---|---|---|
+| F18-02's wording joined two claims and misdescribed the intervals | high | **confirmed; fixed.** The report now says the false-candidate intervals are a bootstrap over blocks within each class (a Poisson upper limit where a class has none), that under correlated interference they hold the rate far less often than 95% (about 41% for 2016-like) and nothing tried fixes it, and, apart, that the window-resampled recovery intervals are a supplementary check that also falls short under strong correlation. |
+| F18-08: records not checked against each other | medium | **built.** `tools/report.py` refuses to write unless the BLISS comparison is the 2017 session's, steps 10 and 12 are their sessions' under their frozen configs' SHA-256s, and the operating points name only the report's sessions (`tests/test_report_records.py` mixes records and is refused). |
+
 ## 19. Public repository and release readiness: 20 November 2026
 
 **Verdict:** the repository is fit to be public as research software; the

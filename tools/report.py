@@ -213,6 +213,31 @@ def detector_sentence(det):
     return out + " Neither is changed here: the detector stays as step 10 ran it."
 
 
+# The records the report is written from, and what each must be (refused otherwise): the 2017 comparison,
+# step 10's and step 12's verdicts under their frozen configs, and analysis records of those sessions.
+SESSIONS = {"KIC8462852": "AGBT17A_999_68", "HIP17147": "AGBT16A_999_192", "NGC6946": "AGBT19B_999_104"}
+FROZEN_CONFIG_SHA = {10: "0af3a6340e1abdf40555a7862f1d07cbd53e75665495ca697469fc5b7714f188",
+                     12: "de7a5b9d9675a886c537c7d7a79366d48d95ab57de2841a898dc8c57fc53ee7d"}
+
+
+def record_problems(b, s10, s12, ops):
+    """What does not belong together in the records: [] when they do."""
+    bad = []
+    if (b.get("target"), b.get("session")) != ("KIC8462852", SESSIONS["KIC8462852"]):
+        bad.append(f"the BLISS comparison is of {b.get('target')} {b.get('session')}, not the 2017 session")
+    for step, r, target in ((10, s10, "HIP17147"), (12, s12, "NGC6946")):
+        if r is None:
+            continue
+        if (r.get("target"), r.get("session")) != (target, SESSIONS[target]):
+            bad.append(f"step {step}'s verdict is of {r.get('target')} {r.get('session')}")
+        if r.get("config_sha256") != FROZEN_CONFIG_SHA[step]:
+            bad.append(f"step {step}'s verdict was made under another config than the frozen one")
+    for x in (ops or {}).get("sessions", []):
+        if SESSIONS.get(x.get("target")) != x.get("session"):
+            bad.append(f"the operating points name {x.get('target')} {x.get('session')}, not a session of the report")
+    return bad
+
+
 def main():
     b = load("measurements/matched-bliss.json")
     s10 = load("measurements/step10.json")
@@ -229,6 +254,9 @@ def main():
             inj[name] = json.loads(pth.read_text(encoding="utf-8"))
     ops_path = DATA / "analysis" / "operating_points.json"
     ops = json.loads(ops_path.read_text(encoding="utf-8")) if ops_path.exists() else None
+    bad = record_problems(b, s10, s12, ops)
+    if bad:
+        refuse("; ".join(bad))
     control_dir = DATA / "matched" / f"{b['target']}-{b['session']}" / "bliss_control"
     control = [json.loads(p.read_text(encoding="utf-8")) for p in sorted(control_dir.glob("block_*.json"))]
     trace_path = DATA / "analysis" / "bliss_only" / "trace_summary.json"
@@ -578,9 +606,13 @@ def main():
     w("- **False candidates a block** count the distinct candidates over all 19 wrong choices of ON looks "
       "together, not what one cadence would give; the union can be up to about 19 times one choice's rate. It is "
       "a control for comparing pipelines on the same blocks, not a calibrated false-alarm rate.")
-    w("- **The 95% intervals** are nominal block-bootstrap intervals. Where interference correlates between "
-      "blocks they hold the true rate far less often than 95% (about 41% in a simulation like 2016); "
-      "recovery intervals with whole windows of neighbouring blocks resampled are the ones to quote there.")
+    w("- **The false-candidate intervals** are a bootstrap over blocks within each class (a Poisson upper limit "
+      "where a class has none). Where interference correlates between blocks they hold the true rate far less "
+      "often than 95%: about 41% in a simulation like 2016, and no method tried fixes that. The 2016 rate's "
+      "interval is therefore not a 95% interval.")
+    w("- **The recovery intervals** with whole windows of neighbouring blocks resampled are a supplementary "
+      "check; they too fall short of 95% when blocks correlate strongly (about 46 to 60% at a correlation of "
+      "0.95 in simulation, 80 to 90% at 0.5 to 0.8).")
     w("- **turboSETI** as run (FindDoppler's defaults) never searches zero drift, and at fast drifts its reported "
       "frequency and drift can fall outside the ±6 Hz, ±0.05 Hz/s tolerances: of 60 strong signals at 2 to "
       "4 Hz/s it detected all, and the tolerances credit 5. The comparison is of whole pipelines, so detection, "
