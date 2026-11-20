@@ -42,8 +42,11 @@ REVISIONS = (
                           "measure.", True),
     ("1.4", "2026-11-19", "Recovery weighted to each session's crowded and clean blocks beside the sample's; "
                           "the neighbouring-block check over consecutive blocks; one rule for the matched cut.", True),
-    ("1.5", None, "Checks of the planted signals (a tone in the voltages, finer sampling, the DC bin, a fixed "
-                  "flux): none moves recovery.", True),
+    ("1.5", "2026-11-19", "Checks of the planted signals (a tone in the voltages, finer sampling, the DC bin, a "
+                          "fixed flux): none moves recovery.", True),
+    ("1.6", None, "What the code audits found that bears on the results: the 2016 reads' DC bins, how the "
+                  "false-candidate count and its intervals are built and where they fall short, turboSETI's zero "
+                  "drift and fast-drift reporting, how BLISS was run; the planted signals counted per session.", True),
 )
 CHROME = (Path("C:/Program Files/Google/Chrome/Application/chrome.exe"),
           Path("C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"))
