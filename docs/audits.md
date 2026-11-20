@@ -36,7 +36,7 @@ answered it.
 | 11 | ON/OFF cadence matching (`onoff.py`) | 2 | high | **in progress** (20 Nov 2026): three findings confirmed with `onoff.py`'s own functions, measured in the queued blocks run; see below |
 | 12 | Candidate vetting and ranking | 2 | high | **in progress** (20 Nov 2026): five defects fixed as checks version 5, no recorded verdict changed; the ranking challenge planned; see below |
 | 13 | Instrument calibration and sensitivity | 2 | high | **in progress** (20 Nov 2026): calibration records used only where they apply; the coarse-channel response and band-wide sensitivity planned; see below |
-| 14 | Data acquisition and integrity | 2 | high | to do |
+| 14 | Data acquisition and integrity | 2 | high | **in progress** (20 Nov 2026): the 2016 DC bins found misplaced and fixed (no false candidate rested on them); refusals added; source versions planned; see below |
 | 15 | Astronomical signal coverage | 2 | medium | to do |
 | 16 | End-to-end reproducibility | 3 | critical | to do |
 | 17 | Experiment freezing and scientific provenance | 3 | high | to do |
@@ -514,3 +514,27 @@ covers, which the report states and later work extends.
 | 5: flux values carry no record of the SEFD assumed | medium | **agreed; planned**: a calibration manifest beside the records (SEFD, band, polarizations, formula, nominal or calibrated); the stored values stay. |
 | 6: the fine-channel response from one Voyager 1 file | medium | **agreed; stated** (reduced χ² 3.72, wings above sinc²); a second carrier is **planned**. |
 | 7: frequency dependence of the SEFD | medium | **agreed; planned**: the measured 50 MHz values (9.97 to 13.5 Jy) used where measured. |
+
+## 14. Data acquisition and integrity: 20 November 2026
+
+**Verdict:** A14-01 was worse than stated, and it is fixed. The 2016 session's
+coarse channels are 1,033,216 channels wide (its file holds exactly 308),
+while its storage chunks are 2^20; the web reader blanked the DC bin at each
+chunk's middle. Read raw, the 2016 file's real DC spikes stand 21,000 to
+27,000 times the median at the coarse channels' middles, and the chunks'
+middles are ordinary channels. So every 2016 read left the DC spikes in and
+smoothed one ordinary channel a chunk. 2017 and 2019 are not affected (coarse
+channels and chunks both 2^20). The effect on step 10: of 4,016 false events
+at cut 30 over the 19 wrong choices, none lies within 50 Hz of a DC channel.
+A spike in every look is vetoed by its OFF looks, so the 2016 failure does not
+rest on it. Step 10's records stand as made; its verdict is frozen.
+
+| Finding | Severity | Verdict and what was done |
+|---|---|---|
+| A14-01: the two readers blank the DC bin in different places | high | **confirmed, larger than stated; fixed.** Both now take the coarse channel's width from the instrument (`seti.coarse_width`: at Green Bank the coarse channel's 187.5/64 MHz over the channel width), which gives 2^20 in 2017 and 2019, as before, and 1,033,216 in 2016 (tested, with the DC bin blanked at the coarse middle). `SSY_DC_BY_CHUNK=1` keeps the old rule for remaking records made before (set by `tools/regress_step10.py`; reruns of `tools/rfi2016.py reread` need it to reproduce step 10's records). |
+| A14-02: a changed source file can leave old results current | high | **agreed; planned.** Every file read so far carries an ETag; binding each block's record to the file's ETag and size, and refusing to resume across a change, comes with the survey runs (audit 22). |
+| A14-03: decode rebuilds only the first of several filters | high | **confirmed; guarded.** `reading.direct_ready` now refuses a file with more than one filter (tested), so it is never read wrongly. All 31 files indexed have one. |
+| A14-04: a missing start time became MJD 0 | high | **confirmed; fixed.** Both readers refuse a look without `tstart` (tested). Checking a cadence's order and pointing against its target is **planned** (the matched runs take the order from the store's cadence positions). |
+| A14-05: no ETag means no If-Match | medium | **agreed; planned.** Every file read so far had one; refusing a file without one would stop the 3C295 calibration files, so the total length is to be checked instead. |
+| A14-06: damaged spectra enter the search | medium | **built in part.** A look with any non-finite sample is now refused rather than searched (audit 9 found one NaN empties a search; tested). Zero-filled and dropped-data checks stay in `instrument.dropped`, run apart. |
+| A14-07: no reader regression tests | medium | **built in part**: `tests/test_reading_integrity.py`; local against web byte for byte on a fixture is **planned**. |

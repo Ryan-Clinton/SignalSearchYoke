@@ -266,9 +266,11 @@ def chunk_index(url):
 
 def direct_ready(index):
     """Whether the direct path fits this file: float32 data of (time, 1,
-    channel) in chunks of one spectrum by a run of channels."""
+    channel) in chunks of one spectrum by a run of channels, through at
+    most one filter (decode rebuilds only the first of a filter pipeline)."""
     shape, chunk = index["shape"], index["chunk_shape"]
     return (len(shape) == 3 and shape[1] == 1 and chunk[0] == 1 and chunk[1] == 1 and index["dtype"] == "float32"
+            and len(index.get("filters") or []) <= 1
             and len(index["chunks"]) == shape[0] * -(-shape[2] // chunk[2]))
 
 

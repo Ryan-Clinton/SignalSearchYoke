@@ -186,6 +186,32 @@ def channels(fch1, foff, nchans, low, high):
     return first, last
 
 
+def coarse_width(attrs, chunk_width):
+    """Channels in one coarse channel: a saved slice's own record of it; at Green Bank (telescope 6) the
+    coarse channel's 187.5/64 MHz over the channel width (2^20 channels at 2.79 Hz in 2017 and 2019,
+    1,033,216 at 2.84 Hz in 2016, whose 2^20-channel storage chunks do not follow the coarse channels);
+    otherwise the file's chunk width."""
+    if "coarse_channel" in attrs:
+        return int(attrs["coarse_channel"])
+    if int(attrs.get("telescope_id", 0)) == 6:
+        return int(round(GBT_COARSE_MHZ / abs(float(attrs["foff"]))))
+    return int(chunk_width)
+
+
+def start_mjd(attrs, where):
+    """A look's start (MJD), refused when the file does not give one (never taken as MJD 0)."""
+    if attrs.get("tstart") is None:
+        raise yoke.Refusal("INVALID_REQUEST", f"{where} gives no start time (tstart)")
+    return float(attrs["tstart"])
+
+
+def finite_or_refuse(spectra, where):
+    """Refuse a look with non-finite samples: one NaN would end its search silently (docs/audits.md 9)."""
+    bad = int(np.count_nonzero(~np.isfinite(spectra)))
+    if bad:
+        raise yoke.Refusal("INVALID_REQUEST", f"{where}: {bad} non-finite samples in the slice")
+
+
 def blank_dc(spectra, first, per):
     """Blank the receiver's spike at the middle of each coarse channel (the
     "DC bin": one channel of every `per`, made by the instrument, not the
@@ -224,12 +250,15 @@ def read_looks(urls, low, high):
     out = {}
     for url, index in zip(urls, indexes):
         a, first = index["attrs"], want[url][0]
-        per = index["chunk_shape"][2]
+        # The DC spikes sit at the coarse channels' middles, which need not be the storage chunks' (2016).
+        # SSY_DC_BY_CHUNK=1 blanks by chunk as reads before 20 Nov 2026 did, to remake their records exactly.
+        per = index["chunk_shape"][2] if os.environ.get("SSY_DC_BY_CHUNK") == "1" else coarse_width(a, index["chunk_shape"][2])
         spectra = got.pop(url).astype(np.float64)
+        finite_or_refuse(spectra, url)
         blank_dc(spectra, first, per)
         out[url] = {"spectra": spectra, "fch1": float(a["fch1"]) + first * float(a["foff"]), "foff": float(a["foff"]),
                     "tsamp": float(a["tsamp"]), "first_channel": first, "coarse_channel": per,
-                    "tstart": float(a.get("tstart", 0.0)), "target": str(a.get("source_name", "")),
+                    "tstart": start_mjd(a, url), "target": str(a.get("source_name", "")),
                     "fetched_mb": round(moved[url] / 1e6, 1)}
     return out
 
@@ -250,17 +279,13 @@ def read_slice(source, low, high):
         # Otherwise Green Bank's coarse channels are 187.5/64 MHz wide (2^20
         # channels at 2.79 Hz); a file's chunks need not be one coarse channel
         # (the Voyager 1 file's are 16384 channels).
-        if "coarse_channel" in attrs:
-            per = int(attrs["coarse_channel"])
-        elif int(attrs.get("telescope_id", 0)) == 6:
-            per = int(round(GBT_COARSE_MHZ / abs(foff)))
-        else:
-            per = int((data.chunks or data.shape)[-1])
+        per = coarse_width(attrs, (data.chunks or data.shape)[-1])
         whole_first = int(attrs.get("first_channel", 0)) + first
+    finite_or_refuse(spectra, str(source))
     blank_dc(spectra, whole_first, per)
     return {"spectra": spectra, "fch1": fch1 + first * foff, "foff": foff, "tsamp": float(attrs["tsamp"]),
             "first_channel": whole_first, "coarse_channel": per,
-            "tstart": float(attrs.get("tstart", 0.0)), "target": str(attrs.get("source_name", "")),
+            "tstart": start_mjd(attrs, str(source)), "target": str(attrs.get("source_name", "")),
             "fetched_mb": None}
 
 

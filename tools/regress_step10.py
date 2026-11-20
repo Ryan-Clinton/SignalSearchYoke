@@ -10,6 +10,10 @@ changed.
 
     python tools/regress_step10.py
 """
+import os
+
+# Remakes step 10's records: the DC bins blanked as those reads did, by storage chunk (seti.read_looks).
+os.environ.setdefault("SSY_DC_BY_CHUNK", "1")
 import json
 import shutil
 import sys
