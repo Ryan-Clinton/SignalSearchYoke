@@ -16,6 +16,7 @@ ELSEWHERE = {
     "tools/turbo_curves.py": "turboSETI's environment",
     "tools/turbo_events.py": "turboSETI's environment",
     "tools/turbo_local.py": "turboSETI's environment",
+    "tools/turbo_diag.py": "turboSETI's environment",
     "tools/setigen_frame.py": "turboSETI's environment (setigen)",
     "tools/pickles_block.py": "turboSETI's environment, a script that runs on import",
     "tools/pickles_check.py": "turboSETI's environment, a script that runs on import",
