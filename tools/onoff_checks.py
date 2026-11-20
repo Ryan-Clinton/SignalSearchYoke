@@ -9,7 +9,7 @@ on synthetic looks here.
   than 16 reference lines or no spread, and judge then counts that OFF look
   as clear. unmeasured(events): candidates with an OFF look neither
   measured (projected or fixed) nor holding a hit.
-- **weak ON** (A11-02): an ON look without a hit passes on the best of
+- **weak ON** (A11-02, exploratory): an ON look without a hit passes on the best of
   every place and drift within the tolerances reaching ON_MIN. null_on: at
   random places in the first ON look where nothing was planted, how often
   the other ON looks reach ON_MIN that way (each, and both, which with one
@@ -29,6 +29,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+import measure  # noqa: E402
 import onoff  # noqa: E402
 import yoke  # noqa: E402
 
@@ -91,35 +92,50 @@ def null_on(looks, n=200, seed=0):
             continue
         each = [b >= onoff.ON_MIN for r in rs for b in r[1]]
         both = [all(b >= onoff.ON_MIN for b in r[1]) for r in rs]
+        clear = [b and not r[2] for b, r in zip(both, rs)]
         out[f"{lo}-{hi}"] = {"places": len(rs), "each_on_look_over_on_min": round(float(np.mean(each)), 4),
                              "both_over_on_min": round(float(np.mean(both)), 4),
-                             "both_and_off_clear": round(float(np.mean([b and not r[2] for b, r in zip(both, rs)])), 4)}
+                             "both_and_off_clear": round(float(np.mean(clear)), 4),
+                             "both_and_off_clear_interval": list(measure.wilson(int(sum(clear)), len(clear)))}
+    out["note"] = ("exploratory: random places, not detected hits; how often unrelated places pass the track rule, "
+                   "not a candidate false-acceptance probability")
     return out
 
 
 def asymmetry(looks):
     """Real hit pairs between ON looks (earlier to later, as _events makes them): how many are within
-    distance 1 one way, and how many of those are not within it the other way."""
+    distance 1 one way, and how many of those are not within it the other way. The candidates are
+    screened both ways (onoff._close from each side), since its screen is the forward distance."""
     ons = [lk for lk in looks if lk.on]
     one_way = both_ways = only_forward = only_backward = 0
     for u, la in enumerate(ons):
         for lb in ons[u + 1:]:
-            hits_b = [i for i, h in enumerate(lb.hits) if not h.get("shadow")]
-            rows = np.array(hits_b) if hits_b else np.array([], int)
-            for ia, a in enumerate(la.hits):
-                if a.get("shadow") or not len(rows):
-                    continue
-                for k in onoff._close(a, la, lb, rows=rows):
-                    b = lb.hits[int(rows[k])]
-                    f = onoff.distance(a, b, la, lb) <= 1
-                    r = onoff.distance(b, a, lb, la) <= 1
-                    if f or r:
-                        one_way += 1
-                        both_ways += f and r
-                        only_forward += f and not r
-                        only_backward += r and not f
+            pairs = candidate_pairs(la, lb)
+            for ia, ib in pairs:
+                a, b = la.hits[ia], lb.hits[ib]
+                f = onoff.distance(a, b, la, lb) <= 1
+                r = onoff.distance(b, a, lb, la) <= 1
+                if f or r:
+                    one_way += 1
+                    both_ways += f and r
+                    only_forward += f and not r
+                    only_backward += r and not f
     return {"pairs_within_1_some_way": one_way, "both_ways": both_ways, "forward_only": only_forward,
             "backward_only": only_backward}
+
+
+def candidate_pairs(la, lb):
+    """(index in la, index in lb) of hits at the cut that onoff._close passes either way."""
+    rows_a = np.array([i for i, h in enumerate(la.hits) if not h.get("shadow")], int)
+    rows_b = np.array([i for i, h in enumerate(lb.hits) if not h.get("shadow")], int)
+    out = set()
+    if not len(rows_a) or not len(rows_b):
+        return out
+    for ia in rows_a:
+        out.update((int(ia), int(rows_b[k])) for k in onoff._close(la.hits[ia], la, lb, rows=rows_b))
+    for ib in rows_b:
+        out.update((int(rows_a[k]), int(ib)) for k in onoff._close(lb.hits[ib], lb, la, rows=rows_a))
+    return out
 
 
 def example():

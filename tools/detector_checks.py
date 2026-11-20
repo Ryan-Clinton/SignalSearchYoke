@@ -253,6 +253,8 @@ def _judged(cad, cad_p, su, sp, ts, cut=30, blind=None):
     if blind is not None:
         blind.update(wrong_choices=tally, planted=onoff_checks.unmeasured(events))
     looks, events, order = matched.our_events(cad, su, matched.TRUE, cut, [{} for _ in range(6)])
+    if blind is not None:
+        blind["true_choice_unplanted"] = onoff_checks.unmeasured(events)
     ku = matched._our_kept(looks, events, order)
     found = sum(matched._status({j: matched.where(cad, t, j)[1] for j in matched.TRUE}, t["drift"], kp, ku)
                 ["three_looks"] == "recovered" for t in ts)

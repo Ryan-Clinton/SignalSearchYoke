@@ -457,6 +457,14 @@ once). `onoff.py` is frozen; changes to the rules belong to a new version.
 | A11-06: interference changing drift between looks escapes the OFF test | high | **agreed; planned**: injected interference that changes drift, with a wider occupancy check as a flag, not a veto. |
 | A11-07: the OFF veto rate is measured at random places, not where candidates arise | medium | **agreed; planned**: null tracks matched to candidates' frequencies, drifts and crowding. |
 
+### 11, re-audited at 529ebf4, 20 November 2026
+
+| Finding | Severity | Verdict and what was done |
+|---|---|---|
+| The asymmetry count could never see a backward-only pair: `onoff._close` screens on the forward distance | high | **confirmed; fixed.** Candidate pairs are now screened from both sides and both distances taken (tested with a pair within 1 only backward). |
+| The unmeasured-OFF count left out the unplanted cadence at its true choice, and was tested only on made-up events | medium | **confirmed; fixed.** The true choice's own candidates are counted too; an end-to-end test runs a cadence with one OFF look that has nothing to measure through `onoff.judge`: the tone is called a candidate and the blind OFF look is named. |
+| The weak-ON measurement is not calibrated | medium | **agreed; labelled.** It is marked exploratory (random places, not detected hits) and each rate carries its Wilson interval; 60 places on noise say only that the rate there is under about 6%. |
+
 ## 12. Candidate vetting and ranking: 20 November 2026
 
 **Verdict:** five of the defects are real in the code and fixed, as checks
