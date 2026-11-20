@@ -824,6 +824,12 @@ real run's of 03:46).
 | T23-06: migrations and processes | medium | **in part**: writers from four processes are tested (audit 20); an old-schema fixture is **planned**. |
 | T23-07: external pipelines and real records not a release gate | medium | **agreed; planned** as a release workflow. |
 
+### 23, re-audited at a5bd71a, 20 November 2026
+
+| Finding | Severity | Verdict and what was done |
+|---|---|---|
+| T23-01: the guard accepted any folder under the temporary directory | medium | **confirmed; fixed.** tests/synth.py now refuses if a project module was loaded before it at all, so the tests' folder is always their own (checked: importing yoke first is refused); the isolation test also checks the folder is the one set for this run. CI run 87 ran 145 tests a job, the old-onoff comparison and the four-process writers among them. |
+
 ## 24. Large-scale survey strategy: 20 November 2026
 
 **Verdict:** the next step is a small survey pilot fixed in advance, not a

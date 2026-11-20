@@ -9,9 +9,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 # Nothing a test does may touch a real data folder: the tests always get a fresh one of their own, whatever
 # SSY_DATA was set to, and refuse to run if a project module was loaded with another before this.
+if "yoke" in sys.modules:       # loaded before this: its data folder is not this run's own, whatever it is
+    raise RuntimeError("yoke was imported before tests/synth.py; import synth first, so the tests get their own "
+                       "data folder")
 os.environ["SSY_DATA"] = tempfile.mkdtemp(prefix="ssy-test-data-")
-if "yoke" in sys.modules and not str(sys.modules["yoke"].DATA).startswith(tempfile.gettempdir()):
-    raise RuntimeError("yoke was imported with a real data folder before tests/synth.py; import synth first")
 for p in (ROOT, ROOT / "tools", ROOT / "tools" / "bliss"):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
