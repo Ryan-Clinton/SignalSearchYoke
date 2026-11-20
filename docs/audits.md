@@ -27,7 +27,7 @@ answered it.
 | 2 | Signal injection accuracy | 1 | critical | **re-audited** (20 Nov 2026): paired reruns running; see below |
 | 3 | turboSETI comparison fairness | 1 | critical | **re-audited** (20 Nov 2026): the experiment corrected, 16 blocks queued; see below |
 | 4 | False-positive methodology | 1 | critical | **in progress** (20 Nov 2026): record-based checks done, the time-order test queued; see below |
-| 5 | The 2016 interference failure | 1 | critical | to do |
+| 5 | The 2016 interference failure | 1 | critical | **in progress** (20 Nov 2026): records analysed, blocks read again queued; see below |
 | 6 | Detector completeness and missed signals | 1 | high | to do |
 | 7 | BLISS comparison | 1 | high | to do |
 | 8 | Statistical analysis and uncertainty | 1 | high | to do |
@@ -291,4 +291,23 @@ R4-01 accepted as fixed. Remaining points:
 | The DOT diagnostic paired stamps by positions 0, 2 and 4 | low | **built**: `onoff.judge` now pairs each ON look with the OFF look just after it by the looks' own flags; in the published ON, OFF pairs that selects exactly positions 0, 2 and 4, as before. It is recorded, not part of the verdict. |
 | The new records in the evidence package | — | **planned**: built and reproduced when the queued runs finish. |
 | Independent negative controls | — | **planned**, a new experiment. |
+
+## 5. The 2016 interference failure: 20 November 2026
+
+**Verdict:** the failure is real and stays a failure. Its shape is now
+measured: almost all of it is candidates seeded by one ON look's hit, the
+other two ON looks only measured along the track, in blocks crowded enough
+that their hit lists were cut. Every finding was checked against the code
+and the records (`tools/rfi2016.py records`; the blocks read again are queued).
+
+| Finding | Severity | Verdict and what was done |
+|---|---|---|
+| A5-01: "no candidate left unexplained" is not a selective filter: 1,273 of 3,729 recovered planted signals (34%) were marked interference, 913 by the band list alone, and only 39 of 3,938 false candidates were shown to be interference, the rest indicated | high | **correct; stated.** The figures are docs/seti.md's own. The checks keep shown, indicated and unexplained apart; what was missing is the reading: an indication is not an identified transmitter, and the checks' cost to real signals is a third of them at 2016's band list. Measuring each verdict's yield and cost separately is **planned** in audit 12. |
+| A5-02: the cadence test lets one ON hit and two measured tracks make a candidate, which is where crowded interference gets through | high | **confirmed and measured.** At SNR 30, of 3,938 false candidates **3409 are one hit and two tracks**, 441 two hits and a track, 88 three hits. Requiring more ON hits, from the records (false rate a block; planted signals found): 2016 at 30, one hit 39.0608, 4337; two 5.2489, 4068; three 0.8732, 3757. 2017 at 30: 0.0682 / 4520, 0.013 / 4268, 0.0 / 4031. 2019 at 30, found 2404, 2291, 2192 (no false candidates). So two ON hits would cut 2016's rate by seven-eighths for about 6% of the planted signals, three hits by 98% for 11 to 13%, still above 0.1 in 2016. Chosen on the failure it explains, so not adopted: it is a rule for a new detector version, tested on sessions chosen beforehand. |
+| A5-03: masking the listed bands would not pass 2016 | high | **confirmed and measured** (rate a block at 30): in listed bands 38.5714; in the GPS L3 annotation 0.2679 (27, block 119); elsewhere in crowded blocks 0.1488 (15); within 10 MHz of a band 0.0595 (6); clean 0.0132 (2). Outside the bands and L3 together, 0.22 a block: still above 0.1. |
+| A5-04: GPS L3 (1,381.05 MHz) is missing from the band list, and block 119's cluster at 1,378.4 to 1,378.6 MHz lies in 1,376 to 1,386 MHz | medium | **built**: `vetting.KNOWN_RFI`, an annotation used to describe candidates, never a mask or a verdict. Its source is NRAO's VLA and VLBA RFI tables (GPS L3, intermittent); no Green Bank table listing it was found, so at the GBT it is a likely source, not a measured one. |
+| A5-05: the matched runs vetted every session's candidates at KIC 8462852's place on the sky | medium | **built.** Confirmed: `matched.run` called `measure.vet_hook()` without a target. It now reads the session's ON target from the store (`matched.session_target`, tested with two targets). The supplementary checks already recorded for HIP 17147 and NGC 6946 were made with KIC 8462852's coordinates; check 5 (the expected drift from the Earth's motion) is informational, not a rejection, and the counts and frozen verdicts never used them. |
+| A5-06: the hit cap | medium | **measured in part; running.** 3899 of 3,938 false candidates at 30 lie in blocks where some look's hit list stopped at the cap, so OFF hits that would veto them may be missing. `rfi2016.py reread` searches the seven blocks holding 3654 of them again with the cap at 20,000 and compares their false candidates by identity. Not called the cause before that. |
+| The seven blocks, the OFF threshold, related OFF hits | — | **running** (`rfi2016.py reread`): the seven blocks (195, 59, 171, 53, 60, 54, 55) and eight others of 2016 and eight of 2017 read again: OFF_MAX at 5, 6, 7, 8 and 10 against both the false candidates and the planted signals, and for each candidate of the seven blocks the hits within 3 kHz in its OFF looks. |
+| A detector v2 validated on new sessions chosen beforehand | — | **planned**: whatever these suggest is a new version with its own frozen test, including crowded L-band data. |
 
