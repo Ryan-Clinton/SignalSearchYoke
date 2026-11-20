@@ -401,6 +401,15 @@ tested); `tests/test_detector_checks.py` pins each behaviour down.
 | F9-06: the SNR is rounded before matched.py compares it with the cut | medium | **confirmed in the code.** A hit at 9.96 is shadow to the search but counts at 10 in matched.py. The queued run counts, per cut, the hits whose exact SNR is under it and rounded value at it. Records keep the rounded value only. |
 | F9-07: the exhaustive drift search is costly | low | **noted.** The records time each stage per block (search, judging, planting); a stepped drift grid would be a new detector version with completeness measured again. |
 
+### 9, re-audited at 8eed705, 20 November 2026
+
+| Finding | Severity | Verdict and what was done |
+|---|---|---|
+| The direction test on real blocks left out the kurtosis flags the search measures its noise without | medium | **confirmed; fixed.** Each of the six looks is measured both ways with the flags the search makes from it (`searching.kurtosis` over `SK_FLAG`). |
+| Blocks read again were not checked against their records | medium | **confirmed; fixed**, in these checks and the curved ones: the looks' start times must be the record's, or the block is refused. |
+| The cache fingerprint left out code the checks use | medium | **confirmed; fixed**, in both: it now covers every module they call and what was read (the files and the block's channels). |
+| F9-03 needs the search run at each cut, not the shadow-refresh stand-in | high | **agreed; built.** Each block is also searched at cut 8 (the lowest tested) and 30 and judged at that cut, beside the one search at 10 relabelled as the comparison does: hits differing, false candidates and planted signals found. At 10 the two are the same by construction. |
+
 ## 10. Curved Doppler search: 20 November 2026
 
 **Verdict:** the two weaknesses in the matcher are real in the code, and

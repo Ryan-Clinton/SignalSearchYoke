@@ -54,10 +54,16 @@ def _say(*a):
     print(*a, flush=True)
 
 
-def fingerprint():
+DEPENDS = ("curved_pass.py", "curved.py", "matched.py", "onoff.py", "searching.py", "seti.py", "measure.py",
+           "injection.py", "store.py", "tools/curved_checks.py", "tools/turbo_checks.py")
+
+
+def fingerprint(source=""):
+    """The code the results rest on, and (`source`) what was read."""
     h = hashlib.sha256()
-    for f in ("curved_pass.py", "curved.py", "matched.py", "onoff.py", "searching.py", "tools/curved_checks.py"):
+    for f in DEPENDS:
         h.update((ROOT / f).read_bytes().replace(b"\r\n", b"\n"))
+    h.update(source.encode())
     return h.hexdigest()[:16]
 
 
@@ -203,9 +209,9 @@ def blocks(say=_say):
     chosen = {int(b): c for b, c in json.loads((matched.folder(TARGET, session) / "blocks.json")
                                                .read_text(encoding="utf-8"))["chosen"].items()}
     block_list = seti.blocks(seti.reading.prepare(urls[:1])[0])
-    fp = fingerprint()
     rows = []
     for b in _picks():
+        fp = fingerprint(json.dumps([urls, list(block_list[b])], default=str))
         path = OUT / "curved_checks" / f"block_{b:03d}.json"
         if path.exists():
             old = json.loads(path.read_text(encoding="utf-8"))
@@ -213,6 +219,9 @@ def blocks(say=_say):
                 rows.append(old)
                 continue
         cad = matched._cadence(seti.read_looks(urls, *block_list[b]), urls)
+        recorded = json.loads((curved_pass.folder(TARGET, session) / f"block_{b:03d}.json").read_text(encoding="utf-8"))
+        if [c["s"]["tstart"] for c in cad] != recorded["tstarts"]:
+            raise yoke.Refusal("INVALID_REQUEST", f"block {b}: the looks read again start at other times than the record's")
         searched = matched.our_search(cad)
         caches = [{} for _ in range(6)]
         false = {w: {} for w in WAYS}
@@ -251,7 +260,7 @@ def blocks(say=_say):
             + (f"; traced {row['traced']['statuses']['as published']}" if "traced" in row else ""))
     total = {k: {w: sum(r[k][w] for r in rows) for w in WAYS} for k in ("false_30", "found_30")}
     out = {"target": TARGET, "cut": CUT, "a_max": A_MAX, "blocks": [r["block"] for r in rows], "rows": rows,
-           "totals": total, "code": fp, "kind": "measured"}
+           "totals": total, "code": fingerprint(), "kind": "measured"}
     yoke.write(OUT / "curved_checks.json", out, indent=1, stamp=True)
     say(f"totals: {total}")
     return out

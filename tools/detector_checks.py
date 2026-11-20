@@ -60,10 +60,16 @@ def _say(*a):
     print(*a, flush=True)
 
 
-def fingerprint():
+DEPENDS = ("searching.py", "tools/search_variants.py", "tools/detector_checks.py", "matched.py", "onoff.py", "seti.py",
+           "measure.py", "matched_tables.py", "injection.py", "store.py", "tools/turbo_checks.py")
+
+
+def fingerprint(source=""):
+    """The code the results rest on, and (`source`) what was read."""
     h = hashlib.sha256()
-    for f in ("searching.py", "tools/search_variants.py", "tools/detector_checks.py", "matched.py", "onoff.py"):
+    for f in DEPENDS:
         h.update((ROOT / f).read_bytes().replace(b"\r\n", b"\n"))
+    h.update(source.encode())
     return h.hexdigest()[:16]
 
 
@@ -214,6 +220,7 @@ def _picks():
 
 
 def _searched(cad, **kw):
+    """The six looks through the diagnostic copy (kw: its switches, or snr_min for a search at another cut)."""
     from concurrent.futures import ThreadPoolExecutor
 
     def one(j):
@@ -226,17 +233,17 @@ def _searched(cad, **kw):
         return list(pool.map(one, range(6)))
 
 
-def _judged(cad, cad_p, su, sp, ts):
+def _judged(cad, cad_p, su, sp, ts, cut=30):
     caches = [{} for _ in range(6)]
     by = {}
     for ons in itertools.combinations(range(6), 3):
         if ons == matched.TRUE:
             continue
-        looks, events, order = matched.our_events(cad, su, ons, 30, caches)
+        looks, events, order = matched.our_events(cad, su, ons, cut, caches)
         by[str(ons)] = matched._our_kept(looks, events, order)
-    looks, events, order = matched.our_events(cad_p, sp, matched.TRUE, 30, [{} for _ in range(6)])
+    looks, events, order = matched.our_events(cad_p, sp, matched.TRUE, cut, [{} for _ in range(6)])
     kp = matched._our_kept(looks, events, order)
-    looks, events, order = matched.our_events(cad, su, matched.TRUE, 30, [{} for _ in range(6)])
+    looks, events, order = matched.our_events(cad, su, matched.TRUE, cut, [{} for _ in range(6)])
     ku = matched._our_kept(looks, events, order)
     found = sum(matched._status({j: matched.where(cad, t, j)[1] for j in matched.TRUE}, t["drift"], kp, ku)
                 ["three_looks"] == "recovered" for t in ts)
@@ -244,22 +251,25 @@ def _judged(cad, cad_p, su, sp, ts):
 
 
 def blocks(say=_say):
-    fp = fingerprint()
     rows = []
     for target, b in _picks():
         session, _, _ = matched_tables.load(target)
+        db = store.connect_readonly()
+        _, urls = store.cadence_files(db, target)
+        db.close()
+        block_list = seti.blocks(seti.reading.prepare(urls[:1])[0])
+        fp = fingerprint(json.dumps([urls, list(block_list[b])], default=str))
         path = OUT / "detector_checks" / f"{target}_block_{b:03d}.json"
         if path.exists():
             old = json.loads(path.read_text(encoding="utf-8"))
             if old.get("code") == fp:
                 rows.append(old)
                 continue
-        db = store.connect_readonly()
-        _, urls = store.cadence_files(db, target)
-        db.close()
-        block_list = seti.blocks(seti.reading.prepare(urls[:1])[0])
         rec = json.loads((matched.folder(target, session) / f"block_{b:03d}.json").read_text(encoding="utf-8"))
         cad = matched._cadence(seti.read_looks(urls, *block_list[b]), urls)
+        if [c["s"]["tstart"] for c in cad] != rec["tstarts"]:
+            raise yoke.Refusal("INVALID_REQUEST", f"{target} block {b}: the looks read again start at other times "
+                                                  "than the record's")
         ts = rec["tones"]
         cad_p = [dict(c, spectra=p["spectra"]) for c, p in zip(cad, matched.plant(cad, ts))]
         row = {"target": target, "block": b, "class": rec["class"], "code": fp,
@@ -273,8 +283,20 @@ def blocks(say=_say):
             keys[name] = [_keys(x[0]) for x in su]
             if name == "as published":
                 row["rounding_flips"] = {c: sum(rounding_flips(x[0])[c] for x in su) for c in map(matched.ck, CUTS)}
-                row["direction"] = direction(su[0][1])
+                # each look's noise both ways, with the kurtosis flags the search uses
+                row["direction"] = [direction(su[j][1], searching.kurtosis(cad[j]["spectra"]) > searching.SK_FLAG)
+                                    for j in range(6)]
+                single = (su, sp)
         row["hits_differing"] = [len(keys["as published"][j] ^ keys["full reach"][j]) for j in range(6)]
+        # F9-03: the search run at each cut against the one search at 10 relabelled (the same at 10 by construction)
+        row["per_cut"] = {}
+        for c in (8, 30):
+            su_c, sp_c = _searched(cad, snr_min=float(c)), _searched(cad_p, snr_min=float(c))
+            f1, n1 = _judged(cad, cad_p, single[0], single[1], ts, cut=c)
+            f2, n2 = _judged(cad, cad_p, su_c, sp_c, ts, cut=c)
+            row["per_cut"][str(c)] = {
+                "one search": {"false": f1, "found": n1}, "searched at this cut": {"false": f2, "found": n2},
+                "hits_differing": [len(_keys(single[0][j][0]) ^ _keys(su_c[j][0])) for j in range(6)]}
         path.parent.mkdir(parents=True, exist_ok=True)
         yoke.write(path, row, indent=1)
         rows.append(row)
@@ -282,7 +304,7 @@ def blocks(say=_say):
         say(f"{target} block {b} ({row['class']}): as published {a['false_30']} false, {a['found_30']} found; full "
             f"reach {z['false_30']} false, {z['found_30']} found; hits differing {row['hits_differing']}; "
             f"rounding flips {row['rounding_flips']}; non-finite {row['nonfinite_samples']}")
-    out = {"rows": rows, "code": fp, "kind": "measured"}
+    out = {"rows": rows, "code": fingerprint(), "kind": "measured"}
     yoke.write(OUT / "detector_checks_blocks.json", out, indent=1, stamp=True)
     return out
 
