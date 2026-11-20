@@ -38,7 +38,7 @@ answered it.
 | 13 | Instrument calibration and sensitivity | 2 | high | **in progress** (20 Nov 2026): calibration records used only where they apply; the coarse-channel response and band-wide sensitivity planned; see below |
 | 14 | Data acquisition and integrity | 2 | high | **in progress** (20 Nov 2026): the 2016 DC bins found misplaced and fixed (no false candidate rested on them); refusals added; source versions planned; see below |
 | 15 | Astronomical signal coverage | 2 | medium | **in progress** (20 Nov 2026): seven kinds of signal measured through the unchanged search; pulses, faster drifts and eccentric orbits planned; see below |
-| 16 | End-to-end reproducibility | 3 | critical | **in progress** (20 Nov 2026): reproduction now proves each output made again; a replay from a fresh clone and fresh environments running, which found the published turboSETI pins could not be installed as written; another machine planned; see below |
+| 16 | End-to-end reproducibility | 3 | critical | **in progress** (20 Nov 2026): reproduction proves each output made again; step 10 replayed from a fresh clone, fresh environments and the evidence package alone, identical (it found the turboSETI pins could not be installed as written, now fixed); another machine planned; see below |
 | 17 | Experiment freezing and scientific provenance | 3 | high | **in progress** (20 Nov 2026): frozen configs pinned, deviation history kept, block provenance and the step 12 checks enforced; see below |
 | 18 | The report and its claims | 3 | high | **in progress** (20 Nov 2026): version 1.6 written with what the audits found; record checks planned; see below |
 | 19 | Public repository and release readiness | 3 | high | **in progress** (20 Nov 2026): documents brought into line with the code, a consistency test; the release, tag and Zenodo deposit left for Ryan's go; see below |
@@ -767,9 +767,14 @@ public repository from GitHub, builds new core and turboSETI environments
 from the pinned versions, unpacks the evidence package as an empty data
 folder, and runs `tools/regress_step10.py` there. That reads two of step
 10's blocks again from the archive, measures them with the clone's code
-and compares them field by field with step 10's records. Its result goes
-in `data/analysis/fresh_replay.json` and the ledger when it finishes. It is
-the same PC, Windows and Python: another machine is still the step after.
+and compares them field by field with step 10's records. **Result,
+20 November 2026: passed.** From a clone of the public repository at
+4b9dd4c, a core environment of 8 packages and a turboSETI environment of 37
+built afresh from the pins, and the evidence package as the only data,
+blocks 3 (crowded) and 72 (clean) read again from the archive are
+**identical** to step 10's records in every field but the timings
+(`data/analysis/fresh_replay.json`). It is the same PC, Windows and Python:
+another machine is still the step after.
 
 | Finding | Severity | Verdict and what was done |
 |---|---|---|
@@ -1089,3 +1094,4 @@ provenance. Results still running are not listed until they finish.
 | The detector's refresh reach, noise spread and non-finite input, synthetic | 9 | `data/analysis/detector_checks_synthetic.json` | `8199c56`, local changes (diff not kept) | `tools/detector_checks.py synthetic` |
 | The cadence test's asymmetry, blind OFF looks and weak ON looks, synthetic | 11 | `data/analysis/onoff_checks_synthetic.json` | `5de5877`, clean | `tools/onoff_checks.py synthetic` |
 | BLISS's runs match their pins (all 242) | 7 | `data/analysis/bliss_pins.json` | `749c7c2`, local changes (diff not kept) | `tools/bliss_checks.py pins` |
+| Step 10's blocks replayed from a fresh clone, fresh environments and the evidence package alone: identical | 16 | `data/analysis/fresh_replay.json` | `dcc383f`, local changes | `tools/fresh_replay.py` |

@@ -62,9 +62,7 @@ def main(zip_path=None, say=print):
     if not zip_path or not zip_path.exists():
         raise yoke.Refusal("NOT_FOUND", "no evidence package: build one with tools/evidence.py build")
     base_python = getattr(sys, "_base_executable", sys.executable)
-    work = Path(tempfile.gettempdir()) / "ssy-fresh-replay"
-    shutil.rmtree(work, ignore_errors=True)
-    work.mkdir(parents=True)
+    work = Path(tempfile.mkdtemp(prefix="ssy-fresh-replay-"))     # a new folder each run, nothing reused
     clone, data = work / "clone", work / "data"
 
     _run(["git", "clone", "-q", REPO, clone], say=say)
