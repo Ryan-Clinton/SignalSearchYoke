@@ -33,6 +33,12 @@ class Lifecycle(unittest.TestCase):
         checks = [{"n": n, "name": f"c{n}", "result": "r", "strength": None, "evidence": {}} for n in range(1, 11)]
         store.save_checks(self.db, "L", checks[:3], "v", 77)              # as a run cut off would have left
         self.assertNotIn(77, store.checked_events(self.db, "v", 10))
+        with self.db:                                                     # the rest from another evaluation
+            self.db.executemany("INSERT INTO checks (event_id, lead, name, result, strength, evidence, version,"
+                                " checked_utc) VALUES (?,?,?,?,?,?,?,?)",
+                                [(77, "L", f"{c['n']}. {c['name']}", "r", None, "{}", "v", "2099-01-01T00:00:00+00:00")
+                                 for c in checks[3:]])
+        self.assertNotIn(77, store.checked_events(self.db, "v", 10))      # two halves are not one whole set
         store.save_checks(self.db, "L", checks, "v", 78)
         self.assertIn(78, store.checked_events(self.db, "v", 10))
 

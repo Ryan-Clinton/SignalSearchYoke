@@ -230,8 +230,16 @@ def run(args, say=print):
         rows = db.execute("SELECT * FROM events WHERE label='candidate' AND superseded_run IS NULL"
                           " ORDER BY snr DESC").fetchall()
         if not args.all:
-            done = store.checked_events(db, vetting.VERSION, vetting.N_CHECKS)
-            rows = [r for r in rows if r["event_id"] not in done]
+            # done: a whole evaluation in the store and its record written (ranking reads the record)
+            in_store = store.checked_events(db, vetting.VERSION, vetting.N_CHECKS)
+            name = {}
+
+            def recorded(r):
+                if r["session"] not in name:
+                    name[r["session"]] = target_of(db, r["session"])["name"]
+                rec = record_for(lead_id(name[r["session"]], r["session"], r["f_start_mhz"]), r["event_id"])[1]
+                return rec is not None and rec.get("version") == vetting.VERSION
+            rows = [r for r in rows if not (r["event_id"] in in_store and recorded(r))]
     out = [check_event(db, r, say) for r in rows]
     if not rows:
         say("No candidate waiting: every current candidate has been checked by this version of the checks.")

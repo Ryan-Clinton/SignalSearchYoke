@@ -508,8 +508,10 @@ def save_checks(db, lead, checks, version, event_id):
 
 
 def checked_events(db, version, n_checks):
-    """Events with a whole set of checks of this version (n_checks distinct checks)."""
-    return {r[0] for r in db.execute("SELECT event_id FROM checks WHERE version=? GROUP BY event_id"
+    """Events with a whole set of checks of this version from one evaluation: save_checks writes an
+    evaluation's checks with one lead and one time, so a set is counted within (event, lead, time), and
+    parts of two cut-off evaluations do not add up to one."""
+    return {r[0] for r in db.execute("SELECT event_id FROM checks WHERE version=? GROUP BY event_id, lead, checked_utc"
                                      " HAVING count(DISTINCT name) >= ?", (version, n_checks))}
 
 

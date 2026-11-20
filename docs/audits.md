@@ -770,3 +770,13 @@ own checks. Tests: `tests/test_store_lifecycle.py`.
 | A21-10: no integrity check on the packaged store | medium | **confirmed; fixed.** The evidence package refuses a store that fails SQLite's `integrity_check` or `foreign_key_check`; the store as it stands passes both. |
 | A21-11: the store and the records not one snapshot | medium | as F16-06, **planned**. |
 | A21-12: indexes for vetting a growing store | high | **built**: a file's current hits by frequency, a candidate's checks, a session's current events by frequency. Measuring them at 1 to 50 million hits is **planned**. |
+
+### 21, re-audited at a097087, 20 November 2026
+
+| Finding | Severity | Verdict and what was done |
+|---|---|---|
+| R21-01: checks complete in the store with their record never written | high | **confirmed; fixed.** A candidate counts as checked only with a whole evaluation in the store **and** its record written at this checks version (`check.record_for`); otherwise it is checked again. |
+| R21-02: parts of two evaluations counted as one | medium | **confirmed; fixed.** Checks are counted within one evaluation (event, lead and the time `save_checks` gives them all); a test writes three checks, then seven from another evaluation, and the event is not counted. |
+| R21-03: the six scans' contents not checked | medium | **planned** with the cadence-membership table. |
+| R21-04: file headers and cadence membership updated in place | medium | **agreed; planned** (the source version itself is fixed). |
+| R21-05: hashing the whole store costs | medium | **measured**: 24.5 s for the whole store (0.7 GB, 1.9 million hits); fine at this size, and it grows with the store, so a sampled or per-table option is **planned** before the survey. |
