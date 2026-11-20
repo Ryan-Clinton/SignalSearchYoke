@@ -1,0 +1,6 @@
+# The versions the tests and the published runs were made with (Python 3.12.10, Windows); requirements.txt
+# takes any recent ones. pip install -r requirements.txt -c requirements-tested.txt pins these.
+numpy==2.5.4
+requests==2.34.2
+h5py==3.16.0
+hdf5plugin==7.1.0

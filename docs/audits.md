@@ -41,7 +41,7 @@ answered it.
 | 16 | End-to-end reproducibility | 3 | critical | **in progress** (20 Nov 2026): reproduction now proves each output made again, comparisons narrowed; a fresh-machine run planned; see below |
 | 17 | Experiment freezing and scientific provenance | 3 | high | **in progress** (20 Nov 2026): frozen configs pinned, deviation history kept, block provenance and the step 12 checks enforced; see below |
 | 18 | The report and its claims | 3 | high | **in progress** (20 Nov 2026): version 1.6 written with what the audits found; record checks planned; see below |
-| 19 | Public repository and release readiness | 3 | high | to do |
+| 19 | Public repository and release readiness | 3 | high | **in progress** (20 Nov 2026): documents brought into line with the code, a consistency test; the release, tag and Zenodo deposit left for Ryan's go; see below |
 | 20 | Parallel processing and performance | 4 | high | to do |
 | 21 | Database and evidence storage | 4 | medium | to do |
 | 22 | Distributed volunteer computing (`docs/multiuser.md`) | 4 | high | to do |
@@ -683,3 +683,21 @@ results", each finding that does, and fixes the wording points.
 | F18-07: "none changes" against differences of up to two | medium | **done**: "a few signals at most, not changing one pipeline against the other". |
 | F18-08: the report's records not checked against each other | medium | **agreed; planned**: a check of each record's session, provenance and counts before writing, with tests that mix records. |
 | F18-09: references and Figure 1's axis | low | **done in part**: Enriquez et al. 2017, Isaacson et al. 2017, turboSETI 2.3.2 and BLISS at 2b98afe added; the axis is described in the caption. |
+
+## 19. Public repository and release readiness: 20 November 2026
+
+**Verdict:** the repository is fit to be public as research software; the
+findings are documents that lagged the code, and the release itself, which
+is Ryan's decision (a tag, a GitHub release and a Zenodo DOI are permanent),
+is not made here.
+
+| Finding | Severity | Verdict and what was done |
+|---|---|---|
+| F19-01: no tag, release or changelog | high | **agreed; left for Ryan's go.** No tag or release is made without it. |
+| F19-02: Zenodo described as done | high | **confirmed; fixed.** docs/publishing.md and docs/reproducing-results.md now say the deposits are planned and none is made yet. |
+| F19-03: README behind the code | medium | **confirmed; fixed** (report 1.6, checks version 5, all three sessions), with `tests/test_docs_consistency.py` checking the README against the code's versions. |
+| F19-04: release checks dated 19 November | medium | **agreed; planned** at the release commit, with that commit recorded. |
+| F19-05: dependencies unpinned | medium | **built**: `requirements-tested.txt`, the versions the tests and runs were made with, usable as constraints; requirements.txt stays loose for ordinary installs. |
+| F19-06: security checks historical | medium | **agreed; planned** at the release (history scan, Gitleaks, dependency checks). |
+| F19-07: the report generator moved past 1.5 | medium | **done**: version 1.6 is written with the changes, a new revision, not a replacement (audit 18). |
+| F19-08: "et al." as a name suffix in CITATION.cff | low | **confirmed; fixed.** Release date and DOI are added only when they exist. |

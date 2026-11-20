@@ -23,13 +23,13 @@ site. When a second comes along, this gets revisited then.
   `tools/evidence.py build` packs the summary records (data/measurements,
   step 10's choice and deviations), the per-block records (data/matched,
   data/curved_pass) and a copy of the hit store, with a manifest of
-  hashes, about 240 MB zipped; it is deposited on Zenodo with each version,
+  hashes, about 240 MB zipped; it is to be deposited on Zenodo with each version (none deposited yet),
   so anyone can check a number against its source or make the tables again
   (docs/reproducing-results.md).
   The report is written as Markdown and a PDF. Each version has a number and
   a date, and a revision note says what changed.
-- **Zenodo holds each version.** The PDF of each version is deposited on
-  Zenodo, which gives it a permanent DOI (and a concept DOI for all
+- **Zenodo is to hold each version** (planned; none deposited yet). The PDF of each version is to be
+  deposited on Zenodo, which gives it a permanent DOI (and a concept DOI for all
   versions). This is what people cite.
 - **The code.** Once the repository is public: a tagged release archived on
   Zenodo with its own DOI, and a CITATION.cff in the repository. The report

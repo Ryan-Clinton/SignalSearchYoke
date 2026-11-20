@@ -97,8 +97,8 @@ commit):
 
 Left out: the raw spectra (about 15 GB a look; they stay in the archive,
 and the records name each file's URL), chunk indexes, caches, unfinished
-work, locks and logs. About 1.3 GB before compression. It is deposited on
-Zenodo with each version of the report (docs/publishing.md).
+work, locks and logs. About 1.3 GB before compression. It is to be deposited
+on Zenodo with each version of the report (docs/publishing.md); none is deposited yet.
 
 The package's copies have the names of the machine that made them taken
 out, and nothing else changed: every home folder is written `~` (BLISS's
