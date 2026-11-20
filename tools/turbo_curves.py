@@ -8,8 +8,10 @@ F0..F5 in time order (the true cadence: ON, OFF, ON, OFF, ON, OFF). CUTS:
 comma-separated SNRs, e.g. 5,6,8,10,15. CHOICES: "all" (the 20 choices of
 three ON looks) or "true" (0,2,4 only).
 
-Its hit search (FindDoppler, ±4 Hz/s, zero drift kept as Price et al. ran
-it) runs once per file at the lowest cut. At a higher cut X every table is
+Its hit search (FindDoppler, ±4 Hz/s, its default min_drift 1e-5: it searches
+only |drift| > min_drift, so not the zero-drift trial; check_zero_drift in the
+event stage cannot bring back hits never found) runs once per file at the lowest
+cut. At a higher cut X every table is
 cut to SNR > X before its event stage, ON and OFF alike: the same as its hit
 search run at X, since its top-hit rule compares each channel with its
 neighbours' largest SNR whatever the cut. (Its own SNR_cut would cut only the

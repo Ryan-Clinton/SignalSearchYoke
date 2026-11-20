@@ -1,7 +1,8 @@
 """Run in turboSETI's environment: Price et al. 2020's own pipeline on a
 cadence's six slices. turboSETI's hit search (±4 Hz/s, SNR 10) on each, then
 its event pipeline at filter threshold 3 (a hit in all three ON looks, none
-in the OFF looks within its window), zero drift kept, as Price et al. did.
+in the OFF looks within its window), check_zero_drift on as Price et al. ran it;
+its hit search, at its default min_drift 1e-5, does not search the zero-drift trial itself.
 
     python tools/turbo_events.py OUT_DIR ON1.h5 OFF1.h5 ON2.h5 OFF2.h5 ON3.h5 OFF3.h5
 
