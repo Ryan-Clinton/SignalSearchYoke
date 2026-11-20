@@ -1,6 +1,8 @@
 """onoff.py versions listed in matched.ONOFF_EQUIVALENT judge the matched
 pipeline's cadences exactly as the current one: every one of the 20 choices
-of ON looks, every field of every event (the DOT score too). The earlier
+of ON looks, every field of every event (the DOT score too), on a cadence
+whose tones straddle OFF_MAX and ON_MIN (tests/test_planted_faults.py shows
+moving either changes the verdicts on it). The earlier
 version comes from git; the test is skipped without it."""
 import importlib.util
 import itertools
@@ -38,23 +40,9 @@ def _plain(ev):
 
 class Equivalent(unittest.TestCase):
     def test_listed_versions_judge_alike(self):
-        import math
         import matched
-        import measure
         import onoff
-        cad = synth.cadence(5)
-        sigma = float(np.median(cad[1]["sigma"]))
-        planted = []
-        for j, c in enumerate(cad):
-            raw = c["raw"]
-            dt = (c["s"]["tstart"] - cad[0]["s"]["tstart"]) * 86400
-            tones = [(8000.3 + 0.2 * dt / (c["s"]["foff"] * 1e6), 0.2, 60 * sigma / math.sqrt(raw.shape[0]))]
-            if j in (0, 2, 4):
-                tones.append((12000.7 - 0.1 * dt / (c["s"]["foff"] * 1e6), -0.1, 40 * sigma / math.sqrt(raw.shape[0])))
-            if j in (1, 3, 5):
-                tones.append((4000.2, 0.0, 30 * sigma / math.sqrt(raw.shape[0])))
-            raw = measure.plant(raw, tones, c["s"]["tsamp"], c["s"]["foff"])
-            planted.append(dict(c, raw=raw, spectra=raw, s=dict(c["s"], spectra=raw)))
+        planted = synth.judging_cadence(5)    # its thresholds straddled, so a change to them shows
         searched = matched.our_search(planted)
         self.assertTrue(matched.ONOFF_EQUIVALENT)
         for commit in sorted(set(matched.ONOFF_EQUIVALENT.values())):

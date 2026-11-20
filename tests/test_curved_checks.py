@@ -23,7 +23,9 @@ class Matcher(unittest.TestCase):
         import injection
         ts = injection.tones_for(cad, 8, 0, np.random.default_rng(7), strengths=[200])
         for k, t in enumerate(ts):
-            t["accel"] = (8e-4, -8e-4, 5e-4, -5e-4)[k % 4]      # curved enough that straight lines miss them
+            # curved enough that straight lines miss them; the third past the limit 1e-3, so the limit is used
+            # (tests/test_planted_faults.py: with another limit the copy differs here)
+            t["accel"] = (8e-4, -8e-4, 2e-3)[k % 3]
         cad_p = [dict(c, spectra=p) for c, p in zip(cad, curved_pass.plant(cad, ts))]
         searched = matched.our_search(cad_p)
         checked = hyps_seen = 0

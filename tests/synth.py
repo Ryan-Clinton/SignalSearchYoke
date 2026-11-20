@@ -38,3 +38,34 @@ def cadence(seed=0):
              "target": "SYNTH" if j % 2 == 0 else "SYNTH_OFF", "first_channel": 0, "coarse_channel": 0}
         out.append({"s": s, "raw": raw, "sigma": measure.channel_noise(raw)})
     return out
+
+
+def judging_cadence(seed=5):
+    """A cadence for comparing versions of the cadence test, with tones that
+    reach every verdict and straddle its thresholds, so a change to either
+    shows: a tone in every look (interference), one in the ON looks only
+    (a candidate), one in the OFF looks only, one strong in the ON looks
+    with a faint echo in the OFF looks (OFF S/N about 5.5, under OFF_MAX 6),
+    and one strong in two ON looks and faint in the third (about 5.5 along
+    its track, over ON_MIN 5). Returns the six looks, planted, as
+    matched.our_search takes them."""
+    import math
+    import measure
+    cad = cadence(seed)
+    sigma = float(np.median(cad[1]["sigma"]))
+    out = []
+    for j, c in enumerate(cad):
+        raw = c["raw"]
+        n = math.sqrt(raw.shape[0])
+        k = (c["s"]["tstart"] - cad[0]["s"]["tstart"]) * 86400 / (c["s"]["foff"] * 1e6)
+        tones = [(8000.3 + 0.2 * k, 0.2, 60 * sigma / n)]
+        if j in (0, 2, 4):
+            tones.append((12000.7 - 0.1 * k, -0.1, 40 * sigma / n))
+        if j in (1, 3, 5):
+            tones.append((4000.2, 0.0, 30 * sigma / n))
+        tones.append((6000.4 + 0.3 * k, 0.3, (40 if j % 2 == 0 else 8) * sigma / n))
+        if j in (0, 2, 4):
+            tones.append((10000.6 - 0.2 * k, -0.2, (40 if j < 4 else 11) * sigma / n))
+        raw = measure.plant(raw, tones, c["s"]["tsamp"], c["s"]["foff"])
+        out.append(dict(c, raw=raw, spectra=raw, s=dict(c["s"], spectra=raw)))
+    return out
