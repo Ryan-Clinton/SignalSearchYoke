@@ -14,13 +14,14 @@ unchanged; these read the same block records.
   them by the class's share of the session. A class with no candidate then
   adds nothing in every draw, so its own uncertainty (its Poisson upper limit,
   which _rate reports for the class) is lost from the combined interval
-  unless every class is empty. Mended: a class with none is drawn from the
-  posterior of a Poisson rate over its blocks under a flat prior (Gamma(1,
-  1/blocks), whose 97.5% point is the exact upper limit _rate gives the class),
-  a class with some is bootstrapped over its blocks as before. A coverage
-  simulation (rare and concentrated candidates in two classes, the sessions'
-  block counts and weights) gives how often each interval holds the true
-  rate.
+  unless every class is empty. Two replacements, both supplementary: a
+  hybrid (a class with none drawn from the flat-prior posterior of a Poisson
+  rate, Gamma(1, 1/blocks); a class with some bootstrapped), exploratory, as
+  it is neither a confidence nor a credible interval; and a conservative one
+  (each class's interval the wider of its bootstrap and the exact Poisson
+  interval of its total, weighted and added end to end). A coverage
+  simulation (rare, concentrated and correlated candidates in the sessions'
+  layouts) gives how often each holds the true rate.
 - **assignments**: the published rate is distinct candidates over all 19
   wrong choices a block (a stress test of many assignments). One real
   observation is one assignment: per wrong choice, its distinct candidates a
@@ -72,10 +73,13 @@ def _say(*a):
 # --- the interval ------------------------------------------------------------------------
 
 def mended_interval(counts, weights, rng, boot=BOOT):
-    """The weighted rate a block and its 95% interval: a class with candidates
-    bootstrapped over its blocks, a class with none drawn from the Jeffreys
-    posterior of a Poisson rate over its blocks under a flat prior, Gamma(1, 1/blocks), whose
-    97.5% point is the exact (Garwood) upper limit _rate reports for the class. counts: {class: [per block]}."""
+    """A hybrid, exploratory interval: a class with candidates bootstrapped over
+    its blocks, a class with none drawn from the posterior of a Poisson rate
+    under a flat prior, Gamma(1, 1/blocks) (whose 97.5% point is the exact
+    Garwood upper limit for none). A mixture of a bootstrap and a posterior, it
+    is neither a frequentist confidence interval nor a credible interval; with
+    nothing counted its lower end is above zero, which says nothing about the
+    rate being positive. counts: {class: [per block]}."""
     est = sum(weights[c] * (np.mean(n) if len(n) else 0.0) for c, n in counts.items())
     draws = np.zeros(boot)
     for c, n in counts.items():
@@ -87,6 +91,37 @@ def mended_interval(counts, weights, rng, boot=BOOT):
         else:
             draws += weights[c] * rng.gamma(1.0, 1.0 / len(n), boot)
     lo, hi = np.percentile(draws, [2.5, 97.5])
+    return float(est), (float(lo), float(hi))
+
+
+def class_interval(n, rng, boot=BOOT):
+    """One class's rate a block, conservatively: the wider, at each end, of
+    the bootstrap over its blocks and the exact (Garwood) Poisson interval of
+    its total; with none counted, 0 to the exact upper limit."""
+    n = np.asarray(n, float)
+    m = max(len(n), 1)
+    k = int(n.sum())
+    # exact (Garwood) for small totals; for large ones the normal approximation, accurate there and fast
+    g_lo, g_hi = ((x / m for x in measure.poisson_interval(k)) if k <= 200
+                  else ((k - 1.96 * k ** 0.5) / m, (k + 1.96 * k ** 0.5) / m))
+    if not n.sum():
+        return 0.0, float(g_hi)
+    b_lo, b_hi = np.percentile([rng.choice(n, len(n)).mean() for _ in range(boot)], [2.5, 97.5])
+    return float(min(b_lo, g_lo)), float(max(b_hi, g_hi))
+
+
+def conservative_interval(counts, weights, rng, boot=BOOT):
+    """The weighted rate and a conservative interval: each class's interval
+    (class_interval) weighted and added, ends to ends. Wider than a joint 95%
+    interval by construction; its coverage is measured, not assumed."""
+    est = sum(weights[c] * (np.mean(n) if len(n) else 0.0) for c, n in counts.items())
+    lo = hi = 0.0
+    for c, n in counts.items():
+        if not len(n):
+            continue
+        a, b = class_interval(n, rng, boot)
+        lo += weights[c] * a
+        hi += weights[c] * b
     return float(est), (float(lo), float(hi))
 
 
@@ -105,33 +140,56 @@ def published_interval(counts, weights, rng, boot=BOOT):
     return float(est), (float(lo), float(hi))
 
 
+METHODS = {"published": "published_interval", "hybrid (exploratory)": "mended_interval",
+           "conservative": "conservative_interval"}
+
+
+def _draw(rng, sc):
+    """One simulated session's counts: clean blocks Poisson; crowded blocks
+    negative binomial (shape 0.2: most none, a few many); with "runs", the
+    crowded blocks' rate shared by runs of that many neighbouring blocks (a
+    gamma-distributed intensity each run: correlated, overdispersed)."""
+    clean = rng.poisson(sc["rate"]["clean"], sc["n"]["clean"])
+    k = sc.get("runs")
+    if k:
+        n = sc["n"]["crowded"]
+        lam = np.repeat(rng.gamma(0.3, sc["rate"]["crowded"] / 0.3, -(-n // k)), k)[:n]
+        crowded = rng.poisson(lam)
+    else:
+        crowded = rng.negative_binomial(0.2, 0.2 / (0.2 + sc["rate"]["crowded"]), sc["n"]["crowded"])
+    return {"clean": clean.tolist(), "crowded": crowded.tolist()}
+
+
 def coverage(trials=1000, boot=1000, seed=12):
-    """How often each interval holds the true weighted rate, for rare and
-    concentrated candidates: clean blocks Poisson, crowded blocks negative
-    binomial (most blocks none, a few many), in the sessions' layouts."""
+    """How often each interval holds the true weighted rate, for rare,
+    concentrated and correlated candidates, in the sessions' layouts."""
     rng = np.random.default_rng(seed)
+    w19 = {"clean": 61 / 64, "crowded": 3 / 64}
+    w17 = {"clean": 247 / 308, "crowded": 61 / 308}
+    w16 = {"clean": 120 / 304, "crowded": 184 / 304}
     scenarios = [
         {"name": "2019 layout: 61 clean, 3 crowded; clean 0.01, crowded 0.3", "n": {"clean": 61, "crowded": 3},
-         "w": {"clean": 61 / 64, "crowded": 3 / 64}, "rate": {"clean": 0.01, "crowded": 0.3}},
+         "w": w19, "rate": {"clean": 0.01, "crowded": 0.3}},
         {"name": "2019 layout: clean 0.03, crowded 1.0", "n": {"clean": 61, "crowded": 3},
-         "w": {"clean": 61 / 64, "crowded": 3 / 64}, "rate": {"clean": 0.03, "crowded": 1.0}},
+         "w": w19, "rate": {"clean": 0.03, "crowded": 1.0}},
         {"name": "2017 layout: 60 clean, 61 crowded; clean 0.005, crowded 0.3", "n": {"clean": 60, "crowded": 61},
-         "w": {"clean": 247 / 308, "crowded": 61 / 308}, "rate": {"clean": 0.005, "crowded": 0.3}},
+         "w": w17, "rate": {"clean": 0.005, "crowded": 0.3}},
         {"name": "2017 layout: clean 0.05, crowded 0.5", "n": {"clean": 60, "crowded": 61},
-         "w": {"clean": 247 / 308, "crowded": 61 / 308}, "rate": {"clean": 0.05, "crowded": 0.5}},
+         "w": w17, "rate": {"clean": 0.05, "crowded": 0.5}},
+        {"name": "2017 layout, crowded correlated in runs of 4: clean 0.005, crowded 0.3",
+         "n": {"clean": 60, "crowded": 61}, "w": w17, "rate": {"clean": 0.005, "crowded": 0.3}, "runs": 4},
+        {"name": "2016 layout, crowded correlated in runs of 8: clean 0.5, crowded 60",
+         "n": {"clean": 60, "crowded": 61}, "w": w16, "rate": {"clean": 0.5, "crowded": 60.0}, "runs": 8},
     ]
     out = []
     for sc in scenarios:
         truth = sum(sc["w"][c] * sc["rate"][c] for c in sc["n"])
-        hit = {"published": 0, "mended": 0}
-        width = {"published": [], "mended": []}
+        hit = {m: 0 for m in METHODS}
+        width = {m: [] for m in METHODS}
         for _ in range(trials):
-            counts = {"clean": rng.poisson(sc["rate"]["clean"], sc["n"]["clean"]).tolist(),
-                      # negative binomial with mean rate and shape 0.2: mostly none, a few many
-                      "crowded": rng.negative_binomial(0.2, 0.2 / (0.2 + sc["rate"]["crowded"]),
-                                                       sc["n"]["crowded"]).tolist()}
-            for name, f in (("published", published_interval), ("mended", mended_interval)):
-                _, (lo, hi) = f(counts, sc["w"], rng, boot)
+            counts = _draw(rng, sc)
+            for name, f in METHODS.items():
+                _, (lo, hi) = globals()[f](counts, sc["w"], rng, boot)
                 hit[name] += lo <= truth <= hi
                 width[name].append(hi - lo)
         out.append({"scenario": sc["name"], "true_rate": round(truth, 5), "trials": trials,
@@ -165,14 +223,16 @@ def interval(say=_say):
                                 if r["class"] == cls] for cls in ("clean", "crowded")}
                 e, pub = published_interval(counts, weights, rng)
                 _, men = mended_interval(counts, weights, rng)
+                _, con = conservative_interval(counts, weights, rng)
                 rows[f"{p} {k}"] = {"per_block": round(e, 4), "published": [round(x, 4) for x in pub],
-                                    "mended": [round(x, 4) for x in men],
+                                    "hybrid (exploratory)": [round(x, 4) for x in men],
+                                    "conservative": [round(x, 4) for x in con],
                                     "classes_with_none": [cls for cls, n in counts.items() if n and not sum(n)]}
         rec["sessions"][year] = {"target": target, "weights": weights, "rates": rows}
     rec["kind"] = "measured"
     yoke.write(OUT / "false_interval.json", rec, indent=1, stamp=True)
     for c in rec["coverage"]:
-        say(f"coverage, {c['scenario']}: published {c['coverage']['published']}, mended {c['coverage']['mended']}")
+        say(f"coverage, {c['scenario']}: {c['coverage']}")
     say(f"2019, this search at 8: {rec['sessions']['2019']['rates']['ours 8']}")
     return rec
 
@@ -202,6 +262,29 @@ def _groups(events):
     return list(out.values())
 
 
+def assignment_stats(by):
+    """One block's wrong choices ({choice: [kept candidate]}): the distinct
+    candidates of each choice alone, of their union, and for each of the
+    union's groups the number of choices it appears in."""
+    per = [len(matched.shared_hits({ch: evs})) for ch, evs in by.items()]
+    events, choice_of = [], []
+    for ch, evs in by.items():
+        for ev in evs:
+            events.append(ev)
+            choice_of.append(ch)
+    recur = [len({choice_of[i] for i in g}) for g in _groups(events)]
+    return per, len(matched.shared_hits(by)), recur
+
+
+def window_groups(per, w):
+    """Blocks {block: (class, count)} grouped by class and by window of w
+    consecutive block numbers: {class: [[counts of one window], ...]}."""
+    groups = {}
+    for b, (cl, n) in per.items():
+        groups.setdefault((cl, b // w), []).append(n)
+    return {cl: [v for (c2, _), v in sorted(groups.items()) if c2 == cl] for cl in ("clean", "crowded")}
+
+
 def assignments(say=_say):
     rec = {"sessions": {}}
     for target, year in SESSIONS:
@@ -213,19 +296,11 @@ def assignments(say=_say):
                 single, union, recur = [], [], []
                 any_share = []
                 for r in recs:
-                    by = r[p]["false"].get(k, {})
-                    per = [len(matched.shared_hits({ch: evs})) for ch, evs in by.items()]
+                    per, u, rc = assignment_stats(r[p]["false"].get(k, {}))
                     single += per
                     any_share.append(np.mean([x > 0 for x in per]) if per else 0.0)
-                    u = matched_tables.distinct(r, by, "shared hits")
                     union.append(u)
-                    events, choice_of = [], []
-                    for ch, evs in by.items():
-                        for ev in evs:
-                            events.append(ev)
-                            choice_of.append(ch)
-                    for g in _groups(events):
-                        recur.append(len({choice_of[i] for i in g}))
+                    recur += rc
                 mean_single = float(np.mean(single)) if single else 0.0
                 mean_union = float(np.mean(union)) if union else 0.0
                 res[f"{p} {k}"] = {
@@ -333,10 +408,7 @@ def windows(say=_say):
                           for cl in ("clean", "crowded"))
                 out = {"per_block": round(float(est), 4)}
                 for w in (1, 4, 16):
-                    groups = {}
-                    for b, (cl, n) in per.items():
-                        groups.setdefault((cl, b // w), []).append(n)
-                    by_cls = {cl: [v for (c2, _), v in groups.items() if c2 == cl] for cl in ("clean", "crowded")}
+                    by_cls = window_groups(per, w)
                     draws = []
                     for _ in range(BOOT):
                         tot = 0.0
@@ -348,7 +420,8 @@ def windows(say=_say):
                         draws.append(tot)
                     lo, hi = np.percentile(draws, [2.5, 97.5])
                     out[f"windows_of_{w}"] = {"interval": [round(float(lo), 4), round(float(hi), 4)],
-                                              "windows": {cl: len(gs) for cl, gs in by_cls.items()}}
+                                              "windows": {cl: len(gs) for cl, gs in by_cls.items()},
+                                              "few_windows": any(0 < len(gs) < 20 for gs in by_cls.values())}
                 res[f"{p} {k}"] = out
         rec["sessions"][year] = {"target": target, "results": res}
     rec["kind"] = "measured"
@@ -381,6 +454,8 @@ def chronological(say=_say):
     rec = {"blocks": [], "kind": "measured"}
     totals = {f"{w} {c}": {"union": 0, "choices_with_any": 0} for w in ("pairs", "time") for c in CUTS}
     differ = {str(c): 0 for c in CUTS}
+    ident = {str(c): 0 for c in CUTS}
+    by_choice_diff, by_class_diff = {}, {}
     for target in ("KIC8462852", "HIP17147"):
         session, urls, base, chosen, picks = turbo_checks._picks(target)
         block_list = seti.blocks(seti.reading.prepare(urls[:1])[0])
@@ -404,15 +479,28 @@ def chronological(say=_say):
                             lk.flat = None
                     row[f"{name} {c}"] = {"union": len(matched.shared_hits(by)),
                                           "choices_with_any": sum(bool(v) for v in by.values()),
-                                          "by_choice": {k: len(v) for k, v in by.items()}}
+                                          "by_choice": {k: len(v) for k, v in by.items()},
+                                          "identities": {k: sorted(sorted(matched._hit_key(m) for m in ev["members"])
+                                                                   for ev in v) for k, v in by.items()}}
                     totals[f"{name} {c}"]["union"] += row[f"{name} {c}"]["union"]
                     totals[f"{name} {c}"]["choices_with_any"] += row[f"{name} {c}"]["choices_with_any"]
                 differ[str(c)] += sum(row[f"pairs {c}"]["by_choice"][k] != row[f"time {c}"]["by_choice"][k]
                                       for k in row[f"pairs {c}"]["by_choice"])
+                ident[str(c)] += sum(row[f"pairs {c}"]["identities"][k] != row[f"time {c}"]["identities"][k]
+                                     for k in row[f"pairs {c}"]["identities"])
+                for k in row[f"pairs {c}"]["identities"]:
+                    if row[f"pairs {c}"]["identities"][k] != row[f"time {c}"]["identities"][k]:
+                        by_choice_diff.setdefault(str(c), {}).setdefault(k, 0)
+                        by_choice_diff[str(c)][k] += 1
+                        by_class_diff.setdefault(str(c), {}).setdefault(chosen[b], 0)
+                        by_class_diff[str(c)][chosen[b]] += 1
             rec["blocks"].append(row)
             say(f"{target} block {b}: " + ", ".join(f"{k} {row[k]['union']}" for k in row if " " in k))
     rec["totals"] = totals
     rec["choices_whose_count_differs"] = differ
+    rec["choices_whose_candidates_differ"] = ident
+    rec["candidate_differences_by_choice"] = by_choice_diff
+    rec["candidate_differences_by_class"] = by_class_diff
     rec["published_check"] = "pairs: as matched.py orders a choice's looks (ON, OFF pairs); time: in time order"
     yoke.write(OUT / "false_chronological.json", rec, indent=1, stamp=True)
     say(f"chronological: {totals}; choices differing {differ}")

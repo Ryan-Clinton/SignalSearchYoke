@@ -40,5 +40,69 @@ class Interval(unittest.TestCase):
         self.assertAlmostEqual(e1, e2)
 
 
+
+class Look:
+    def __init__(self, on, hits):
+        self.on, self.hits, self.fch1, self.foff = on, hits, 2000.0, -2.79e-6
+
+
+def event(matches, label="candidate"):
+    return {"label": label, "matches": matches, "frequency_mhz": 2000.0, "drift_hz_s": 0.1, "snr": 20.0,
+            "seed_position": next(p for p, i in enumerate(matches) if i is not None),
+            "looks": [{"track_channel": None} for _ in matches]}
+
+
+def hits():
+    return [{"frequency_mhz": 2000.0, "drift_hz_s": 0.1}]
+
+
+class OurKept(unittest.TestCase):
+    """matched._our_kept takes a candidate's members from the ON looks by each look's own flag."""
+
+    def test_alternating_looks_as_published(self):
+        import matched
+        looks = [Look(p % 2 == 0, hits()) for p in range(6)]
+        kept = matched._our_kept(looks, [event([0, None, 0, None, 0, None])], [0, 1, 2, 3, 4, 5])
+        self.assertEqual([m[0] for m in kept[0]["members"]], [0, 2, 4])
+
+    def test_on_looks_at_odd_places(self):
+        import matched
+        ons = (1, 3, 5)
+        looks = [Look(p in ons, hits()) for p in range(6)]
+        kept = matched._our_kept(looks, [event([None, 0, None, 0, None, 0])], [0, 1, 2, 3, 4, 5])
+        self.assertEqual([m[0] for m in kept[0]["members"]], [1, 3, 5])
+
+
+def kept(*keys):
+    """A kept candidate whose members are hits (look, index)."""
+    return {"members": [[lk, i, 0.0, 0.0] for lk, i in keys]}
+
+
+class Records(unittest.TestCase):
+    def test_assignment_stats(self):
+        by = {"(0, 1, 2)": [kept((0, 1)), kept((2, 5))], "(0, 1, 3)": [kept((0, 1))], "(1, 2, 3)": []}
+        per, union, recur = fc.assignment_stats(by)
+        self.assertEqual(sorted(per), [0, 1, 2])
+        self.assertEqual(union, 2)                    # the hit (0, 1) is one signal in two choices
+        self.assertEqual(sorted(recur), [1, 2])
+
+    def test_window_groups_by_block_number(self):
+        per = {0: ("clean", 1), 1: ("clean", 2), 5: ("clean", 3), 6: ("crowded", 9), 7: ("crowded", 4)}
+        got = fc.window_groups(per, 4)
+        self.assertEqual(got["clean"], [[1, 2], [3]])
+        self.assertEqual(got["crowded"], [[9, 4]])
+
+    def test_partition_single_link_within_reach(self):
+        pts = [(1.000, 0.0), (1.002, 0.0), (1.004, 0.0), (1.010, 0.0)]
+        g = fc._partition(pts, 3e-3, lambda a, b: abs(a[0] - b[0]) <= 3e-3)
+        self.assertEqual(len(set(g)), 2)
+        self.assertEqual(g[0], g[2])                  # chained through the middle point
+
+    def test_conservative_holds_zero_when_nothing_is_counted(self):
+        lo, hi = fc.class_interval([0] * 50, np.random.default_rng(0))
+        self.assertEqual(lo, 0.0)
+        self.assertAlmostEqual(hi, 3.689 / 50, delta=0.002)
+
+
 if __name__ == "__main__":
     unittest.main()

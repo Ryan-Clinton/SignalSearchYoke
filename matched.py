@@ -143,7 +143,8 @@ def our_events(cad, searched, ons, cut, caches):
 
 def _our_kept(looks, events, order):
     """Candidates: each with the look of its strongest hit and its member hit
-    in each ON look as [look, hit index, MHz, Hz/s]. A hit index is into that
+    in each ON look (by the look's own ON flag, so the looks need not alternate) as
+    [look, hit index, MHz, Hz/s]. A hit index is into that
     look's one hit list, the same in every choice and cut, so two candidates
     sharing one are the same signal."""
     out = []
@@ -151,13 +152,13 @@ def _our_kept(looks, events, order):
         if e["label"] != "candidate":
             continue
         members = [[order[p], int(i), looks[p].hits[i]["frequency_mhz"], looks[p].hits[i]["drift_hz_s"]]
-                   for p, i in enumerate(e["matches"]) if i is not None and p % 2 == 0]
+                   for p, i in enumerate(e["matches"]) if i is not None and looks[p].on]
         # An ON look with no hit at the cut: the track judge measured there
         # (its start in MHz, drift, S/N), which made the candidate.
         tracks = [[order[p], looks[p].fch1 + x["track_channel"] * looks[p].foff, x["track_drift_hz_s"],
                    x["track_snr"]]
                   for p, x in enumerate(e["looks"])
-                  if p % 2 == 0 and e["matches"][p] is None and x.get("track_channel") is not None]
+                  if looks[p].on and e["matches"][p] is None and x.get("track_channel") is not None]
         out.append({"f_mhz": round(e["frequency_mhz"], 6), "drift": round(e["drift_hz_s"], 4),
                     "snr": round(e["snr"], 2), "look": order[e["seed_position"]], "members": members,
                     "tracks": tracks})
