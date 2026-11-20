@@ -26,7 +26,7 @@ answered it.
 | 1 | Scientific methodology | 1 | critical | **done** (19 Nov 2026), re-audited the same day; see below |
 | 2 | Signal injection accuracy | 1 | critical | **re-audited** (20 Nov 2026): the paired reruns finished, no change to either pipeline's recovery beyond 2 signals in 880; see below |
 | 3 | turboSETI comparison fairness | 1 | critical | **re-audited** (20 Nov 2026): the experiment corrected, 16 blocks queued; see below |
-| 4 | False-positive methodology | 1 | critical | **in progress** (20 Nov 2026): record-based checks done, the time-order test queued; see below |
+| 4 | False-positive methodology | 1 | critical | **in progress** (20 Nov 2026): record-based checks done, the time-order test queued; control B (four real cadences of other targets in their own order) chosen by a rule fixed first and queued; see below |
 | 5 | The 2016 interference failure | 1 | critical | **in progress** (20 Nov 2026): records analysed, blocks read again queued; see below |
 | 6 | Detector completeness and missed signals | 1 | high | **in progress** (20 Nov 2026): the cap, crowding, close pairs and offsets measured from the records and synthetic data; the 2016 false candidates shown not to be the cap's in the first two blocks read again; the strong misses and shadow refresh read again, queued; see below |
 | 7 | BLISS comparison | 1 | high | **in progress** (20 Nov 2026): provenance enforced, two-ON split measured, wider same-hit control queued; see below |
@@ -325,7 +325,7 @@ cadences. Every finding was checked against the code and the records.
 | F4-05: concentrated interference and correlated blocks | high | **built in part** (`false_checks.py windows`): the false rate's interval with windows of 4 and 16 consecutive blocks resampled within each class; 2016 this search at 30: by block [14.6185, 69.675], by 4 [11.4274, 70.4456], by 16 [2.7473, 80.3749]. A tail absent from a session cannot be drawn from it; the three sessions' rates (0.068, 39.1 and 0 at 30) are the measure of session-to-session spread so far: **planned**, more sessions (audit 24). |
 | F4-06: the matched cuts are chosen on the blocks they are judged on | high | **stated; in part already held out.** The frozen cut of steps 10 and 12, 30, was step 4's matched cut on the 2017 session, then tested on 2016 (failed) and 2019 (held): that is the out-of-sample test of one threshold. Choosing thresholds on some sessions and testing them on others more widely: **planned** (control C, audit 24). |
 | F4-07: cadence candidates before vetting are not vetted false alarms | medium | **built**: the report names the count a cadence-candidate yield before vetting. Measuring the yield after vetting, and how often vetting rejects planted signals: **planned** in audits 5 and 12. |
-| Control B: real, time-ordered negative-control cadences from other directions | — | **planned**: a new experiment, sessions chosen beforehand as steps 10 and 12 were. |
+| Control B: real, time-ordered negative-control cadences from other directions | — | **chosen and queued** (below): four sessions by a rule fixed first. |
 
 ### 4, re-audited at d441e00, 20 November 2026
 
@@ -349,6 +349,41 @@ R4-01 accepted as fixed. Remaining points:
 | The DOT diagnostic paired stamps by positions 0, 2 and 4 | low | **built**: `onoff.judge` now pairs each ON look with the OFF look just after it by the looks' own flags; in the published ON, OFF pairs that selects exactly positions 0, 2 and 4, as before. It is recorded, not part of the verdict. |
 | The new records in the evidence package | — | **planned**: built and reproduced when the queued runs finish. |
 | Independent negative controls | — | **planned**, a new experiment. |
+
+### 4, control B chosen, 20 November 2026
+
+Control B is **chosen and queued**, before any of its spectra were read.
+The rule (`tools/negative_controls.py`'s docstring, fixed first): targets in
+the order of Breakthrough Listen's target list (Isaacson et al. 2017, its
+file's SHA-256 recorded), asked of the archive by name; Green Bank
+sessions, each one's first run of six looks ON, OFF, ON, OFF, ON, OFF of the
+finest product; no session or ON target this project has read; the first
+ON file's header in the layout the frozen search was validated on (16
+spectra of 18.25 s, 2.79 or 2.84 Hz channels); the first four that pass.
+Every archive reply is kept with its hash
+(`data/analysis/negative_controls/`).
+
+| Listed under | Session | ON target of its first eligible run | Band | Blocks |
+|---|---|---|---|---|
+| HIP 2 | AGBT16A_999_224 | GJ 83.1 | 1,024 to 1,926 MHz (L) | 308 |
+| HIP 169 | AGBT16B_999_102 | HIP 15638 | 1,024 to 1,926 MHz (L) | 308 |
+| HIP 171 | AGBT16A_999_244 | HIP 3419 | 1,024 to 1,926 MHz (L) | 308 |
+| HIP 194 | AGBT16B_999_61 | HIP 103256 | 1,798 to 2,803 MHz (S) | 343 |
+
+Sixteen sessions were passed over: 15 for spectra of 17.99 s, one already
+read here. The session is the one listed under the catalogue's star; its
+first eligible run need not be of that star, and here none is.
+
+What is measured, fixed now: each cadence swept whole by the frozen search
+in its real time order, in a store of its own; the primary measure is
+cadence candidates (before the checks) with SNR at least 30 a block, by
+session with its exact Poisson 95% interval and a bootstrap over blocks,
+and over the four; secondary, the same at 10 and, after the checks, the
+unexplained only. Beside each, the rate one wrong ON/OFF choice gives
+(F4-01). Three of the four are L band, the band of 2016's failure, so the
+control also tells whether that failure belongs to L-band cadences in
+their real order or to the wrong-choice stand-in. Nothing in steps 4, 10
+or 12 changes with the result.
 
 ## 5. The 2016 interference failure: 20 November 2026
 
