@@ -46,7 +46,7 @@ answered it.
 | 21 | Database and evidence storage | 4 | medium | **in progress** (20 Nov 2026): checks saved whole, six looks required, source versions kept, content hashed, integrity checked, indexes added; evidence revisions planned; see below |
 | 22 | Distributed volunteer computing (`docs/multiuser.md`) | 4 | high | **in progress** (20 Nov 2026): the plan's constraints written in; occupancy's cache follows the store, a block's scans required; the system itself not built; see below |
 | 23 | Testing and regression coverage | 4 | high | **in progress** (20 Nov 2026): tests isolated from any real data folder, the old-version comparison required in CI; the whole-pipeline and reader tests planned; see below |
-| 24 | Large-scale survey strategy | 4 | medium | to do |
+| 24 | Large-scale survey strategy | 4 | medium | **in progress** (20 Nov 2026): a second cadence of a session refused until cadences have ids; coverage searched and searched completely kept apart; the survey protocol planned; see below |
 
 ## What each audit covers
 
@@ -817,3 +817,23 @@ real run's of 03:46).
 | T23-05: one synthetic layout | medium | **agreed; planned** (property-based tests). |
 | T23-06: migrations and processes | medium | **in part**: writers from four processes are tested (audit 20); an old-schema fixture is **planned**. |
 | T23-07: external pipelines and real records not a release gate | medium | **agreed; planned** as a release workflow. |
+
+## 24. Large-scale survey strategy: 20 November 2026
+
+**Verdict:** the next step is a small survey pilot fixed in advance, not a
+large sweep, and the store needs cadence identities first. The defect
+found is real in the schema and now guarded; nothing has been overwritten
+(the store holds one cadence a session).
+
+| Finding | Severity | Verdict and what was done |
+|---|---|---|
+| F24-01: blocks keyed by session, so a second cadence of a session would supersede the first | critical | **confirmed; guarded.** `store.save_block` refuses files that are not the session's own cadence in the store (tested), so no cadence can supersede another; cadence ids, with the store's records migrated, are **planned** before any survey. |
+| F24-02: a sweep finds its cadence at run time | high | **agreed; planned**: survey work from an explicit, fixed manifest. |
+| F24-03: no archive-wide population | high | **agreed; planned**: a metadata census, frozen, every exclusion recorded. |
+| F24-04: searched width counted blocks cut short | high | **confirmed; fixed in part.** A sweep now reports the width searched completely beside the width searched; coverage masks for edges and DC bins are **planned**. |
+| F24-05: choosing sessions by how the search does on them | high | **agreed; stated**: step 12's gate stays a one-off; a survey's population is fixed apart from detections. |
+| F24-06: a new session without its OFF null stops the ranking after the checks | high | **confirmed; fixed.** The checks are saved and the run says the ranking waits and why, rather than failing; a per-session calibration state is **planned**. |
+| F24-07: survey-scale controls | high | **agreed; planned**: independent negative-control cadences, thresholds fixed beforehand. |
+| F24-08: recurrence visits every file per candidate | medium | **agreed; planned**: a benchmark, then set-based retrieval with the same matching. |
+| F24-09: no resource budget | medium | **agreed; planned** (about 92 GB and 1.9 hours a 2017-like cadence, measured here). |
+| F24-10: the survey's objective | medium | **agreed; planned**: fixed before the first survey observation. |

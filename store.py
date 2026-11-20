@@ -406,6 +406,13 @@ def save_block(db, run_id, session, block_idx, f_lo, f_hi, file_ids, looks_hits,
         raise yoke.Refusal("INVALID_REQUEST", f"block {block_idx}: {len(file_ids)} files, {len(looks_hits)} hit lists"
                                               f"{'' if scans is None else f', {len(scans)} scans'}; six of each, "
                                               "all different files, are needed")
+    # The store keys blocks by session and block number, so it can hold one cadence a session: blocks of a
+    # different cadence of the same session would supersede this one's. Refused until cadences have ids.
+    own = [r[0] for r in db.execute("SELECT file_id FROM files WHERE session=? AND cadence_position IS NOT NULL"
+                                    " ORDER BY cadence_position", (session,))]
+    if own and own != list(file_ids):
+        raise yoke.Refusal("INVALID_REQUEST", f"block {block_idx}: the files are not session {session}'s cadence in "
+                                              "the store; a second cadence of a session needs cadence ids (planned)")
     with db:
         earlier = [dict(r) for r in db.execute(
             "SELECT event_id, f_start_mhz, drift_hz_s, label FROM events"

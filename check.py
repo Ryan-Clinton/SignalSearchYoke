@@ -245,8 +245,15 @@ def run(args, say=print):
         say("No candidate waiting: every current candidate has been checked by this version of the checks.")
     count = db.execute("SELECT count(*) FROM events WHERE label='candidate' AND superseded_run IS NULL").fetchone()[0]
     db.close()
-    ranked = ranking.rank(say) if count and not args.event else None
-    return {"checked": out, "candidates": count, "ranked": ranked is not None}
+    ranked, waiting = None, None
+    if count and not args.event:
+        try:
+            ranked = ranking.rank(say)
+        except yoke.Refusal as e:
+            # the checks are saved; the ranking waits for what it needs (a session's OFF null), said, not hidden
+            waiting = str(e)
+            say(f"checks saved; not ranked: {waiting}")
+    return {"checked": out, "candidates": count, "ranked": ranked is not None, "ranking_waits_for": waiting}
 
 
 def main():

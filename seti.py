@@ -683,10 +683,12 @@ def sweep(target, count=1, say=print, get=requests.get, files=None):
     done = record["done"]
     candidates = [dict(e, block=int(k)) for k, d in done.items() for e in d["events"]]
     covered = sum(d["to_mhz"] - d["from_mhz"] for d in done.values())
+    # a block with a look stopped at the hit cap was searched, not searched completely: no limit rests on it
+    whole = sum(d["to_mhz"] - d["from_mhz"] for d in done.values() if d.get("complete") not in (0, False))
     say(f"{target}, session {session}: {len(done)} of {len(block_list)} blocks searched "
         f"({covered:.1f} MHz), {len(candidates)} candidate(s) so far; every hit in {store.path()}")
     return {"target": target, "session": session, "blocks": len(block_list), "searched": len(done),
-            "searched_mhz": round(covered, 3), "this_run": this_run, "candidates_so_far": candidates[:MAX_LISTED],
+            "searched_mhz": round(covered, 3), "searched_completely_mhz": round(whole, 3), "this_run": this_run, "candidates_so_far": candidates[:MAX_LISTED],
             "store": str(store.path()), "run_id": run_id, "kind": "measured"}
 
 

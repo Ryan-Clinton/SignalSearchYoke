@@ -29,6 +29,16 @@ class Lifecycle(unittest.TestCase):
             store.save_block(self.db, 1, "S", 0, 1.0, 2.0, [1, 2, 3, 4, 5, 5], [[]] * 6, [], {})
         self.assertEqual(store.content(self.db), before)                 # nothing changed
 
+    def test_a_second_cadence_of_a_session_refused(self):
+        ids = [store.upsert_file(self.db, _index(f"https://example.invalid/c1_{i}.h5"), session="S2", position=i,
+                                 is_on=i % 2 == 0) for i in range(6)]
+        other = [store.upsert_file(self.db, _index(f"https://example.invalid/c2_{i}.h5")) for i in range(6)]
+        before = store.content(self.db)
+        with self.assertRaises(yoke.Refusal):
+            store.save_block(self.db, 1, "S2", 0, 1.0, 2.0, other, [[]] * 6, [], {}, scans=[{}] * 6)
+        self.assertEqual(store.content(self.db), before)
+        self.assertEqual(len(ids), 6)
+
     def test_checks_saved_whole(self):
         checks = [{"n": n, "name": f"c{n}", "result": "r", "strength": None, "evidence": {}} for n in range(1, 11)]
         store.save_checks(self.db, "L", checks[:3], "v", 77)              # as a run cut off would have left
