@@ -7,8 +7,8 @@ their verdicts. Each writes data/analysis/injection_<name>.json.
     python tools/injection_checks.py voltage    power added to the spectra (in use) against a tone added to the
                                                 voltages before they are squared, on synthetic noise
     python tools/injection_checks.py dc         signals crossing the DC bin, planted before and after it is blanked
-    python tools/injection_checks.py flux       a fixed S_in in every ON look (in use) against a fixed flux, on real
-                                                blocks of the 2017 session
+    python tools/injection_checks.py power      a fixed S_in in every ON look (in use) against one injected power
+                                                in all three (instrument units), on real blocks of the 2017 session
     python tools/injection_checks.py all
 
 - **substeps**: measure.plant spreads a spectrum's power over the channels
@@ -23,7 +23,11 @@ their verdicts. Each writes data/analysis/injection_<name>.json.
   (sinc, its phase random from FFT to FFT), added before squaring. The same
   noise and the same tones made three ways: power at 32 sub-steps (as in
   use), power at 51 (one an FFT, to tell sampling from the cross term), and
-  voltage. Both pipelines, three-look recovery at their cuts.
+  voltage. Then again with two polarizations summed, as Stokes I is (the
+  tone's power split equally between them, each with its own phase: an
+  unpolarized or circular signal). Both pipelines, three-look recovery at
+  their cuts. A simplified noise model: no polyphase filterbank, no 8-bit
+  requantization, a flat receiver response.
 - **dc**: seti.blank_dc replaces each coarse channel's middle channel with
   the mean of its neighbours when a slice is read, and signals are planted
   after, so a planted signal crossing it keeps its power there, where a
@@ -31,11 +35,20 @@ their verdicts. Each writes data/analysis/injection_<name>.json.
   before blanking (as the sky would) and after (as in use); both pipelines.
   And how many of the finished experiments' planted signals cross a DC bin
   in any ON look.
-- **flux**: matched.plant scales each ON look's signal to that look's noise,
-  so its S_in is the same in each. A transmitter's flux does not follow the
-  noise: the same blocks planted with one power in all three ON looks (the
-  mean of the three looks' noise, so the same S_in on average), both
-  pipelines, and the looks' noise against each other.
+- **flux** (constant injected power): matched.plant scales each ON look's
+  signal to that look's noise, so its S_in is the same in each; a
+  transmitter's flux does not follow the noise. Eight blocks of the 2017
+  session, four crowded and four clean drawn at random (seed 12), planted
+  again with one power in all three ON looks, in the spectra's own units
+  (the mean of the three looks' noise, so the same S_in on average). The
+  spectra are not flux-calibrated, so this is constant injected power, not
+  constant received flux in Jy; both pipelines, and the looks' noise
+  against each other.
+
+Every comparison is paired: the same signals in both variants, recorded
+one by one (both found, first only, second only, neither) for each
+pipeline and cut, overall and by strength and drift, so equal totals
+cannot hide signals found in one and lost in the other.
 """
 import json
 import math
@@ -64,6 +77,7 @@ N_T = 16
 N_FFT = 51                       # FFTs summed in a spectrum of Green Bank's finest product
 CUTS = (10, 30)
 SUBSTEP_GRID = (32, 51, 128, 256)
+NEAR_CUT = {1.0: 12, 2.0: 20, 4.0: 40}     # S_in a signal is found at about half the time, by drift (the box widens with it)
 
 
 def _say(*a):
@@ -128,6 +142,43 @@ class Judge:
         return per
 
 
+def _drift_bin(d):
+    for lo, hi in measure.DRIFT_BINS:
+        if lo <= abs(d) < hi or (hi == measure.DRIFT_BINS[-1][1] and abs(d) <= hi):
+            return f"{lo}-{hi}"
+    return "other"
+
+
+def paired(first, second):
+    """The same signals in two variants: for each pipeline and cut, both
+    found, first only, second only, neither; overall, by S_in and by drift."""
+    if len(first) != len(second) or any((a["s_in"], a["drift"]) != (b["s_in"], b["drift"])
+                                        for a, b in zip(first, second)):
+        raise ValueError("the two variants are not of the same signals in the same order")
+    keys = [k for k in first[0] if k.startswith(("ours_", "turboseti_"))] if first else []
+
+    def count(pairs):
+        out = {}
+        for k in keys:
+            c = {"both": 0, "first_only": 0, "second_only": 0, "neither": 0}
+            for a, b in pairs:
+                c["both" if a[k] and b[k] else "first_only" if a[k] else "second_only" if b[k] else "neither"] += 1
+            out[k] = c
+        return out
+    pairs = list(zip(first, second))
+    by_s, by_d = {}, {}
+    for a, b in pairs:
+        by_s.setdefault(str(a["s_in"]), []).append((a, b))
+        by_d.setdefault(_drift_bin(a["drift"]), []).append((a, b))
+    return {"all": count(pairs), "by_strength": {k: count(v) for k, v in sorted(by_s.items(), key=lambda kv: float(kv[0]))},
+            "by_drift": {k: count(v) for k, v in by_d.items()}}
+
+
+def _discordant(p):
+    """The largest number of signals found in one variant and not the other, over pipelines and cuts."""
+    return max(max(c["first_only"], c["second_only"]) for c in p["all"].values())
+
+
 def _totals(rows):
     keys = [k for k in rows[0] if k.startswith(("ours_", "turboseti_"))] if rows else []
     return {k: int(sum(r[k] for r in rows)) for k in keys} | {"signals": len(rows)}
@@ -148,14 +199,23 @@ def _by_strength(rows):
 
 def substeps(say=_say):
     rows = []
+    n_f = 2048
     for drift in (0.15, 1.0, 2.0, 4.0):
         for frac in (0.0, 0.25, 0.5):
-            x0 = 200.0 + frac
-            prof = {k: measure.plant(np.zeros((N_T, 600)), [(x0, drift, 1.0)], TSAMP, FOFF, substeps=k)
+            # The whole track, sidelobes and all, inside the array: a positive drift runs to lower channels.
+            shift = drift * N_T * TSAMP / abs(FOFF * 1e6)
+            x0 = n_f / 2 + shift / 2 + frac
+            lo, hi = x0 - shift - measure.NEIGHBOURS - 1, x0 + measure.NEIGHBOURS + 2
+            if lo < 0 or hi > n_f:
+                raise ValueError(f"the track at {drift} Hz/s leaves the {n_f}-channel test array")
+            prof = {k: measure.plant(np.zeros((N_T, n_f)), [(x0, drift, 1.0)], TSAMP, FOFF, substeps=k)
                     for k in SUBSTEP_GRID}
+            if abs(prof[256].sum() / N_T - measure.plant(np.zeros((N_T, 4 * n_f)), [(x0 + n_f, drift, 1.0)], TSAMP,
+                                                          FOFF, substeps=256).sum() / N_T) > 1e-9:
+                raise ValueError("power lost at the array's edge")
             ref = prof[256]
             for k in SUBSTEP_GRID:
-                rows.append({"drift": drift, "start_fraction": frac, "substeps": k,
+                rows.append({"drift": drift, "start_fraction": frac, "substeps": k, "channels": n_f,
                              "max_bin_diff_over_peak": round(float(np.abs(prof[k] - ref).max() / ref.max()), 5),
                              "power_over_256": round(float(prof[k].sum() / ref.sum()), 6)})
     # The detector's S/N on the planted track near the cut, the same noise each time.
@@ -166,8 +226,8 @@ def substeps(say=_say):
             noise = rng.chisquare(2 * N_FFT, size=(N_T, 16384)) * 1e3
             sigma = float(np.median(measure.channel_noise(noise)))
             x0 = 8000.3 + rng.uniform(0, 1)
-            h = 12 * sigma / math.sqrt(N_T)
-            row = {"drift": drift, "trial": trial}
+            h = NEAR_CUT[drift] * sigma / math.sqrt(N_T)
+            row = {"drift": drift, "trial": trial, "s_in": NEAR_CUT[drift]}
             for k in SUBSTEP_GRID:
                 p = measure.plant(noise, [(x0, drift, h)], TSAMP, FOFF, substeps=k)
                 hits = searching.search(p, FOFF, TSAMP, 2000.0)
@@ -182,7 +242,7 @@ def substeps(say=_say):
         summary[str(drift)] = {str(k): {"mean_snr_minus_256": round(float(np.mean([r[str(k)] - r["256"] for r in rs])), 3),
                                         "found_of_20": sum(r[str(k)] is not None for r in det if r["drift"] == drift)}
                                for k in SUBSTEP_GRID} | {"trials_found_at_all": len(rs)}
-    rec = {"profiles": rows, "detection_s_in_12": det, "detection_summary": summary, "kind": "measured"}
+    rec = {"profiles": rows, "detection_near_the_cut": det, "detection_s_in": {str(k): v for k, v in NEAR_CUT.items()}, "detection_summary": summary, "kind": "measured"}
     yoke.write(OUT / "injection_substeps.json", rec, indent=1, stamp=True)
     worst = max((r for r in rows if r["substeps"] == 32), key=lambda r: r["max_bin_diff_over_peak"])
     say(f"substeps: 32 against 256, worst bin {100 * worst['max_bin_diff_over_peak']:.2f}% of the peak "
@@ -194,9 +254,11 @@ def substeps(say=_say):
 
 # --- voltage ------------------------------------------------------------------------------
 
-def _voltage_look(rng, n_f, tones, n_t=N_T):
+def _voltage_look(rng, n_f, tones, n_t=N_T, pols=1):
     """One look: (power of the noise alone, power of noise plus the tones added
-    to the voltages), summing N_FFT FFTs a spectrum. tones: (x0, drift, h)."""
+    to the voltages), summing N_FFT FFTs a spectrum and `pols` polarizations
+    (Stokes I with 2). tones: (x0, drift, h); a tone's power is split equally
+    between the polarizations, each with its own random phase."""
     plain = np.zeros((n_t, n_f))
     volt = np.zeros((n_t, n_f))
     per_channel = FOFF * 1e6
@@ -205,56 +267,72 @@ def _voltage_look(rng, n_f, tones, n_t=N_T):
         acc = np.zeros(n_f)
         delta = np.zeros(n_f)
         for f in range(N_FFT):
-            n = (rng.standard_normal(n_f) + 1j * rng.standard_normal(n_f)) * math.sqrt(0.5)
-            p = n.real ** 2 + n.imag ** 2
-            acc += p
             tau = (t + (f + 0.5) / N_FFT) * TSAMP
-            for x0, drift, h in tones:
-                x = x0 + drift * tau / per_channel
-                cells = int(math.floor(x)) + offsets
-                ok = (cells >= 0) & (cells < n_f)
-                a = math.sqrt(h / N_FFT) * np.sinc(cells[ok] - x) * np.exp(1j * rng.uniform(0, 2 * math.pi))
-                v = n[cells[ok]] + a
-                delta[cells[ok]] += (v.real ** 2 + v.imag ** 2) - p[cells[ok]]
+            for _ in range(pols):
+                n = (rng.standard_normal(n_f) + 1j * rng.standard_normal(n_f)) * math.sqrt(0.5)
+                p = n.real ** 2 + n.imag ** 2
+                acc += p
+                for x0, drift, h in tones:
+                    x = x0 + drift * tau / per_channel
+                    cells = int(math.floor(x)) + offsets
+                    ok = (cells >= 0) & (cells < n_f)
+                    a = math.sqrt(h / (N_FFT * pols)) * np.sinc(cells[ok] - x) * np.exp(1j * rng.uniform(0, 2 * math.pi))
+                    v = n[cells[ok]] + a
+                    delta[cells[ok]] += (v.real ** 2 + v.imag ** 2) - p[cells[ok]]
         plain[t] = acc
         volt[t] = acc + delta
     return plain, volt
 
 
 def voltage(blocks=8, n_f=1048576, say=_say):
-    rows = {"power, 32 sub-steps (in use)": [], "power, 51 sub-steps": [], "voltage, 51 FFTs": []}
+    """One polarization: power at 32 and 51 sub-steps and voltage, on the
+    same noise. Two polarizations (Stokes I): power at 32 and voltage."""
+    rows = {"power, 32 sub-steps (in use)": [], "power, 51 sub-steps": [], "voltage, 51 FFTs": [],
+            "two polarizations: power, 32 sub-steps (in use)": [], "two polarizations: voltage, 51 FFTs": []}
     for b in range(blocks):
         rng = np.random.default_rng([12, 51, b])
         # The tones first, on a flat cadence of the right size, so the voltages can carry them.
         shape_cad = _cadence([np.ones((N_T, n_f))] * 6)
         ts = matched.tones(shape_cad, rng)
-        sigma = math.sqrt(N_FFT)                   # one channel's noise in the summed power
-        looks_plain, looks_volt = [], []
-        for j in range(6):
-            here = []
-            if j in matched.TRUE:
-                for t in ts:
-                    x, _ = matched.where(shape_cad, t, j)
-                    here.append((x, t["drift"], t["s_in"] * sigma / math.sqrt(N_T)))
-            pl, vo = _voltage_look(rng, n_f, here)
-            looks_plain.append(pl)
-            looks_volt.append(vo)
-        cad = _cadence(looks_plain)
-        judge = Judge(cad, WORK / f"voltage_{b}")
-        for name, k in (("power, 32 sub-steps (in use)", 32), ("power, 51 sub-steps", 51)):
-            planted = []
-            for j, raw in enumerate(looks_plain):
-                if j not in matched.TRUE:
-                    planted.append(raw)
-                    continue
-                here = [(matched.where(cad, t, j)[0], t["drift"], t["s_in"] * sigma / math.sqrt(N_T)) for t in ts]
-                planted.append(measure.plant(raw, here, TSAMP, FOFF, substeps=k))
-            rows[name] += judge.judge(f"p{k}", planted, ts)
-        rows["voltage, 51 FFTs"] += judge.judge("v", looks_volt, ts)
-        shutil.rmtree(WORK / f"voltage_{b}", ignore_errors=True)
+        for pols in (1, 2):
+            sigma = math.sqrt(N_FFT * pols)            # one channel's noise in the summed power
+            looks_plain, looks_volt = [], []
+            for j in range(6):
+                here = []
+                if j in matched.TRUE:
+                    for t in ts:
+                        x, _ = matched.where(shape_cad, t, j)
+                        here.append((x, t["drift"], t["s_in"] * sigma / math.sqrt(N_T)))
+                pl, vo = _voltage_look(rng, n_f, here, pols=pols)
+                looks_plain.append(pl)
+                looks_volt.append(vo)
+            cad = _cadence(looks_plain)
+            judge = Judge(cad, WORK / f"voltage_{b}_{pols}")
+            pre = "" if pols == 1 else "two polarizations: "
+            for k in ((32, 51) if pols == 1 else (32,)):
+                planted = []
+                for j, raw in enumerate(looks_plain):
+                    if j not in matched.TRUE:
+                        planted.append(raw)
+                        continue
+                    here = [(matched.where(cad, t, j)[0], t["drift"], t["s_in"] * sigma / math.sqrt(N_T)) for t in ts]
+                    planted.append(measure.plant(raw, here, TSAMP, FOFF, substeps=k))
+                name = pre + ("power, 32 sub-steps (in use)" if k == 32 else "power, 51 sub-steps")
+                rows[name] += judge.judge(f"p{k}", planted, ts)
+            rows[pre + "voltage, 51 FFTs"] += judge.judge("v", looks_volt, ts)
+            shutil.rmtree(WORK / f"voltage_{b}_{pols}", ignore_errors=True)
         say(f"voltage block {b}: " + "; ".join(f"{k}: {_totals(v)}" for k, v in rows.items()))
+    pairs = {"power 32 against power 51 (sampling)": paired(rows["power, 32 sub-steps (in use)"],
+                                                            rows["power, 51 sub-steps"]),
+             "power 51 against voltage (the cross term)": paired(rows["power, 51 sub-steps"], rows["voltage, 51 FFTs"]),
+             "power 32 against voltage": paired(rows["power, 32 sub-steps (in use)"], rows["voltage, 51 FFTs"]),
+             "two polarizations: power 32 against voltage": paired(
+                 rows["two polarizations: power, 32 sub-steps (in use)"], rows["two polarizations: voltage, 51 FFTs"])}
     rec = {"blocks": blocks, "channels": n_f, "fft_per_spectrum": N_FFT,
-           "totals": {k: _totals(v) for k, v in rows.items()},
+           "model": "complex Gaussian noise a channel an FFT; tone added before squaring; one or two polarizations; "
+                    "no polyphase filterbank, no requantization, flat receiver response",
+           "totals": {k: _totals(v) for k, v in rows.items()}, "paired": pairs,
+           "largest_discordance": {k: _discordant(v) for k, v in pairs.items()},
            "by_strength": {k: _by_strength(v) for k, v in rows.items()}, "kind": "measured"}
     yoke.write(OUT / "injection_voltage.json", rec, indent=1, stamp=True)
     return rec
@@ -264,7 +342,10 @@ def voltage(blocks=8, n_f=1048576, say=_say):
 
 def dc_census():
     """How many of the finished experiments' planted signals cross a DC bin
-    (the middle channel of the coarse channel) in any ON look."""
+    in any ON look: the DC bins' frequencies from the session's own header
+    (fch1, foff and the coarse channel, one HDF5 chunk), each signal's
+    frequency through each ON look from its record, a channel's width either
+    side."""
     out = {}
     for target in ("KIC8462852", "HIP17147", "NGC6946"):
         db = store.connect_readonly()
@@ -272,27 +353,31 @@ def dc_census():
         db.close()
         if not kept:
             continue
-        session, _ = kept
+        session, urls = kept
+        idx = seti.reading.prepare(urls[:1])[0]
+        a = idx["attrs"]
+        fch1, foff = float(a["fch1"]), float(a["foff"])
+        per, nchans = int(idx["chunk_shape"][-1]), int(idx["shape"][-1])
+        dcs = np.array([fch1 + (k * per + per // 2) * foff for k in range(nchans // per)])
+        width = abs(foff)
         base = matched.folder(target, session)
         n = crossing = 0
         for p in sorted(base.glob("block_*.json")):
             r = json.loads(p.read_text(encoding="utf-8"))
-            per = 1048576
-            # A block is one coarse channel less a channel each side: its DC bin is at per // 2 - 1.
-            dc = per // 2 - 1
-            span = (N_T - 1 + 1) * TSAMP
             t0 = r["tstarts"][0]
+            here = dcs[(dcs >= r["from_mhz"] - 1) & (dcs <= r["to_mhz"] + 1)]
             for t in r["tones"]:
                 n += 1
                 hit = False
                 for j in matched.TRUE:
                     dt = (r["tstarts"][j] - t0) * 86400
-                    a = t["x0"] + t["drift"] * dt / (FOFF * 1e6)
-                    b = a + t["drift"] * span / (FOFF * 1e6)
-                    if min(a, b) - 1 <= dc <= max(a, b) + 1:
+                    f_a = t["f_mhz"] + t["drift"] * dt / 1e6
+                    f_b = f_a + t["drift"] * N_T * TSAMP / 1e6
+                    if np.any((here >= min(f_a, f_b) - width) & (here <= max(f_a, f_b) + width)):
                         hit = True
                 crossing += hit
-        out[target] = {"signals": n, "crossing_dc_in_an_on_look": crossing}
+        out[target] = {"signals": n, "crossing_dc_in_an_on_look": crossing, "coarse_channel": per,
+                       "from": "the session's own header"}
     return out
 
 
@@ -339,8 +424,10 @@ def dc(blocks=6, n_f=1048576, per=65536, say=_say):
         rows["blanked then planted (as in use)"] += judge.judge("in_use", in_use, ts)
         shutil.rmtree(WORK / f"dc_{b}", ignore_errors=True)
         say(f"dc block {b}: " + "; ".join(f"{k}: {_totals(v)}" for k, v in rows.items()))
+    pr = paired(rows["blanked then planted (as in use)"], rows["planted then blanked (as a real signal)"])
     rec = {"blocks": blocks, "channels": n_f, "coarse_channel": per,
            "totals": {k: _totals(v) for k, v in rows.items()},
+           "paired": {"in use against as a real signal": pr}, "largest_discordance": _discordant(pr),
            "by_strength": {k: _by_strength(v) for k, v in rows.items()},
            "census": dc_census(), "kind": "measured"}
     yoke.write(OUT / "injection_dc.json", rec, indent=1, stamp=True)
@@ -351,8 +438,9 @@ def dc(blocks=6, n_f=1048576, per=65536, say=_say):
 # --- flux --------------------------------------------------------------------------------------
 
 def flux(n_blocks=8, say=_say):
-    """The 2017 session's first crowded and clean blocks of its choice, read
-    again and planted two ways with the same tones (its records' own)."""
+    """Constant injected power: eight blocks of the 2017 session, four crowded
+    and four clean drawn at random (seed 12), read again and planted two ways
+    with the same tones (their records' own)."""
     target = "KIC8462852"
     db = store.connect_readonly()
     session, urls = store.cadence_files(db, target)
@@ -360,10 +448,11 @@ def flux(n_blocks=8, say=_say):
     base = matched.folder(target, session)
     meta = json.loads((base / "blocks.json").read_text(encoding="utf-8"))
     chosen = {int(b): c for b, c in meta["chosen"].items()}
-    picks = [b for b, c in chosen.items() if c == "crowded"][:n_blocks // 2] + \
-            [b for b, c in chosen.items() if c == "clean"][:n_blocks // 2]
+    rng = np.random.default_rng(12)
+    picks = sorted(int(b) for cls in ("crowded", "clean")
+                   for b in rng.choice(sorted(b for b, c in chosen.items() if c == cls), n_blocks // 2, replace=False))
     block_list = seti.blocks(seti.reading.prepare(urls[:1])[0])
-    rows = {"fixed S_in in each ON look (in use)": [], "fixed flux across the ON looks": []}
+    rows = {"fixed S_in in each ON look (in use)": [], "one injected power in all three ON looks": []}
     ratios = []
     for b in picks:
         rec = json.loads((base / f"block_{b:03d}.json").read_text(encoding="utf-8"))
@@ -392,23 +481,26 @@ def flux(n_blocks=8, say=_say):
             fixed.append(measure.plant(raw, here, s["tsamp"], s["foff"]))
         judge = Judge(cad, WORK / f"flux_{b}")
         rows["fixed S_in in each ON look (in use)"] += judge.judge("in_use", in_use, ts)
-        rows["fixed flux across the ON looks"] += judge.judge("fixed", fixed, ts)
+        rows["one injected power in all three ON looks"] += judge.judge("fixed", fixed, ts)
         shutil.rmtree(WORK / f"flux_{b}", ignore_errors=True)
         say(f"flux block {b} ({chosen[b]}): " + "; ".join(f"{k}: {_totals(v)}" for k, v in rows.items()))
     r = np.array(ratios)
-    rec = {"target": target, "session": session, "blocks": picks,
+    pr = paired(rows["fixed S_in in each ON look (in use)"], rows["one injected power in all three ON looks"])
+    rec = {"target": target, "session": session, "blocks": picks, "sample": "4 crowded and 4 clean at random, seed 12",
+           "what": "constant injected power in the spectra's own units, not calibrated flux",
+           "paired": {"in use against one power": pr}, "largest_discordance": _discordant(pr),
            "noise_over_mean_of_on_looks": {"median": round(float(np.median(r)), 4),
                                            "p5_p95": [round(float(np.percentile(r, 5)), 4),
                                                       round(float(np.percentile(r, 95)), 4)]},
            "totals": {k: _totals(v) for k, v in rows.items()},
            "by_strength": {k: _by_strength(v) for k, v in rows.items()}, "kind": "measured"}
-    yoke.write(OUT / "injection_flux.json", rec, indent=1, stamp=True)
+    yoke.write(OUT / "injection_power.json", rec, indent=1, stamp=True)
     return rec
 
 
 def main():
     what = sys.argv[1] if len(sys.argv) > 1 else "all"
-    steps = {"substeps": substeps, "voltage": voltage, "dc": dc, "flux": flux}
+    steps = {"substeps": substeps, "voltage": voltage, "dc": dc, "power": flux}
     todo = list(steps) if what == "all" else [what]
     for name in todo:
         if (OUT / f"injection_{name}.json").exists() and what == "all":
