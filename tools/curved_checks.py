@@ -152,19 +152,24 @@ def any_candidate(hyps):
     return [{k: h[k] for k in ("members", "track", "offs", "label", "a")} for h in by.values()]
 
 
-def measured_only(hyps):
-    """first_wins, a candidate with no OFF look measured made 'unmeasured' (not kept)."""
-    out = []
-    seen = set()
-    for h in hyps:
-        if h["sig"] in seen:
-            continue
-        seen.add(h["sig"])
-        e = {k: h[k] for k in ("members", "track", "offs", "label", "a")}
-        if e["label"] == "candidate" and h["off_measured"] == 0:
-            e["label"] = "unmeasured"
-        out.append(e)
-    return out
+def measured_at_least(k):
+    """first_wins, a candidate with fewer than k OFF looks measured made 'unmeasured' (not kept)."""
+    def way(hyps):
+        out = []
+        seen = set()
+        for h in hyps:
+            if h["sig"] in seen:
+                continue
+            seen.add(h["sig"])
+            e = {x: h[x] for x in ("members", "track", "offs", "label", "a")}
+            if e["label"] == "candidate" and h["off_measured"] < k:
+                e["label"] = "unmeasured"
+            out.append(e)
+        return out
+    return way
+
+
+measured_only = measured_at_least(1)
 
 
 def order_stats(hyps):
@@ -184,7 +189,8 @@ def order_stats(hyps):
 
 
 WAYS = {"as published": first_wins, "any hypothesis a candidate": any_candidate,
-        "unmeasured OFF not clean": measured_only}
+        "an OFF look measured": measured_at_least(1), "two OFF looks measured": measured_at_least(2),
+        "every OFF look measured": measured_at_least(3)}
 
 
 def _judge(cad, searched, ons, caches):
@@ -231,9 +237,10 @@ def blocks(say=_say):
             kept, hyps = _judge(cad, searched, ons, caches)
             if ons == matched.TRUE:
                 true_plain = kept
-            else:
-                for w in WAYS:
-                    false[w][str(ons)] = kept[w]
+                order_true = order_stats(hyps)
+                continue
+            for w in WAYS:
+                false[w][str(ons)] = kept[w]
             for k, v in order_stats(hyps).items():
                 order[k] = order.get(k, 0) + v
         ts = curved_pass.tones(cad, np.random.default_rng([curved_pass.SEED, b]))
@@ -244,7 +251,7 @@ def blocks(say=_say):
                         for t in ts) for w in WAYS}
         row = {"block": b, "class": chosen[b], "code": fp,
                "false_30": {w: len(matched.shared_hits(false[w])) for w in WAYS}, "found_30": found,
-               "order_wrong_choices": order, "order_planted": order_stats(hyps_p)}
+               "order_wrong_choices": order, "order_true_plain": order_true, "order_planted": order_stats(hyps_p)}
         if b in TRACED:
             t = ts[TRACED[b]]
             st = {w: curved_pass.statuses(cad, t, kept_p[w], true_plain[w]) for w in WAYS}

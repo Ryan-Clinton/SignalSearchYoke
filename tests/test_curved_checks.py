@@ -37,6 +37,32 @@ class Matcher(unittest.TestCase):
         self.assertGreater(checked, 0)
         self.assertGreaterEqual(hyps_seen, checked)
 
+    def test_the_same_hits_give_fits_with_other_off_measurements(self):
+        """CD-01's mechanism end to end: on the true choice the same three ON hits, reached from two
+        pairs of ON looks, give two fitted accelerations and different OFF measurements, and the
+        published matcher keeps only the first."""
+        import curved_pass
+        import injection
+        import matched
+        cad = synth.cadence(5)
+        for c in cad:
+            c["s"]["coarse_channel"] = synth.N_F
+        ts = injection.tones_for(cad, 8, 0, np.random.default_rng(7), strengths=[200])
+        for k, t in enumerate(ts):
+            t["accel"] = (8e-4, -8e-4, 5e-4, -5e-4)[k % 4]
+        cad_p = [dict(c, spectra=p) for c, p in zip(cad, curved_pass.plant(cad, ts))]
+        looks, events, _ = matched.our_events(cad_p, matched.our_search(cad_p), matched.TRUE, 10,
+                                              [{} for _ in range(6)])
+        hyps = cc.second_pass_all(looks, events, 1e-3)
+        by = {}
+        for h in hyps:
+            by.setdefault(h["sig"], []).append(h)
+        multi = [v for v in by.values() if len(v) > 1 and len({h["a"] for h in v}) > 1]
+        self.assertTrue(multi)
+        self.assertTrue(any(len({tuple(h["offs"]) for h in v}) > 1 for v in multi))
+        kept = cc.first_wins(hyps)
+        self.assertEqual(len(kept), len(by))
+
     def test_helpers(self):
         def h(sig, label, measured):
             return {"sig": frozenset(sig), "label": label, "off_measured": measured, "off_looks": 3,
@@ -46,6 +72,9 @@ class Matcher(unittest.TestCase):
         self.assertEqual([e["label"] for e in cc.first_wins(hyps)], ["interference", "candidate"])
         self.assertEqual(sorted(e["label"] for e in cc.any_candidate(hyps)), ["candidate", "candidate"])
         self.assertEqual([e["label"] for e in cc.measured_only(hyps)], ["interference", "unmeasured"])
+        hyps[1]["off_measured"] = 2
+        self.assertEqual([e["label"] for e in cc.measured_at_least(3)([hyps[1]])], ["unmeasured"])
+        self.assertEqual([e["label"] for e in cc.measured_at_least(2)([hyps[1]])], ["candidate"])
         st = cc.order_stats(hyps)
         self.assertEqual((st["sets_disagreeing"], st["first_is_interference_another_candidate"],
                           st["candidates_no_off_measured"]), (1, 1, 1))

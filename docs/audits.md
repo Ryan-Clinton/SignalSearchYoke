@@ -430,6 +430,15 @@ every hypothesis (`tools/curved_checks.py`; deduplicated first-wins it gives
 | CD-07: the pass's extra false candidates are not general | high | **agreed.** Paired block-level intervals for the pass's increments use audit 8's tools; **planned** with the blocks run's results. |
 | CD-08: no comparison with a truly curved search | medium | **planned**, on the same planted signals and controls. |
 
+### 10, re-audited at 8b836f4, 20 November 2026
+
+| Finding | Severity | Verdict and what was done |
+|---|---|---|
+| The OFF-coverage check asked only for one measured OFF look | medium | **agreed; built.** The run now compares requiring one, two and all three OFF looks measured, beside the published rule and any-hypothesis-a-candidate. |
+| The wrong-choice tallies included the true choice | low | **confirmed; fixed.** The true choice's tallies are kept apart. |
+| No end-to-end case of two fits from the same hits | medium | **built in part.** On a synthetic cadence with eight curved signals, the same three ON hits reached from two pairs of ON looks give two fitted accelerations (for example −7.58 and −7.81 ×10⁻⁴ Hz/s²) and different OFF measurements, and the published matcher keeps the first (tested). A case where the veto itself flips was not found on synthetic data; the blocks run counts such sets on real data. |
+| The two signals are located, not explained | medium | **open**: the run records every hypothesis near each, in both blocks. |
+
 ## 11. ON/OFF cadence matching: 20 November 2026
 
 **Verdict:** three mechanisms are confirmed with `onoff.py`'s own functions;
