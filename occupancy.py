@@ -52,11 +52,21 @@ DRIFT_TOL_FRACTION = 0.1
 _cache = {}
 
 
+def revision(db, session):
+    """What the session's current hits and blocks are now: changes when a block is added or searched again."""
+    h = db.execute("SELECT count(*), max(hit_id) FROM hits WHERE session=? AND superseded_run IS NULL",
+                   (session,)).fetchone()
+    b = db.execute("SELECT count(*), max(run_id) FROM blocks WHERE session=?", (session,)).fetchone()
+    return tuple(h) + tuple(b)
+
+
 def load(db, session):
     """The session's hits (current runs), and its searched blocks and
-    cut-short looks; kept in memory for the process."""
-    if session in _cache:
-        return _cache[session]
+    cut-short looks; kept in memory for the process while the session's
+    hits and blocks stay as they were (revision), made again when they change."""
+    key = (session, revision(db, session))
+    if key in _cache:
+        return _cache[key]
     rows = db.execute("SELECT h.f_start_mhz, h.drift_hz_s, h.snr, h.origin, h.block_idx, f.cadence_position"
                       " FROM hits h JOIN files f USING(file_id) WHERE h.session=? AND h.superseded_run IS NULL",
                       (session,)).fetchall()
@@ -78,7 +88,9 @@ def load(db, session):
         nu_by_block[k] = np.sort(d[m] / (f[m] * 1e6))
     occ = {"session": session, "f": f, "d": d, "cut": cut, "blocks": blocks, "short": short,
            "grid": grid, "nu_by_block": nu_by_block, "hits": len(f), "hits_at_cut": int(cut.sum())}
-    _cache[session] = occ
+    for k in [k for k in _cache if k[0] == session]:
+        del _cache[k]
+    _cache[key] = occ
     return occ
 
 

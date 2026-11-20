@@ -17,10 +17,11 @@ SETI@home searched Arecibo's data.
 **That is throughput, not credibility.** More data searched does not make
 the search more sensitive, its false candidates fewer, or a candidate more
 convincing. The search's measured advantage over turboSETI is from one
-session (comparable.md step 4); whether it holds on others is step 10's
-question, and a survey's candidates are only as good as the checks and the
-ranking, the ranking not yet finished (step 5). Two things are kept apart
-throughout:
+session (comparable.md step 4), held on a third chosen in advance (step 12)
+and failed the false-candidate limit on a crowded L-band session (step 10);
+a survey's candidates are only as good as the checks and the ranking
+(`ranking.py`, version 2, validated only against one session's eleven
+candidates: docs/audits.md 12). Two things are kept apart throughout:
 
 - **was the block searched as this repository searches it** (the machinery
   below: computing reliability);
@@ -419,9 +420,10 @@ when replaced. Both tables are added with the server, not before.
 
 ## Ranking across a survey
 
-`ranking.py` is being built (comparable.md step 5) and is not committed or
-validated at this writing. Before a survey's candidates are ranked against
-each other: step 5 is done and its result read; the ranking has a version
+`ranking.py` exists (version 2), validated only against one session's
+eleven candidates (docs/audits.md 12). Before a survey's candidates are
+ranked against each other: a ranking challenge on sessions chosen
+beforehand is done and its result read; the ranking has a version
 of its own, kept with every ranked list; completeness into the first N of
 the whole survey (not one cadence's eleven) is measured with planted
 signals at the survey's scale; candidates are ranked again when their
@@ -619,3 +621,40 @@ and pickles are not part of it.
 - Set from measurement: the tolerances (stage 1), the minimum computer
   (stage 1), the audit share p and the backlog limits (stage 4), lease
   times (stage 3), storage budgets and retention times (stage 4).
+
+## Constraints from the audit of this plan (docs/audits.md 22)
+
+Not built; each is a requirement on the design before a volunteer pilot.
+
+- **Volunteer evidence cannot bury a confirmed candidate.** Evidence only
+  volunteers agreed on (recurrence, interference, crowding from other
+  blocks) may not downgrade, dismiss or rank down a candidate the project
+  has confirmed in its own block until the project has verified that
+  evidence too; escalation to a person goes on the candidate's own
+  detection, not on a ranking the volunteers' evidence moved.
+- **Agreement is not completeness.** Two agreeing answers say a block was
+  searched by two; they do not say nothing was missed. Coverage is reported
+  apart: verified by the project, agreed by volunteers, submitted only. A
+  random audit at 3% finds a single omitted candidate's block 3% of the time.
+- **Answers are compared one hit to one hit.** The validator pairs hits
+  one-to-one within tolerances and counts the unmatched on each side, and
+  compares events' members; a tolerance never turns a missing hit into a
+  match. Tested at every cut's boundary.
+- **Strict intake.** Six looks, identified; event members within the unit's
+  own looks and block; finite numbers; bounded counts and sizes; frequencies
+  inside the unit; derived counts made again by the server. A volunteer's
+  reads refuse redirects away from the archive's HTTPS origin.
+- **An incomplete look is no evidence of absence.** A look stopped at the hit
+  cap gives the hits it found, not that others were absent; recurrence and
+  crowding count its coverage apart.
+- **Cached evidence follows the store.** Anything computed from many blocks
+  (occupancy, recurrence background) is keyed to the store's state and made
+  again when a block is added or searched again (occupancy.py does so now).
+- **Comparisons are kept.** Each decision keeps both submissions' digests,
+  the validator's version, the matched and unmatched counts, the tolerances
+  and the canonical result; full submissions are kept for the audit horizon
+  of the science, not only the verification queue's.
+- **Identity independence is measured.** Before pairing is trusted, a
+  simulation of an attacker with many patient identities measures how often
+  it gets both answers of a block.
+

@@ -401,7 +401,7 @@ def save_block(db, run_id, session, block_idx, f_lo, f_hi, file_ids, looks_hits,
     by this run; `same(old_event_row, new_event)` says which earlier event
     a new one replaces. Refused, with nothing changed, unless it has six
     looks: six files, six hit lists and (when given) six scans."""
-    if len(file_ids) != 6 or len(looks_hits) != 6 or (scans is not None and len(scans) != 6) \
+    if len(file_ids) != 6 or len(looks_hits) != 6 or scans is None or len(scans) != 6 \
             or len(set(file_ids)) != 6:
         raise yoke.Refusal("INVALID_REQUEST", f"block {block_idx}: {len(file_ids)} files, {len(looks_hits)} hit lists"
                                               f"{'' if scans is None else f', {len(scans)} scans'}; six of each, "

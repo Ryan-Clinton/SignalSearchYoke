@@ -44,7 +44,7 @@ answered it.
 | 19 | Public repository and release readiness | 3 | high | **in progress** (20 Nov 2026): documents brought into line with the code, a consistency test; the release, tag and Zenodo deposit left for Ryan's go; see below |
 | 20 | Parallel processing and performance | 4 | high | **in progress** (20 Nov 2026): every record written whole, broken records set aside; the shared scheduler planned; see below |
 | 21 | Database and evidence storage | 4 | medium | **in progress** (20 Nov 2026): checks saved whole, six looks required, source versions kept, content hashed, integrity checked, indexes added; evidence revisions planned; see below |
-| 22 | Distributed volunteer computing (`docs/multiuser.md`) | 4 | high | to do |
+| 22 | Distributed volunteer computing (`docs/multiuser.md`) | 4 | high | **in progress** (20 Nov 2026): the plan's constraints written in; occupancy's cache follows the store, a block's scans required; the system itself not built; see below |
 | 23 | Testing and regression coverage | 4 | high | to do |
 | 24 | Large-scale survey strategy | 4 | medium | to do |
 
@@ -780,3 +780,23 @@ own checks. Tests: `tests/test_store_lifecycle.py`.
 | R21-03: the six scans' contents not checked | medium | **planned** with the cadence-membership table. |
 | R21-04: file headers and cadence membership updated in place | medium | **agreed; planned** (the source version itself is fixed). |
 | R21-05: hashing the whole store costs | medium | **measured**: 24.5 s for the whole store (0.7 GB, 1.9 million hits); fine at this size, and it grows with the store, so a sampled or per-table option is **planned** before the survey. |
+
+## 22. Distributed volunteer computing: 20 November 2026
+
+**Verdict:** the plan is not built, so most findings are requirements on its
+design; they are now written into docs/multiuser.md ("Constraints from the
+audit of this plan"). Two touched code that exists and are fixed.
+
+| Finding | Severity | Verdict and what was done |
+|---|---|---|
+| F22-01: volunteer evidence could bury a confirmed candidate | critical | **agreed; written into the plan**: volunteer-only evidence cannot rank down a project-confirmed candidate until verified; escalation on the candidate's own detection. |
+| F22-02: two agreeing answers do not show nothing was missed | critical | **agreed; written in**: coverage reported as verified, agreed or submitted, never agreement as completeness. |
+| F22-03: identities need not be independent | high | **agreed; written in**: an attack simulation before pairing is trusted. |
+| F22-04: occupancy cached by session only | high | **confirmed; fixed.** `occupancy.load` keys its cache to the session's current hits and blocks (`occupancy.revision`) and makes it again when they change. |
+| F22-05: `save_block` could be given no scans | high | **confirmed; fixed.** Six scans are required (the one caller gives them); the strict intake for volunteers is written into the plan. |
+| F22-06: tolerant comparison could hide a missing hit | high | **agreed; written in**: one-to-one hit pairing with unmatched counts and event comparison. |
+| F22-07: an incomplete look counted as searched coverage | high | **agreed; written in** for the survey; changing check 6's background now would change the checks, so it goes into a checks version with its own comparison. |
+| F22-08: redirects and hostile uploads | high | **agreed; written in.** |
+| F22-09: the verification computer as the limit | high | **agreed; to be measured** in the simulated deployment. |
+| F22-10: comparisons dropped with old submissions | medium | **agreed; written in**: each decision keeps the comparison record. |
+| F22-11: the plan behind the code | medium | **confirmed; fixed**: its status lines now give steps 10 and 12 and ranking version 2 as they are. |
