@@ -47,6 +47,7 @@ import searching  # noqa: E402
 import seti  # noqa: E402
 import store  # noqa: E402
 import yoke  # noqa: E402
+import onoff_checks  # noqa: E402
 import search_variants as sv  # noqa: E402
 
 OUT = yoke.DATA / "analysis"
@@ -60,7 +61,8 @@ def _say(*a):
     print(*a, flush=True)
 
 
-DEPENDS = ("searching.py", "tools/search_variants.py", "tools/detector_checks.py", "matched.py", "onoff.py", "seti.py",
+DEPENDS = ("searching.py", "tools/search_variants.py", "tools/detector_checks.py", "tools/onoff_checks.py",
+           "matched.py", "onoff.py", "seti.py",
            "measure.py", "matched_tables.py", "injection.py", "store.py", "tools/turbo_checks.py")
 
 
@@ -233,16 +235,23 @@ def _searched(cad, **kw):
         return list(pool.map(one, range(6)))
 
 
-def _judged(cad, cad_p, su, sp, ts, cut=30):
+def _judged(cad, cad_p, su, sp, ts, cut=30, blind=None):
+    """(false candidates over the 19 wrong choices, planted signals found); `blind`, a dict, gets the
+    candidates with OFF looks left unmeasured (onoff_checks.unmeasured), wrong choices and planted."""
     caches = [{} for _ in range(6)]
     by = {}
+    tally = {}
     for ons in itertools.combinations(range(6), 3):
         if ons == matched.TRUE:
             continue
         looks, events, order = matched.our_events(cad, su, ons, cut, caches)
         by[str(ons)] = matched._our_kept(looks, events, order)
+        for k, v in onoff_checks.unmeasured(events).items():
+            tally[k] = tally.get(k, 0) + v
     looks, events, order = matched.our_events(cad_p, sp, matched.TRUE, cut, [{} for _ in range(6)])
     kp = matched._our_kept(looks, events, order)
+    if blind is not None:
+        blind.update(wrong_choices=tally, planted=onoff_checks.unmeasured(events))
     looks, events, order = matched.our_events(cad, su, matched.TRUE, cut, [{} for _ in range(6)])
     ku = matched._our_kept(looks, events, order)
     found = sum(matched._status({j: matched.where(cad, t, j)[1] for j in matched.TRUE}, t["drift"], kp, ku)
@@ -277,7 +286,13 @@ def blocks(say=_say):
         keys = {}
         for name, kw in (("as published", {}), ("full reach", {"refresh_reach": "full"})):
             su, sp = _searched(cad, **kw), _searched(cad_p, **kw)
-            false30, found30 = _judged(cad, cad_p, su, sp, ts)
+            blind = {} if name == "as published" else None
+            false30, found30 = _judged(cad, cad_p, su, sp, ts, blind=blind)
+            if blind is not None:
+                row["unmeasured_off"] = blind
+                looks, _, _ = matched.our_events(cad, su, matched.TRUE, 30, [{} for _ in range(6)])
+                row["null_on"] = onoff_checks.null_on(looks)
+                row["asymmetry"] = onoff_checks.asymmetry(looks)
             row[name] = {"hits": [len(x[0]) for x in su], "complete": [x[2] for x in su],
                          "false_30": false30, "found_30": found30}
             keys[name] = [_keys(x[0]) for x in su]

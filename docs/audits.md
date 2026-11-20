@@ -429,3 +429,21 @@ every hypothesis (`tools/curved_checks.py`; deduplicated first-wins it gives
 | CD-05, CD-06: curvature and orbits covered only in part | high / medium | **agreed; stated.** Results are recovery over the tested acceleration range and orbital grid, not completeness for accelerating transmitters. A completeness map over drift, acceleration and strength, and eccentric orbits, are **planned**. |
 | CD-07: the pass's extra false candidates are not general | high | **agreed.** Paired block-level intervals for the pass's increments use audit 8's tools; **planned** with the blocks run's results. |
 | CD-08: no comparison with a truly curved search | medium | **planned**, on the same planted signals and controls. |
+
+## 11. ON/OFF cadence matching: 20 November 2026
+
+**Verdict:** three mechanisms are confirmed with `onoff.py`'s own functions;
+how much each matters on real data is measured in the queued blocks run
+(`tools/detector_checks.py blocks`, which now also runs
+`tools/onoff_checks.py`'s measurements on each block, so blocks are read
+once). `onoff.py` is frozen; changes to the rules belong to a new version.
+
+| Finding | Severity | Verdict and what was done |
+|---|---|---|
+| A11-01: an OFF look that cannot be measured counts as clear | high | **confirmed in the code; being measured.** `best_track` gives nothing with fewer than 16 reference lines or no spread, and `judge` then sets no OFF evidence. The run counts candidates with an OFF look neither measured (projected or fixed) nor holding a hit, and with every OFF look so, on the wrong choices and the planted signals (`onoff_checks.unmeasured`, tested). The curved pass has the same gap (CD-02, audit 10). |
+| A11-02: an ON look without a hit passes on the best of every place and drift in the tolerances | high | **confirmed; being measured.** At random places where nothing was planted, the run measures how often the other ON looks reach ON_MIN that way (each, both, and both with the OFF looks clear: a one-hit candidate), by drift band. On pure noise none of 60 places reached it, so what reaches it on real data is the data's, not the maximisation's alone. The 2016 cost of one hit and two tracks is audit 5's. |
+| A11-03: the matching distance is not symmetric | medium | **confirmed.** It predicts and sets its tolerance from the first hit's drift, and pairs are made from the earlier look to the later. With `onoff.distance` itself, two hits 1,320 s apart at 3.4372 and 3.6141 Hz/s, the second exactly where the first predicts: 0.92 forward (a match), 2.36 backward (none) (tested). The run counts real hit pairs matching one way only. |
+| A11-04: greedy grouping is not the best assignment | medium | **agreed; planned**: an exact assignment on ambiguous synthetic cadences beside it. |
+| A11-05: an incomplete hit list does not stop a candidate | high | **confirmed; being measured** in audit 5's raised-cap reread (running). |
+| A11-06: interference changing drift between looks escapes the OFF test | high | **agreed; planned**: injected interference that changes drift, with a wider occupancy check as a flag, not a veto. |
+| A11-07: the OFF veto rate is measured at random places, not where candidates arise | medium | **agreed; planned**: null tracks matched to candidates' frequencies, drifts and crowding. |
