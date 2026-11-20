@@ -21,8 +21,11 @@ From the records:
   of those places, so that what is left outside the bands is measured.
 - **evidence**: requiring two, or three, of a candidate's ON looks to hold a
   hit at the cut instead of one and tracks: the false rate left (all three
-  sessions) and the planted signals lost (each signal's own best event, the
-  hits among its ON members), by drift and strength.
+  sessions, exact from the records' wrong-choice candidates) and, for the
+  planted signals, an upper bound on those kept: the records keep, for each
+  signal, the hits of the event matching most of its ON hits, which need not
+  be the event that recovered it in all three looks. The exact count, from
+  the event that does recover each signal, comes from the blocks read again.
 
 From blocks read again (the 2016 session's seven blocks with most false
 candidates at 30, four other crowded and four clean ones at random, and
@@ -30,15 +33,24 @@ eight of the 2017 session's at random, seed 12, so that nothing is set on
 2016 alone):
 - **veto**: onoff.OFF_MAX at 5, 6 (in use), 7, 8 and 10: the false
   candidates of the 19 wrong choices and the planted signals recovered, at
-  SNR 30 and 10;
+  SNR 30 and 10; at 6 each block is checked to give its record's own counts;
+- **evidence, exact**: at OFF_MAX 6, the planted signals recovered by an
+  event with at least one, two or three ON hits at the cut (the event that
+  recovers the signal, recovered_with), and the false candidates left;
 - **cap**: the seven blocks searched with the hit cap raised to 20,000: their
-  false candidates at 30, by identity, against the capped search;
+  false candidates at 30 matched across the two searches by frequency and
+  drift (hit numbers index each search's own list, so they are not compared):
+  kept, kept with other member hits, gone, new;
 - **families**: for each false candidate of the seven blocks at 30, the hits
   in its OFF looks within 3 kHz (any drift, and within 0.1 Hz/s of its own),
   and the S/N its OFF looks show along its track.
 
+Each block read again records a fingerprint of the code that made it and is
+made again when it differs.
+
 Writes data/analysis/rfi2016_records.json and rfi2016_reread.json.
 """
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -64,6 +76,45 @@ CUTS = (30, 10)
 OFF_MAX_GRID = (5.0, 6.0, 7.0, 8.0, 10.0)
 NEAR_MHZ = 10.0
 RAISED_CAP = 20000
+CODE = ("tools/rfi2016.py", "matched.py", "matched_tables.py", "onoff.py", "searching.py", "seti.py", "measure.py",
+        "vetting.py")
+
+
+def fingerprint():
+    h = hashlib.sha256()
+    for f in CODE:
+        h.update((ROOT / f).read_bytes().replace(b"\r\n", b"\n"))
+    return h.hexdigest()[:16]
+
+
+def recovered_with(t_f, drift, kept_planted, kept_plain, need):
+    """Whether a planted signal is recovered in all three ON looks (each by a
+    member hit or a measured track) by an event with at least `need` ON member
+    hits, the same event for both, and no such event in the unplanted block."""
+    def qualifies(ev):
+        ok, n = matched._event_fit(t_f, drift, ev, tracks=True)
+        return ok == n == len(matched.TRUE) and len(ev["members"]) >= need
+    return any(qualifies(e) for e in kept_planted) and not any(qualifies(e) for e in kept_plain)
+
+
+def match_groups(a, b):
+    """Two searches' distinct candidates ({representative event}) matched by
+    frequency and drift within the tolerances: (kept, kept with other member
+    hits, gone, new)."""
+    used, kept, changed = set(), 0, 0
+    for ev in a:
+        hit = next((i for i, e in enumerate(b) if i not in used
+                    and abs((e["f_mhz"] - ev["f_mhz"]) * 1e6) <= matched.TOL_HZ
+                    and abs(e["drift"] - ev["drift"]) <= matched.TOL_DRIFT), None)
+        if hit is None:
+            continue
+        used.add(hit)
+        if len(b[hit]["members"]) == len(ev["members"]) and len(b[hit].get("tracks", [])) == len(ev.get("tracks", [])):
+            kept += 1
+        else:
+            changed += 1
+    return {"kept": kept, "kept_with_other_members": changed, "gone": len(a) - kept - changed,
+            "new": len(b) - len(used)}
 
 
 def _say(*a):
@@ -118,9 +169,10 @@ def groups_of(by_choice):
 
 
 def _session(target):
-    _, meta, recs = matched_tables.load(target)
+    session, meta, recs = matched_tables.load(target)
     total = meta["of"]["clean"] + meta["of"]["crowded"]
-    return meta, sorted(recs, key=lambda r: r["block"]), {c: meta["of"][c] / total for c in ("clean", "crowded")}
+    return dict(meta, session=session), sorted(recs, key=lambda r: r["block"]), \
+        {c: meta["of"][c] / total for c in ("clean", "crowded")}
 
 
 def _weighted(per_block, recs, weights):
@@ -187,12 +239,14 @@ def records(say=_say):
                     by_d[_drift_bin(t["drift"])] = by_d.get(_drift_bin(t["drift"]), 0) + 1
                     by_s[str(t["s_in"])] = by_s.get(str(t["s_in"]), 0) + 1
                 out[f"cut {c}, at least {need} ON hit(s)"] = {
-                    "false_rate_a_block": round(_weighted(pb, rs, w), 4), "found": len(found), "of": len(tones),
+                    "false_rate_a_block": round(_weighted(pb, rs, w), 4), "found_at_most": len(found), "of": len(tones),
                     "found_by_drift": by_d, "found_by_strength": dict(sorted(by_s.items(), key=lambda kv: float(kv[0])))}
         req[target] = out
     rec["evidence_requirement"] = req
-    rec["note"] = ("a planted signal counts under a requirement when it is recovered in all three ON looks and the "
-                   "event it matches best has at least that many ON member hits at the cut")
+    rec["note"] = ("found_at_most: a planted signal is counted under a requirement when it is recovered in all three "
+                   "ON looks and the event matching most of its ON hits has at least that many ON member hits; that "
+                   "event need not be the one recovering it, so this bounds the count from above. The exact count, "
+                   "from the recovering event itself, is rfi2016_reread.json's, on the blocks read again.")
     rec["kind"] = "measured"
     yoke.write(OUT / "rfi2016_records.json", rec, indent=1, stamp=True)
     for c in CUTS:
@@ -201,7 +255,8 @@ def records(say=_say):
             f"blocks {list(x['seven_blocks'])}; by evidence {x['by_evidence']}")
         say(f"  residual: {x['residual']}")
     for t, out in req.items():
-        say(f"{t}: " + "; ".join(f"{k}: false {v['false_rate_a_block']}, found {v['found']}" for k, v in out.items()))
+        say(f"{t}: " + "; ".join(f"{k}: false {v['false_rate_a_block']}, found at most {v['found_at_most']}"
+                                 for k, v in out.items()))
     return rec
 
 
@@ -246,10 +301,6 @@ def _false(cad, searched, cut):
     return by, events_by
 
 
-def _ident(by):
-    return sorted(tuple(sorted(matched._hit_key(m) for m in ev["members"])) for ev, _ in groups_of(by))
-
-
 def _picks():
     import turbo_checks
     _, recs, _ = _session(TARGET)
@@ -276,9 +327,13 @@ def reread(say=_say):
         block_list = seti.blocks(seti.reading.prepare(urls[:1])[0])
         for b in blocks:
             path = OUT / "rfi2016" / f"{target}_{b:03d}.json"
+            fp = fingerprint()
             if path.exists():
-                rec["blocks"].append(json.loads(path.read_text(encoding="utf-8")))
-                continue
+                old = json.loads(path.read_text(encoding="utf-8"))
+                if old.get("code") == fp:
+                    rec["blocks"].append(old)
+                    continue
+                say(f"{path.name}: made by other code ({old.get('code')}, now {fp}); made again")
             r = json.loads((base / f"block_{b:03d}.json").read_text(encoding="utf-8"))
             cad = matched._cadence(seti.read_looks(urls, *block_list[b]), urls)
             if [c["s"]["tstart"] for c in cad] != r["tstarts"]:
@@ -286,7 +341,7 @@ def reread(say=_say):
             ts = r["tones"]
             cad_p = [dict(c, spectra=p["spectra"]) for c, p in zip(cad, matched.plant(cad, ts))]
             s_plain, s_planted = _search(cad), _search(cad_p)
-            row = {"target": target, "block": b, "class": r["class"], "veto": {}}
+            row = {"target": target, "block": b, "class": r["class"], "code": fp, "veto": {}, "evidence": {}}
             for v in OFF_MAX_GRID:
                 with off_max(v):
                     for c in CUTS:
@@ -296,17 +351,30 @@ def reread(say=_say):
                         kept_p = matched._our_kept(looks, events, order)
                         looks, events, order = matched.our_events(cad, s_plain, matched.TRUE, c, [{} for _ in range(6)])
                         kept_u = matched._our_kept(looks, events, order)
-                        found = sum(matched._status({j: matched.where(cad, t, j)[1] for j in matched.TRUE}, t["drift"],
-                                                    kept_p, kept_u)["three_looks"] == "recovered" for t in ts)
+                        t_fs = [{j: matched.where(cad, t, j)[1] for j in matched.TRUE} for t in ts]
+                        found = sum(matched._status(tf, t["drift"], kept_p, kept_u)["three_looks"] == "recovered"
+                                    for tf, t in zip(t_fs, ts))
                         row["veto"][f"{v:g} {c}"] = {"false": len(groups_of(by)), "found": found, "of": len(ts)}
+                        if v == 6.0:
+                            # The baseline must give the block record's own counts.
+                            k = matched.ck(c)
+                            rec_false = len(groups_of(r["ours"]["false"].get(k, {})))
+                            rec_found = sum(t["ours"][k].get("three_looks") == "recovered" for t in ts)
+                            row["veto"][f"{v:g} {c}"]["reproduces_record"] = (len(groups_of(by)), found) == \
+                                (rec_false, rec_found)
+                            for need in (1, 2, 3):
+                                byn = {ch: [e for e in evs if len(e["members"]) >= need] for ch, evs in by.items()}
+                                row["evidence"][f"{c}, at least {need}"] = {
+                                    "false": len(groups_of(byn)),
+                                    "found": sum(recovered_with(tf, t["drift"], kept_p, kept_u, need)
+                                                 for tf, t in zip(t_fs, ts)), "of": len(ts)}
             if target == TARGET and b in seven:
                 by_c, ev_c = _false(cad, s_plain, 30)
                 s_raised = _search(cad, RAISED_CAP)
                 by_r, _ = _false(cad, s_raised, 30)
-                a, z = set(_ident(by_c)), set(_ident(by_r))
+                ga, gz = [ev for ev, _ in groups_of(by_c)], [ev for ev, _ in groups_of(by_r)]
                 row["cap"] = {"capped_looks": [not x[2] for x in s_plain], "raised_complete": [x[2] for x in s_raised],
-                              "false_capped": len(a), "false_raised": len(z), "same": len(a & z),
-                              "only_capped": len(a - z), "only_raised": len(z - a)}
+                              "false_capped": len(ga), "false_raised": len(gz), **match_groups(ga, gz)}
                 fam = []
                 hits = [x[0] for x in s_plain]
                 for ch, evs in ev_c.items():
@@ -332,16 +400,27 @@ def reread(say=_say):
                                                                    for k, v in row["veto"].items())
                 + (f"; cap {row['cap']}" if "cap" in row else "")
                 + (f"; families {({k: v for k, v in row['families'].items() if k != 'rows'})}" if "families" in row else ""))
-    tot = {}
+    tot, ev_tot = {}, {}
     for row in rec["blocks"]:
         for k, v in row["veto"].items():
             d = tot.setdefault(row["target"], {}).setdefault(k, {"false": 0, "found": 0, "of": 0})
             for x in ("false", "found", "of"):
                 d[x] += v[x]
+        for k, v in row.get("evidence", {}).items():
+            d = ev_tot.setdefault(row["target"], {}).setdefault(k, {"false": 0, "found": 0, "of": 0})
+            for x in ("false", "found", "of"):
+                d[x] += v[x]
     rec["veto_totals"] = tot
+    rec["evidence_totals"] = ev_tot
+    rec["baseline_reproduces_records"] = all(v.get("reproduces_record", True) for row in rec["blocks"]
+                                             for v in row["veto"].values())
+    rec["cap_totals"] = {k: sum(row["cap"][k] for row in rec["blocks"] if "cap" in row)
+                         for k in ("false_capped", "false_raised", "kept", "kept_with_other_members", "gone", "new")}
     rec["kind"] = "measured"
     yoke.write(OUT / "rfi2016_reread.json", rec, indent=1, stamp=True)
     say(f"veto totals: {tot}")
+    say(f"evidence (exact): {ev_tot}; cap: {rec['cap_totals']}; baseline reproduces records: "
+        f"{rec['baseline_reproduces_records']}")
     return rec
 
 

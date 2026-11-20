@@ -311,3 +311,13 @@ and the records (`tools/rfi2016.py records`; the blocks read again are queued).
 | The seven blocks, the OFF threshold, related OFF hits | — | **running** (`rfi2016.py reread`): the seven blocks (195, 59, 171, 53, 60, 54, 55) and eight others of 2016 and eight of 2017 read again: OFF_MAX at 5, 6, 7, 8 and 10 against both the false candidates and the planted signals, and for each candidate of the seven blocks the hits within 3 kHz in its OFF looks. |
 | A detector v2 validated on new sessions chosen beforehand | — | **planned**: whatever these suggest is a new version with its own frozen test, including crowded L-band data. |
 
+### 5, re-audited at f3f50bb, 20 November 2026
+
+| Finding | Severity | Verdict and what was done |
+|---|---|---|
+| The planted signals kept under a stricter ON-hit rule were counted from the event matching most of a signal's ON hits, which need not be the event that recovers it in all three looks | high | **confirmed; corrected.** `matched._status` credits recovery to any event matching in all three ON looks (tracks included) but records `members` for the event with most matching hits. So the records give an upper bound, now named so (`found_at_most`). For **three** ON hits the bound is exact: it equals the records' own `three_hits` status (an event whose three ON members all match): 4,031 (2017), 3,757 (2016) and 2,192 (2019) at SNR 30. For **two**, the exact count comes from the blocks read again, by the event that recovers each signal (`rfi2016.recovered_with`: the same event must match in all three looks and hold at least two ON hits; tested with two competing events, the one with most hits not the one that recovers). Until then 2016's 4,068 at two hits is at most. |
+| The raised-cap comparison matched candidates by hit numbers | medium | **confirmed, and worse:** hit numbers index each search's own hit list, so they cannot be compared between a capped and an uncapped search at all. Candidates are now matched by frequency and drift within the tolerances: kept, kept with other member hits, gone, new (`rfi2016.match_groups`, tested). |
+| The blocks read again were reused whatever code made them | medium | **built**: each holds a fingerprint of the code and is made again when it differs; at OFF_MAX 6 each block must give its record's own false and found counts (`reproduces_record`), and the run says whether all did. |
+| The record took its session from the block choice, which does not hold it | low | **built**: from `matched_tables.load`. |
+| Tests for the analysis | — | **built**: `tests/test_rfi2016.py`. |
+
