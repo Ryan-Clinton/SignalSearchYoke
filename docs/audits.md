@@ -38,7 +38,7 @@ answered it.
 | 13 | Instrument calibration and sensitivity | 2 | high | **in progress** (20 Nov 2026): calibration records used only where they apply; the coarse-channel response and band-wide sensitivity planned; see below |
 | 14 | Data acquisition and integrity | 2 | high | **in progress** (20 Nov 2026): the 2016 DC bins found misplaced and fixed (no false candidate rested on them); refusals added; source versions planned; see below |
 | 15 | Astronomical signal coverage | 2 | medium | **in progress** (20 Nov 2026): seven kinds of signal measured through the unchanged search; pulses, faster drifts and eccentric orbits planned; see below |
-| 16 | End-to-end reproducibility | 3 | critical | **in progress** (20 Nov 2026): reproduction now proves each output made again, comparisons narrowed; a fresh-machine run planned; see below |
+| 16 | End-to-end reproducibility | 3 | critical | **in progress** (20 Nov 2026): reproduction now proves each output made again; a replay from a fresh clone and fresh environments running, which found the published turboSETI pins could not be installed as written; another machine planned; see below |
 | 17 | Experiment freezing and scientific provenance | 3 | high | **in progress** (20 Nov 2026): frozen configs pinned, deviation history kept, block provenance and the step 12 checks enforced; see below |
 | 18 | The report and its claims | 3 | high | **in progress** (20 Nov 2026): version 1.6 written with what the audits found; record checks planned; see below |
 | 19 | Public repository and release readiness | 3 | high | **in progress** (20 Nov 2026): documents brought into line with the code, a consistency test; the release, tag and Zenodo deposit left for Ryan's go; see below |
@@ -46,7 +46,7 @@ answered it.
 | 21 | Database and evidence storage | 4 | medium | **in progress** (20 Nov 2026): checks saved whole, six looks required, source versions kept, content hashed, integrity checked, indexes added; evidence revisions planned; see below |
 | 22 | Distributed volunteer computing (`docs/multiuser.md`) | 4 | high | **in progress** (20 Nov 2026): the plan's constraints written in; occupancy's cache follows the store, a block's scans required; the system itself not built; see below |
 | 23 | Testing and regression coverage | 4 | high | **in progress** (20 Nov 2026): tests isolated from any real data folder, the old-version comparison required in CI; the whole-pipeline test built (it found the OFF null could be measured only for the 2017 session), the reader tests planned; see below |
-| 24 | Large-scale survey strategy | 4 | medium | **in progress** (20 Nov 2026): a second cadence of a session refused until cadences have ids; coverage searched and searched completely kept apart; the survey protocol planned; see below |
+| 24 | Large-scale survey strategy | 4 | medium | **in progress** (20 Nov 2026): cadences have keys of their own (store schema 3), so a second cadence of a session is kept apart instead of refused; coverage searched and searched completely kept apart; the survey protocol planned; see below |
 | 25 | Diagnostic and measuring tools | 5 | critical | **in progress** (20 Nov 2026): results' provenance now keeps the command, the script's hash and any uncommitted diff; the evidence ledger checked by `tools/ledger.py`; three equivalence tests found unable to fail and given data that can, the equivalences still holding; the other tools planned; see below |
 | 26 | Following up a real candidate | 5 | high | **planned** (20 Nov 2026): the steps from a top-ranked candidate to one others can check, and what is kept for it; see below |
 
@@ -725,6 +725,21 @@ machine, which is planned, not claimed.
 | A command could rewrite one output and leave another stale | high | **confirmed; fixed.** `evidence.EXPECTED` names what each table command writes (from a run that wrote them); every one must be rewritten, or the reproduction fails (a test keeps the map in step with the commands). The full reproduction of the e325c72 package passes under it: 101 pages and records the same. |
 | Python and library differences ignored silently | medium | **fixed**: they are reported as notes, not failures. |
 
+### 16, the replay from a fresh clone, 20 November 2026
+
+F16-04 and F16-05 are **built in part**: `tools/fresh_replay.py` clones the
+public repository from GitHub, builds new core and turboSETI environments
+from the pinned versions, unpacks the evidence package as an empty data
+folder, and runs `tools/regress_step10.py` there. That reads two of step
+10's blocks again from the archive, measures them with the clone's code
+and compares them field by field with step 10's records. Its result goes
+in `data/analysis/fresh_replay.json` and the ledger when it finishes. It is
+the same PC, Windows and Python: another machine is still the step after.
+
+| Finding | Severity | Verdict and what was done |
+|---|---|---|
+| The published turboSETI environment could not be installed | high | **found by the replay; fixed.** `pip install -r docs/environments/turboseti-windows.txt` fails to resolve. The environment that made the records has sigpyproc 2.0.0, which asks for numpy 2, beside numpy 1.26.4, and setigen and sigpyproc lack some packages they list (`pip check`). It came about through the documented install, which forces `numpy<2` afterwards; turboSETI, setigen and blimpy import and run without the rest. The exact environment is made with `pip install --no-deps -r` the freeze, now in `docs/reproducing-results.md`; the replay does that and keeps `pip check`'s output in its record. |
+
 ## 17. Experiment freezing and scientific provenance: 20 November 2026
 
 **Verdict:** the five high findings are real in the code and fixed; none
@@ -930,6 +945,8 @@ record matches the store.
 | The OFF null could be measured only on the 2017 session's saved cadences | high | **found by the test; fixed.** `ranking.off_null` always read `data/reference`'s cadences, and `ranking.context` rightly refuses an OFF null from another session, so no other session could be ranked in full, only with `--partial`. `ranking.py offnull --session S` now measures it on the session's own searched blocks (five by default, chosen by seed, read again) and keeps it apart (`off_null-S.json`); the 2017 record is unchanged. |
 | A report folder fixed at import | low | **fixed.** `check.check_event` reads `check.REPORTS` when called, so a test can keep its reports out of `docs/leads`. |
 | One test's store leaking into another's | medium | **found; fixed.** All tests share one data folder; `test_evidence` leaves a minimal store there, which the new test then found. The new test uses a data folder of its own. |
+| Store tests that passed only after another test | medium | **found; fixed.** Two of `test_store_lifecycle`'s tests failed when that file ran alone (checked at the commit before: run 1, which they save blocks under, was made by another test). The file now makes it itself. |
+| T23-06: a store of an older schema | medium | **built**: `test_store_lifecycle` makes a store as schema 2 had it and checks the migration to schema 3 (audit 24). |
 
 ## 24. Large-scale survey strategy: 20 November 2026
 
@@ -958,6 +975,29 @@ found is real in the schema and now guarded; nothing has been overwritten
 | The sweep registered a second cadence's files before the guard refused it, which would then block the session's own cadence | high | **confirmed; fixed.** The sweep now refuses a second cadence of a session before any file is registered; the three sessions' own cadences pass the check unchanged. |
 | Unknown completeness counted as complete | medium | **confirmed; fixed.** A sweep counts a block as searched completely only when it is known to be; `save_block` records a block's completeness as unknown when any look's is missing (tested: true, false, missing and null). |
 | `check.run` waited on any refusal | medium | **confirmed; fixed.** Only the missing OFF null is waited for; any other refusal still fails the run. The cadence check is `store.cadence_conflict`, tested: its own cadence passes, another of the session is refused, a new session is free. |
+
+### 24, cadence keys, 20 November 2026
+
+F24-01 is **built**: store schema 3. A `cadences` table and its
+`cadence_files` keep each cadence's six files in order. Blocks, looks, hits
+and events are kept under their cadence's key, in the column that held the
+session: for a session's first cadence the key is the session's own name,
+so every row of every existing store keeps its meaning and nothing is
+rewritten; another cadence of the same session is kept under SESSION-c2,
+-c3. The sweep registers its cadence and keeps everything under its key;
+given files now win over the target's kept cadence, so another cadence of a
+target can be swept. The checks, the recurrence files, the target and the
+OFF null find a cadence's files through its key.
+
+| Check | Result |
+|---|---|
+| A store of schema 2 opened by the new code | migrated: each session's cadence registered under its name (tested) |
+| A copy of the real store migrated | the three sessions' cadences registered; for each, its files, check 6's recurrence files both ways and its target **identical** to before; integrity clean |
+| Two cadences of one session | each kept under its key, neither superseding the other; one cadence's files refused under the other's key (tested) |
+| The whole pipeline with a second cadence of the session | swept, checked and ranked under SESSION-c2 with its own OFF null; the first cadence's blocks untouched (`test_whole_pipeline`) |
+
+The real store migrates the first time a process opens it with this code;
+the migration only adds tables and rows.
 
 ## 25. Diagnostic and measuring tools: 20 November 2026
 

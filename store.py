@@ -37,7 +37,7 @@ from datetime import datetime, timezone
 
 import yoke
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3          # 3: cadences and cadence_files (20 Nov 2026)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS runs (
@@ -75,8 +75,25 @@ CREATE TABLE IF NOT EXISTS files (
     telescope_id INTEGER,
     attrs TEXT                    -- JSON: the file's own header
 );
+-- A cadence: six files in order (ON, OFF, ON, OFF, ON, OFF). Blocks, looks, hits and events are kept under
+-- their cadence's key, in their `session` column: for a session's first cadence the key is the session's own
+-- name (every store made before cadences had keys is so), for another cadence of the same session SESSION-c2,
+-- SESSION-c3, ...
+CREATE TABLE IF NOT EXISTS cadences (
+    cadence TEXT PRIMARY KEY,
+    session TEXT NOT NULL,        -- the archive's session
+    target TEXT,                  -- the cadence's ON target
+    urls TEXT NOT NULL UNIQUE,    -- JSON: the six files' URLs in cadence order
+    created_utc TEXT
+);
+CREATE TABLE IF NOT EXISTS cadence_files (
+    cadence TEXT NOT NULL REFERENCES cadences(cadence),
+    position INTEGER NOT NULL,    -- 0 to 5: ON, OFF, ON, OFF, ON, OFF
+    file_id INTEGER NOT NULL REFERENCES files(file_id),
+    PRIMARY KEY (cadence, position)
+);
 CREATE TABLE IF NOT EXISTS blocks (
-    session TEXT NOT NULL,
+    session TEXT NOT NULL,        -- the cadence's key (see cadences)
     block_idx INTEGER NOT NULL,
     f_lo_mhz REAL,
     f_hi_mhz REAL,
@@ -277,6 +294,18 @@ def _migrate(db):
         db.execute("CREATE INDEX IF NOT EXISTS checks_event ON checks (event_id, version)")
         db.execute("CREATE INDEX IF NOT EXISTS events_frequency ON events (session, f_start_mhz)"
                    " WHERE superseded_run IS NULL")
+        # schema 3: each session's cadence as the files at their positions recorded it, under the session's name
+        if not db.execute("SELECT 1 FROM cadences LIMIT 1").fetchone():
+            for (session,) in db.execute("SELECT DISTINCT session FROM files WHERE cadence_position IS NOT NULL"
+                                         " AND session IS NOT NULL").fetchall():
+                rows = db.execute("SELECT file_id, url, cadence_position, cadence_target FROM files WHERE session=?"
+                                  " AND cadence_position IS NOT NULL ORDER BY cadence_position", (session,)).fetchall()
+                if [r["cadence_position"] for r in rows] != list(range(6)):
+                    continue            # not a whole cadence: left for its sweep to register
+                db.execute("INSERT INTO cadences (cadence, session, target, urls, created_utc) VALUES (?,?,?,?,?)",
+                           (session, session, rows[0]["cadence_target"], json.dumps([r["url"] for r in rows]), now()))
+                db.executemany("INSERT INTO cadence_files (cadence, position, file_id) VALUES (?,?,?)",
+                               [(session, r["cadence_position"], r["file_id"]) for r in rows])
 
 
 def now():
@@ -324,10 +353,62 @@ def run_params(db, run_id):
     return json.loads(row["params"]) if row and row["params"] else {}
 
 
+def _has_cadences(db):
+    return db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='cadences'").fetchone() is not None
+
+
+def has_cadence(db, key):
+    """Whether the store has the cadence `key` registered (schema 3)."""
+    return _has_cadences(db) and db.execute("SELECT 1 FROM cadences WHERE cadence=?", (key,)).fetchone() is not None
+
+
+def register_cadence(db, session, target, urls, file_ids):
+    """The key a cadence's blocks are kept under, registering it the first time: the session's name for its
+    first cadence, SESSION-c2, -c3 for others. The same six URLs always get the same key."""
+    urls = list(urls)
+    if len(urls) != 6 or len(file_ids) != 6:
+        raise yoke.Refusal("INVALID_REQUEST", f"a cadence is six files, not {len(urls)}")
+    got = db.execute("SELECT cadence FROM cadences WHERE urls=?", (json.dumps(urls),)).fetchone()
+    if got:
+        return got[0]
+    taken = {r[0] for r in db.execute("SELECT cadence FROM cadences")}
+    key, n = session, 1
+    while key in taken:
+        n += 1
+        key = f"{session}-c{n}"
+    with db:
+        db.execute("INSERT INTO cadences (cadence, session, target, urls, created_utc) VALUES (?,?,?,?,?)",
+                   (key, session, target, json.dumps(urls), now()))
+        db.executemany("INSERT INTO cadence_files (cadence, position, file_id) VALUES (?,?,?)",
+                       list(zip([key] * 6, range(6), file_ids)))
+    return key
+
+
+def cadence_rows(db, key):
+    """The six file rows of the cadence kept under `key`, in cadence order, each with its position in this
+    cadence (cadence_position) and whether it is ON (is_on). A store made before cadences had keys (or read
+    without migrating it) gives its session's files at their recorded positions."""
+    if has_cadence(db, key):
+        rows = db.execute("SELECT f.*, cf.position AS in_cadence FROM cadence_files cf JOIN files f"
+                          " ON f.file_id = cf.file_id WHERE cf.cadence=? ORDER BY cf.position", (key,)).fetchall()
+        return [dict(dict(r), cadence_position=r["in_cadence"], is_on=int(r["in_cadence"] % 2 == 0)) for r in rows]
+    return [dict(r) for r in db.execute("SELECT * FROM files WHERE session=? AND cadence_position IS NOT NULL"
+                                        " ORDER BY cadence_position", (key,))]
+
+
+def cadence_session(db, key):
+    """The archive's session of the cadence kept under `key` (the key itself for a store without cadences)."""
+    if _has_cadences(db):
+        got = db.execute("SELECT session FROM cadences WHERE cadence=?", (key,)).fetchone()
+        if got:
+            return got[0]
+    return key
+
+
 def cadence_conflict(db, session, urls):
     """Whether the store already holds another cadence of this session (its six files at their positions are
-    not these URLs): the store keys blocks by session, so it holds one cadence a session until cadences have
-    ids."""
+    not these URLs). Since schema 3 such a cadence gets a key of its own (register_cadence) instead of being
+    refused; this says only whether it is a second."""
     held = [r[0] for r in db.execute("SELECT url FROM files WHERE session=? AND cadence_position IS NOT NULL"
                                      " ORDER BY cadence_position", (session,))]
     return bool(held) and held != list(urls)
@@ -371,8 +452,13 @@ def upsert_file(db, index, session=None, target=None, cadence_target=None, posit
 
 
 def cadence_files(db, target):
-    """The six files of the target's cadence, if a sweep has kept them:
+    """The six files of the target's first cadence, if a sweep has kept them:
     (session, [url, ...]) in cadence order, or None."""
+    if _has_cadences(db):
+        got = db.execute("SELECT session, urls FROM cadences WHERE target=? ORDER BY rowid LIMIT 1",
+                         (target,)).fetchone()
+        if got:
+            return got["session"], json.loads(got["urls"])
     rows = db.execute("SELECT url, session FROM files WHERE cadence_target=? ORDER BY cadence_position",
                       (target,)).fetchall()
     if len(rows) != 6 or len({r["session"] for r in rows}) != 1:
@@ -415,13 +501,12 @@ def save_block(db, run_id, session, block_idx, f_lo, f_hi, file_ids, looks_hits,
         raise yoke.Refusal("INVALID_REQUEST", f"block {block_idx}: {len(file_ids)} files, {len(looks_hits)} hit lists"
                                               f"{'' if scans is None else f', {len(scans)} scans'}; six of each, "
                                               "all different files, are needed")
-    # The store keys blocks by session and block number, so it can hold one cadence a session: blocks of a
-    # different cadence of the same session would supersede this one's. Refused until cadences have ids.
-    own = [r[0] for r in db.execute("SELECT file_id FROM files WHERE session=? AND cadence_position IS NOT NULL"
-                                    " ORDER BY cadence_position", (session,))]
+    # Blocks are kept under their cadence's key (`session` here): the files must be that cadence's, or a
+    # block of one cadence would supersede another's.
+    own = [r["file_id"] for r in cadence_rows(db, session)]
     if own and own != list(file_ids):
-        raise yoke.Refusal("INVALID_REQUEST", f"block {block_idx}: the files are not session {session}'s cadence in "
-                                              "the store; a second cadence of a session needs cadence ids (planned)")
+        raise yoke.Refusal("INVALID_REQUEST", f"block {block_idx}: the files are not cadence {session}'s in the "
+                                              "store; register the cadence (register_cadence) and use its key")
     with db:
         earlier = [dict(r) for r in db.execute(
             "SELECT event_id, f_start_mhz, drift_hz_s, label FROM events"

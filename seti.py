@@ -543,11 +543,12 @@ def search_params():
 
 
 def _cadence_files(db, target, get, say, files=None):
-    """The cadence's six files: from the store if a sweep kept them, given
-    (session, six URLs, as a frozen config names them), or found in the
-    archive (and then kept)."""
+    """The cadence's six files: given (session, six URLs, as a frozen config
+    or a survey manifest names them), else from the store if a sweep kept
+    the target's, or found in the archive (and then kept). Given files win,
+    so another cadence of a target can be swept."""
     kept = store.cadence_files(db, target)
-    if kept:
+    if kept and not files:
         return kept[0], kept[1], None
     if files:
         session, urls = files
@@ -618,14 +619,12 @@ def sweep(target, count=1, say=print, get=requests.get, files=None):
         db = store.connect()
         session, urls, scans = _cadence_files(db, target, get, say, files)
         indexes = reading.prepare(urls)
-        # One cadence a session in this store (until cadences have ids): refused before any file is registered,
-        # so a refused cadence leaves nothing behind that would stop the session's own from resuming.
-        if store.cadence_conflict(db, session, urls):
-            raise yoke.Refusal("INVALID_REQUEST", f"session {session} already holds another cadence in the store; "
-                                                  "a second cadence of a session needs cadence ids (planned)")
         file_ids = [store.upsert_file(db, index, session=session,
                                       target=(scans[i]["target"] if scans else None), cadence_target=target,
                                       position=i, is_on=i % 2 == 0) for i, index in enumerate(indexes)]
+        # Everything of this cadence is kept under its key: the session's name for its first cadence, another
+        # (SESSION-c2) for a second cadence of the same session, so neither supersedes the other.
+        archive_session, session = session, store.register_cadence(db, session, target, urls, file_ids)
         block_list = blocks(indexes[0])
         # Blocks searched by an older version of the search come first, then new ones. Where the two DC
         # rules blank different channels, a block counts as done only if read under the rule in force.
@@ -692,7 +691,8 @@ def sweep(target, count=1, say=print, get=requests.get, files=None):
     whole = sum(d["to_mhz"] - d["from_mhz"] for d in done.values() if d.get("complete") in (1, True))
     say(f"{target}, session {session}: {len(done)} of {len(block_list)} blocks searched "
         f"({covered:.1f} MHz), {len(candidates)} candidate(s) so far; every hit in {store.path()}")
-    return {"target": target, "session": session, "blocks": len(block_list), "searched": len(done),
+    return {"target": target, "session": archive_session, "cadence": session, "blocks": len(block_list),
+            "searched": len(done),
             "searched_mhz": round(covered, 3), "searched_completely_mhz": round(whole, 3), "this_run": this_run, "candidates_so_far": candidates[:MAX_LISTED],
             "store": str(store.path()), "run_id": run_id, "kind": "measured"}
 

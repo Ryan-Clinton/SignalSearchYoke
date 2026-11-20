@@ -45,7 +45,16 @@ py -3 -m venv $env:LOCALAPPDATA\signalsearchyoke\seti-venv
 The pins (9 November 2026, Python 3.12): turboSETI 2.3.2 fails on numpy 2
 (`%i` given an array); blimpy needs `pkg_resources`, missing from the
 newest setuptools (79 has it), and an astropy that still runs on numpy 1.
-With them turbo_seti 2.3.2 and blimpy 2.1.4 run. turboSETI writes its log
+With them turbo_seti 2.3.2 and blimpy 2.1.4 run.
+
+To make the exact environment the records were made with, install the
+freeze without resolving it:
+`python -m pip install --no-deps -r docs/environments/turboseti-windows.txt`.
+Resolving it fails (found 20 November 2026 by `tools/fresh_replay.py`): the
+environment that ran has sigpyproc 2.0.0, which asks for numpy 2, beside
+numpy 1.26.4, and setigen and sigpyproc without some packages they list
+(`pip check` names them). turboSETI, setigen and blimpy import and run
+without them; the command above is how that environment came about. turboSETI writes its log
 beside a path it joins wrongly on Windows, so `seti.py` runs it from the
 file's own folder. Without the environment, every command that needs it
 stops and says how to install it.

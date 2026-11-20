@@ -127,8 +127,7 @@ def _session_cadences(session, n_blocks, seed):
     a cadence of six looks a block, in cadence order."""
     import seti
     db = store.connect()
-    urls = [r["url"] for r in db.execute("SELECT url FROM files WHERE session=? AND cadence_position IS NOT NULL"
-                                         " ORDER BY cadence_position", (session,))]
+    urls = [r["url"] for r in store.cadence_rows(db, session)]
     done = sorted(store.done_blocks(db, session).items())
     db.close()
     if len(urls) != 6 or not done:
@@ -178,8 +177,11 @@ def null_applies(rec, db, session):
     of one of its files; or it was measured on the session's own blocks (offnull --session)."""
     if rec.get("session") is not None:
         return rec["session"] == session
-    files = db.execute("SELECT target, cadence_target, tstart_mjd FROM files WHERE session=? AND is_on=1",
-                       (session,)).fetchall()
+    if store.has_cadence(db, session):
+        files = [f for f in store.cadence_rows(db, session) if f["is_on"]]
+    else:
+        files = db.execute("SELECT target, cadence_target, tstart_mjd FROM files WHERE session=? AND is_on=1",
+                           (session,)).fetchall()
     names = {f["cadence_target"] or f["target"] for f in files}
     days = {int(f["tstart_mjd"]) for f in files if f["tstart_mjd"]}
     cads = [str(c.get("cadence", "")) for c in rec.get("cadences", [])]

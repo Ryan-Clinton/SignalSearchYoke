@@ -11,6 +11,10 @@ the candidates are ranked. Planted in the noise:
 - in its second: a tone in the ON looks drifting the other way (a
   candidate), and one in the ON looks and one OFF look (not a candidate).
 
+Then a second cadence of the same session (six other scans, one tone in its
+ON looks) is swept too: it is kept under a key of its own (SESSION-c2), and
+the first cadence's blocks are untouched by it.
+
 (The band runs downward, so the sweep numbers the second chunk block 0:
 blocks go lowest frequency first. The test matches by frequency.)
 
@@ -117,21 +121,25 @@ def _write_look(path, spectra, j):
     return name
 
 
-def _files(folder):
+TONES_2 = [(0, 7000.4, 0.35, (0, 2, 4), "candidate")]
+
+
+def _files(folder, tones=None, scan0=10000, seed=23):
     import measure
-    rng = np.random.default_rng(23)
+    tones_in = TONES if tones is None else tones
+    rng = np.random.default_rng(seed)
     names = []
     for j in range(6):
         raw = rng.chisquare(64, size=(N_T, N_F)).astype(np.float64) * 1e3
         sigma = float(np.median(measure.channel_noise(raw)))
         dt = j * LOOK_S
         tones = []
-        for block, x0, drift, looks, _ in TONES:
+        for block, x0, drift, looks, _ in tones_in:
             if j in looks:
                 x = block * PER + x0 + drift * dt / (FOFF * 1e6)
                 tones.append((x, drift, 80 * sigma / math.sqrt(N_T)))
         raw = measure.plant(raw, tones, TSAMP, FOFF)
-        names.append(f"spliced_blc00_guppi_60000_{10000 + j}_{'' if j % 2 else 'DIAG_'}"
+        names.append(f"spliced_blc00_guppi_60000_{scan0 + j}_{'' if j % 2 else 'DIAG_'}"
                      f"{TARGET if j % 2 == 0 else OFF_NAMES[j // 2]}_{j:04d}.gpuspec.0000.h5")
         _write_look(folder / "pipeline" / SESSION / names[-1], raw, j)
     return names
@@ -146,11 +154,13 @@ class WholePipeline(unittest.TestCase):
     def setUpClass(cls):
         cls.tmp = Path(tempfile.mkdtemp(prefix="ssy-whole-"))
         names = _files(cls.tmp / "www")
+        names_2 = _files(cls.tmp / "www", TONES_2, scan0=20000, seed=24)
         _Files.root = cls.tmp / "www"
         cls.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _Files)
         threading.Thread(target=cls.server.serve_forever, daemon=True).start()
         base = f"http://127.0.0.1:{cls.server.server_address[1]}/pipeline/{SESSION}/"
         cls.urls = [base + n for n in names]
+        cls.urls_2 = [base + n for n in names_2]
 
         import check
         import ranking
@@ -166,9 +176,14 @@ class WholePipeline(unittest.TestCase):
         said = []
         cls.first = seti.sweep(TARGET, count=5, say=said.append, files=(SESSION, cls.urls))
         cls.again = seti.sweep(TARGET, count=5, say=said.append, files=(SESSION, cls.urls))
+        db = store.connect()
+        cls.first_blocks = store.done_blocks(db, SESSION)
+        db.close()
+        cls.second = seti.sweep(TARGET, count=5, say=said.append, files=(SESSION, cls.urls_2))
         args = argparse.Namespace(all=False, event=None, rank=False, json=False)
         cls.checked = check.run(args, say=said.append)
-        ranking.off_null(say=said.append, session=SESSION, n_blocks=2, tracks=200)
+        for key in (SESSION, f"{SESSION}-c2"):
+            ranking.off_null(say=said.append, session=key, n_blocks=2, tracks=200)
         cls.ranked = ranking.rank(say=said.append)
         cls.checked_again = check.run(args, say=said.append)
         cls.said = said
@@ -214,9 +229,18 @@ class WholePipeline(unittest.TestCase):
         self.assertTrue(rows)
         self.assertNotIn("candidate", [r["label"] for r in rows])
 
+    def test_a_second_cadence_of_the_session_is_kept_apart(self):
+        self.assertEqual((self.second["session"], self.second["cadence"]), (SESSION, f"{SESSION}-c2"))
+        self.assertEqual(self.second["searched"], 2)
+        found = [(c["frequency_mhz"], c["drift_hz_s"]) for c in self.second["candidates_so_far"]]
+        self.assertEqual(len(found), 1, found)
+        db = self.store.connect()
+        self.assertEqual(self.store.done_blocks(db, SESSION), self.first_blocks)      # the first untouched
+        db.close()
+
     def test_every_candidate_checked_once_with_every_check(self):
         import vetting
-        self.assertEqual(len(self.checked["checked"]), 2)
+        self.assertEqual(len(self.checked["checked"]), 3)
         for rec in self.checked["checked"]:
             self.assertEqual(rec["version"], vetting.VERSION)
             self.assertEqual(len(rec["checks"]), vetting.N_CHECKS)
@@ -232,6 +256,9 @@ class WholePipeline(unittest.TestCase):
         self.assertEqual(s["calibration"]["off_null"]["file"], f"data/measurements/off_null-{SESSION}.json")
         self.assertEqual(len(s["ranked"]), 2, s["ranked"])
         self.assertEqual(sorted(r["rank"] for r in s["ranked"]), [1, 2])
+        s2 = self.ranked["sessions"][f"{SESSION}-c2"]
+        self.assertEqual(s2["calibration"]["off_null"]["file"], f"data/measurements/off_null-{SESSION}-c2.json")
+        self.assertEqual(len(s2["ranked"]), 1)
 
     def test_the_store_is_whole(self):
         db = self.store.connect()
@@ -239,7 +266,7 @@ class WholePipeline(unittest.TestCase):
         n_files = db.execute("SELECT count(*) FROM files WHERE session=?", (SESSION,)).fetchone()[0]
         db.close()
         self.assertEqual(problems, [])
-        self.assertEqual(n_files, 6)
+        self.assertEqual(n_files, 12)
 
     def test_the_sweep_record_matches_the_store(self):
         import seti

@@ -60,9 +60,7 @@ def records_dir():
 def _cadence(db, session, block_idx):
     """The block's six looks from the store: LookInfo each, and a map from
     hit id to (position, index)."""
-    files = {r["file_id"]: dict(r) for r in db.execute(
-        "SELECT * FROM files WHERE session=? AND cadence_position IS NOT NULL", (session,))}
-    by_pos = {f["cadence_position"]: f for f in files.values()}
+    by_pos = {f["cadence_position"]: f for f in store.cadence_rows(db, session)}
     complete = {r["position"]: r["complete"] for r in db.execute(
         "SELECT position, complete FROM looks WHERE session=? AND block_idx=? AND superseded_run IS NULL",
         (session, block_idx))}
@@ -102,15 +100,23 @@ def _event(db, row, where):
 
 
 def recurrence_files(db, session, on_positions=None):
-    """The files check 6 looks in: the session's OFF looks and every look of
-    other sessions. With `on_positions` (a candidate judged with other
-    looks as ON), the session's looks at the other positions instead."""
-    if on_positions is None:
-        return db.execute("SELECT file_id, tstart_mjd, target, session FROM files"
-                          " WHERE is_on = 0 OR session != ? OR is_on IS NULL", (session,)).fetchall()
-    rows = db.execute("SELECT file_id, tstart_mjd, target, session, cadence_position FROM files").fetchall()
-    return [r for r in rows if r["session"] != session or
-            (r["cadence_position"] is not None and r["cadence_position"] not in on_positions)]
+    """The files check 6 looks in: the cadence's OFF looks and every look of
+    other sessions (`session` is the cadence's key). With `on_positions` (a
+    candidate judged with other looks as ON), the cadence's looks at the
+    other positions instead. Another cadence of the same session counts as
+    another session's looks: its files are other scans."""
+    own = {f["file_id"]: f["cadence_position"] for f in store.cadence_rows(db, session)}
+    archive = store.cadence_session(db, session)
+    out = []
+    for r in db.execute("SELECT file_id, tstart_mjd, target, session, cadence_position FROM files"):
+        pos = own.get(r["file_id"])
+        if pos is not None and (pos % 2 == 0 if on_positions is None else pos in on_positions):
+            continue                     # the cadence's own ON looks (or the looks taken as ON)
+        if pos is None and on_positions is not None and r["session"] == archive and r["cadence_position"] is None:
+            continue                     # the session's files outside any cadence, left out as before
+        out.append({"file_id": r["file_id"], "tstart_mjd": r["tstart_mjd"], "target": r["target"],
+                    "session": r["session"]})
+    return out
 
 
 def recurrence_hits(db, e, looks, session, on_positions=None):
@@ -168,7 +174,7 @@ def session_hits(db, session):
 
 
 def target_of(db, session):
-    on = db.execute("SELECT * FROM files WHERE session=? AND cadence_position=0", (session,)).fetchone()
+    on = store.cadence_rows(db, session)[0]
     return {"name": on["cadence_target"] or on["target"], "ra_hours": on["ra_hours"], "dec_deg": on["dec_degrees"]}
 
 

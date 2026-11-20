@@ -491,7 +491,8 @@ def block(k, cls, slices, urls, work, source, vet, rng):
 def session_target(db, session):
     """The cadence's ON target as the store has it, for the checks (check 5's
     expected drift needs its place on the sky): {name, ra_hours, dec_deg}."""
-    on = db.execute("SELECT * FROM files WHERE session=? AND cadence_position=0", (session,)).fetchone()
+    rows = store.cadence_rows(db, session)
+    on = rows[0] if rows else None
     return {"name": on["cadence_target"] or on["target"], "ra_hours": on["ra_hours"], "dec_deg": on["dec_degrees"]}
 
 
