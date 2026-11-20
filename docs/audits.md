@@ -38,8 +38,8 @@ answered it.
 | 13 | Instrument calibration and sensitivity | 2 | high | **in progress** (20 Nov 2026): calibration records used only where they apply; the coarse-channel response and band-wide sensitivity planned; see below |
 | 14 | Data acquisition and integrity | 2 | high | **in progress** (20 Nov 2026): the 2016 DC bins found misplaced and fixed (no false candidate rested on them); refusals added; source versions planned; see below |
 | 15 | Astronomical signal coverage | 2 | medium | **in progress** (20 Nov 2026): seven kinds of signal measured through the unchanged search; pulses, faster drifts and eccentric orbits planned; see below |
-| 16 | End-to-end reproducibility | 3 | critical | to do |
-| 17 | Experiment freezing and scientific provenance | 3 | high | to do |
+| 16 | End-to-end reproducibility | 3 | critical | **in progress** (20 Nov 2026): reproduction now proves each output made again, comparisons narrowed; a fresh-machine run planned; see below |
+| 17 | Experiment freezing and scientific provenance | 3 | high | **in progress** (20 Nov 2026): frozen configs pinned, deviation history kept, block provenance and the step 12 checks enforced; see below |
 | 18 | The report and its claims | 3 | high | to do |
 | 19 | Public repository and release readiness | 3 | high | to do |
 | 20 | Parallel processing and performance | 4 | high | to do |
@@ -621,3 +621,36 @@ for 60 of 60 at S_in 120, but never joined into a candidate (the cadence
 test matches within its tolerance by design). A wide signal is never
 recovered on a narrowband track; found on its true places it is, at 2 Hz/s,
 where its power crosses channels anyway.
+
+## 16. End-to-end reproducibility: 20 November 2026
+
+**Verdict:** two real defects in the reproduction check, both fixed; the
+rest is the step from rebuilding tables to replaying experiments on another
+machine, which is planned, not claimed.
+
+| Finding | Severity | Verdict and what was done |
+|---|---|---|
+| F16-01: `evidence.py reproduce` passed if a table command wrote nothing | high | **confirmed; fixed.** Every output is given an old time before the tables run; each command must rewrite at least one, and every page whose header names a table command must have been rewritten by it, or the reproduction fails (`evidence.not_made_again`, tested with a command that writes nothing). |
+| F16-02: the comparison ignored the whole provenance and every UTC time on a page | high | **confirmed; fixed.** A record's provenance is compared but for when, by which commit and on which machine's Python and libraries it was written; on a page only the time on its "written by" line and the time and commit after "written" or "finished" are taken out; an observation's time elsewhere is compared (tested, both ways). |
+| F16-03: CI does not run a reproduction | high | **agreed; planned**: a small evidence fixture through extract, rebuild and compare on Linux and Windows. |
+| F16-04: rebuilding tables is not replaying experiments | high | **agreed; stated and planned**: one block a session replayed from the archive with tolerances, then a full replay. |
+| F16-05: the environment is recorded, not rebuilt | high | **agreed; planned**: setup and version-check scripts; BLISS's CUDA set-up documented with tolerances. |
+| F16-06: the store and the records are not one snapshot | medium | **agreed; planned**: packaging refused while a run writes, or from a locked copy. |
+| F16-07: step 12's replay is not in the reproduction guide | medium | **agreed; planned.** |
+| F16-08: extraction filters need Python 3.11.4 | low | **confirmed; fixed**: refused with a message on a Python without them. |
+
+## 17. Experiment freezing and scientific provenance: 20 November 2026
+
+**Verdict:** the five high findings are real in the code and fixed; none
+shows a published result was made otherwise than stated. Step 10's and step
+12's configs are as frozen (their SHA-256s match the configs at the freeze
+commits), and each step's two recorded deviations stand as published.
+
+| Finding | Severity | Verdict and what was done |
+|---|---|---|
+| F17-01: a committed edit could redefine a frozen experiment | high | **confirmed; fixed.** `independent.FROZEN_CONFIGS` pins each config's SHA-256 at its freeze commit (359359d for step 10, 27f35d5 for step 12); a config that differs is a deviation, refused without `--deviation` and logged (tested). |
+| F17-02: logged deviations could drop out of the verdict | high | **confirmed; fixed.** The verdict carries the whole log (`deviation_history`) and its page lists every entry; restoring the code does not take one back. |
+| F17-03 and F17-04: block records reused whatever made them; the DC rule not bound | high | **confirmed; fixed for new records.** `matched.run` writes `made_with` (the config's and the code's SHA-256 and the DC rule) into each record and refuses to resume over a record made with something else. Records from before carry none and stand as made. The curved pass's records are **planned** the same way. |
+| F17-05: the step 12 runner gave its deviation to any change | high | **confirmed; fixed.** It now runs only when every changed fingerprint is the one its deviation explains (`tools/turbo_curves.py` as committed in f161e25); otherwise it refuses and a deviation must be given by hand. With today's changes it refuses, as it should: step 12 is finished. |
+| F17-06: the regression was required only by the runner | medium | **confirmed; fixed.** Step 12's verdict itself refuses unless `data/analysis/regress_step10.json` passed (tested). Widening the regression beyond two blocks is **planned**. |
+| F17-07: the selection gate trusted its cached baseline | medium | **confirmed; fixed.** A cached Green Bank gate made with another geometry, blocks, seed or cut is made again, and each gate result records the baseline record's SHA-256. |

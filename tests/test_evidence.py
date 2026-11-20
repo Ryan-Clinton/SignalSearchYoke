@@ -124,12 +124,31 @@ class Compare(unittest.TestCase):
         res = evidence.compare({"a.md": b"x", "b.md": b"y"}, {"a.md": b"x", "c.md": b"z"})
         self.assertEqual((res["missing"], res["new"]), (["b.md"], ["c.md"]))
 
-    def test_page_stamp_ignored_but_value_on_its_line_is_not(self):
-        old = b"- m.json: written 2026-11-18T13:42:14Z, commit 5fbaa17\n4,520 found (2026-11-11T06:28:53Z)\n"
-        new = b"- m.json: written 2027-01-01T00:00:00Z, commit None\n4,520 found (2027-01-01T00:00:00Z)\n"
+    def test_page_stamp_ignored_but_other_times_are_not(self):
+        old = b"Written by `x` (2026-11-18T13:42:14Z).\n- m.json: written 2026-11-18T13:42:14Z, commit 5fbaa17\n4,520\n"
+        new = b"Written by `x` (2027-01-01T00:00:00Z).\n- m.json: written 2027-01-01T00:00:00Z, commit None\n4,520\n"
         self.assertEqual(evidence.compare({"r.md": old}, {"r.md": new})["same"], 1)
         worse = new.replace(b"4,520", b"4,521")
         self.assertEqual(len(evidence.compare({"r.md": old}, {"r.md": worse})["changed"]), 1)
+        obs = {"r.md": b"observed 2017-05-25T06:13:00Z\n"}
+        moved = {"r.md": b"observed 2017-05-26T06:13:00Z\n"}          # an observation's time is compared
+        self.assertEqual(len(evidence.compare(obs, moved)["changed"]), 1)
+
+    def test_provenance_compared_but_for_when_and_where(self):
+        a = self.rec(provenance={"git_commit": "abc", "python": "3.12.1", "input_sha256": "aa"})
+        b = self.rec(provenance={"git_commit": "def", "python": "3.13.0", "input_sha256": "aa"})
+        self.assertEqual(evidence.compare({"m.json": a}, {"m.json": b})["same"], 1)
+        c = self.rec(provenance={"git_commit": "def", "python": "3.13.0", "input_sha256": "bb"})
+        self.assertEqual(len(evidence.compare({"m.json": a}, {"m.json": c})["changed"]), 1)
+
+    def test_a_command_that_writes_nothing_fails(self):
+        cmd = ("matched.py", "tables", "KIC8462852")
+        page = b"# t\n\nWritten by `matched.py tables KIC8462852` from runs.\n"
+        self.assertEqual(evidence.not_made_again({cmd: ["p.md"]}, {"p.md": page}), [])
+        self.assertTrue(evidence.not_made_again({cmd: []}, {"p.md": page}))
+        other = ("tools/report.py",)
+        self.assertEqual(evidence.not_made_again({cmd: ["q.md"], other: ["r.md"]}, {"p.md": page}),
+                         ["not made again by matched.py tables KIC8462852: p.md"])
 
     def test_other_commits_on_a_page_are_compared(self):
         res = evidence.compare({"p.md": b"BLISS at commit 2b98afe\n"}, {"p.md": b"BLISS at commit 1111111\n"})

@@ -36,6 +36,22 @@ DEVIATION = ("tools/turbo_curves.py sets a 4 GB floor on blimpy's load limit, wh
              "(data shape (1,)); the data read and every hit are unchanged")
 
 
+# The one change DEVIATION explains: tools/turbo_curves.py as committed in f161e25 (the 4 GB floor). Any other
+# change to the fingerprinted code needs its own --deviation, given by hand.
+DEVIATION_COVERS = {"tools/turbo_curves.py": "1736a338c833a1e960257389ff229ebd7e8f1bbeef45199be5490264dfe1cac5"}
+
+
+def deviation_covers_all():
+    """Whether every fingerprint that differs from step 12's freeze is one DEVIATION explains, as it was."""
+    sys.path.insert(0, str(ROOT))
+    import independent
+    independent.set_step(12)
+    cfg, _ = independent.load()
+    now = independent.fingerprint()
+    changed = {k for k in set(now) | set(cfg["code"]) if now.get(k) != cfg["code"].get(k)}
+    return all(k in DEVIATION_COVERS and now.get(k) == DEVIATION_COVERS[k] for k in changed), sorted(changed)
+
+
 def say(text):
     print(time.strftime("%Y-%m-%dT%H:%M:%S ") + text, flush=True)
 
@@ -130,6 +146,10 @@ def bliss():
 
 
 def main():
+    ok, changed = deviation_covers_all()
+    if not ok:
+        raise SystemExit(f"refused: the code differs from step 12's freeze beyond the change DEVIATION explains "
+                         f"({', '.join(changed)}); run independent.py with a --deviation of its own")
     regression()
     # (check takes no deviation; the stages below log theirs)
     run("independent.py", "--step", "12", "sweep", "--deviation", DEVIATION)

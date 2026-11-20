@@ -69,11 +69,12 @@ TABLES = (("matched.py", "tables", "KIC8462852"), ("matched_tables.py", "bliss",
           ("curved_pass.py", "tables", "KIC8462852"), ("curved_pass.py", "orbit-tables", "KIC8462852"),
           ("curved_pass.py", "vet-tables", "KIC8462852"), ("curved_pass.py", "turboseti-tables", "KIC8462852"),
           ("tools/operating_points.py", ), ("tools/report.py",))
-# What may differ when a table is made again: when, and by which commit and machine.
-# What may differ when a table is made again, and nothing else: a record's
-# top-level provenance and written_utc; in a page, a UTC time, and the commit
-# named after "written TIME," in the report's list of its records.
-STAMP_KEYS = {"provenance", "written_utc"}
+# What may differ when a table is made again, and nothing else: when it was written, by which commit, and
+# the machine's Python and libraries (a record's written_utc, and in its provenance GENERATED); in a page,
+# the UTC time on its "written by" line and the time and commit after "written" or "finished" in the
+# report's list of records. Every other time, value and provenance field is compared.
+STAMP_KEYS = {"written_utc"}
+GENERATED = {"git_commit", "uncommitted_changes", "uncommitted_diff_sha256", "created_utc", "python", "libraries"}
 STAMP_TIME = re.compile(r"\b\d{4}-\d\d-\d\dT\d\d:\d\d(:\d\d)?Z")
 STAMP_WRITTEN = re.compile(r"\b(written|finished) \d{4}-\d\d-\d\dT\d\d:\d\d(:\d\d)?Z, commit (?:[0-9a-f]{7}|None)")
 
@@ -277,15 +278,49 @@ def check(path, say=print):
 
 
 def _strip(record):
-    """A record without what says when and by which commit it was written:
-    only its top-level provenance and written_utc."""
+    """A record without what says when, by which commit and on which machine it was written: its
+    written_utc, and those fields (GENERATED) of its top-level provenance; the rest of its provenance
+    is compared."""
     if isinstance(record, dict):
-        return {k: v for k, v in record.items() if k not in STAMP_KEYS}
+        out = {k: v for k, v in record.items() if k not in STAMP_KEYS}
+        if isinstance(out.get("provenance"), dict):
+            out["provenance"] = {k: v for k, v in out["provenance"].items() if k not in GENERATED}
+        return out
     return record
 
 
 def _unstamp(text):
-    return [STAMP_TIME.sub("<utc>", STAMP_WRITTEN.sub(r"\1 <utc>, commit <commit>", ln)) for ln in text.splitlines()]
+    """A page's lines with only the times of its writing taken out: the time on a "written by" line and
+    the time and commit after "written" or "finished" in a list of records; any other time stays."""
+    out = []
+    for ln in text.splitlines():
+        ln = STAMP_WRITTEN.sub(r"\1 <utc>, commit <commit>", ln)
+        if "written by" in ln.lower():
+            ln = STAMP_TIME.sub("<utc>", ln)
+        out.append(ln)
+    return out
+
+
+OLD = 946684800        # 2000-01-01: the time every output is given before the tables are made again
+
+
+def made_by(cmd, page):
+    """Whether a page says it is written by this command (in its first lines)."""
+    head = "\n".join(page.decode(errors="replace").splitlines()[:6])
+    name = " ".join(cmd)
+    return f"`{name}`" in head or f"`python {name}`" in head
+
+
+def not_made_again(touched, pages):
+    """What the tables did not make again: a command that wrote nothing, and a page naming a command
+    that was not rewritten. touched {command: [paths]}, pages {path: bytes before}."""
+    bad = [f"wrote nothing: {' '.join(c)}" for c, ps in touched.items() if not ps]
+    done = {p for ps in touched.values() for p in ps}
+    for path, page in pages.items():
+        for c in touched:
+            if made_by(c, page) and path not in done:
+                bad.append(f"not made again by {' '.join(c)}: {path}")
+    return bad
 
 
 def same(before, after, suffix):
@@ -344,6 +379,9 @@ def reproduce(path, keep=None, say=print):
     tree = tmp / "tree"
     tree.mkdir(parents=True)
     tar = subprocess.run(["git", "-C", str(ROOT), "archive", commit], capture_output=True, check=True).stdout
+    if not hasattr(tarfile, "data_filter"):
+        say("refused: this Python's tarfile has no extraction filters (Python 3.11.4 or later, or 3.12+, is needed)")
+        return False
     with tarfile.open(fileobj=io.BytesIO(tar)) as t:
         t.extractall(tree, filter="data")
     with zipfile.ZipFile(path) as z:
@@ -351,13 +389,23 @@ def reproduce(path, keep=None, say=print):
     data = tree / "data"
     watched = (tree / "docs" / "results", tree / "docs" / "report", data / "measurements")
     before = _snapshot(*watched)
+    for p in before:                       # every output old, so what the tables write shows
+        os.utime(p, (OLD, OLD))
     env = dict(os.environ, SSY_DATA=str(data), PYTHONDONTWRITEBYTECODE="1")
+    touched, seen = {}, set()
     for cmd in TABLES:
         r = subprocess.run([sys.executable, *cmd], cwd=tree, env=env, capture_output=True, text=True)
         say(f"  {' '.join(cmd)}: {'ran' if r.returncode == 0 else f'failed ({r.returncode})'}")
         if r.returncode:
             say("    " + "\n    ".join((r.stderr or r.stdout).strip().splitlines()[-8:]))
             return False
+        now = {p for f in watched if f.exists() for p in f.rglob("*") if p.is_file() and p.stat().st_mtime > OLD + 1}
+        touched[cmd] = sorted(now - seen)
+        seen |= now
+    pages = {p: b for p, b in before.items() if p.suffix == ".md"}
+    missed = not_made_again(touched, pages)
+    for m in missed:
+        say(f"  {m}")
     res = compare(before, _snapshot(*watched))
     rel = lambda p: p.relative_to(tree).as_posix()  # noqa: E731
     say(f"{path}: made again at {commit[:7]} in {tree}; {res['same']} page(s) and record(s) the same (apart "
@@ -371,7 +419,7 @@ def reproduce(path, keep=None, say=print):
         say(f"  missing: {rel(p)}")
     for p in res["new"]:
         say(f"  new: {rel(p)}")
-    return not (res["changed"] or res["missing"] or res["new"])
+    return not (res["changed"] or res["missing"] or res["new"] or missed)
 
 
 def main(argv):

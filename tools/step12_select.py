@@ -252,9 +252,12 @@ def gate_share(geo, blocks=GATE_BLOCKS, seed=GATE_SEED, say=print):
 def gate(geo, say=print):
     fits, reach = drift_fits(geo)
     ref_path = OUT / "gate_green_bank.json"
-    if ref_path.exists():
-        ref = json.loads(ref_path.read_text(encoding="utf-8"))
-    else:
+    want = {"geometry": GREEN_BANK_GEOMETRY, "blocks": GATE_BLOCKS, "seed": GATE_SEED, "cut": GATE_CUT}
+    ref = json.loads(ref_path.read_text(encoding="utf-8")) if ref_path.exists() else None
+    if ref is not None and any(json.loads(json.dumps(ref.get(k))) != json.loads(json.dumps(v)) for k, v in want.items()):
+        say("the cached Green Bank gate was made with another geometry, blocks, seed or cut: made again", flush=True)
+        ref = None
+    if ref is None:
         say("the gate at Green Bank's geometry:", flush=True)
         share, got, n = gate_share(GREEN_BANK_GEOMETRY, say=say)
         ref = {"geometry": GREEN_BANK_GEOMETRY, "share": share, "recovered": got, "of": n,
@@ -270,7 +273,9 @@ def gate(geo, say=print):
         share, got, n = gate_share(geo, say=say)
     passed = share >= GATE_SHARE * ref["share"]
     return {"passed": passed, "share": share, "recovered": got, "of": n, "green_bank": ref["share"],
-            "needed": GATE_SHARE * ref["share"], **reach}
+            "needed": GATE_SHARE * ref["share"], "green_bank_record_sha256": yoke.sha256_file(ref_path)
+            if hasattr(yoke, "sha256_file") else __import__("hashlib").sha256(ref_path.read_bytes()).hexdigest(),
+            **reach}
 
 
 # --- choosing ---------------------------------------------------------------------

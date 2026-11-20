@@ -495,7 +495,7 @@ def session_target(db, session):
     return {"name": on["cadence_target"] or on["target"], "ra_hours": on["ra_hours"], "dec_deg": on["dec_degrees"]}
 
 
-def run(target, count=None, say=print, choice=None, shard=(0, 1)):
+def run(target, count=None, say=print, choice=None, shard=(0, 1), made_with=None):
     """choice: the blocks chosen elsewhere ({"chosen": {block: class},
     "of": {class: blocks swept}, and how they were chosen}), written as the
     run's blocks.json; a run already begun with another choice is refused.
@@ -525,6 +525,15 @@ def run(target, count=None, say=print, choice=None, shard=(0, 1)):
             raise yoke.Refusal("INVALID_REQUEST", f"{base} was begun with another choice of blocks.")
     if not meta_path.exists() or json.loads(meta_path.read_text(encoding="utf-8")) != json.loads(json.dumps(meta)):
         meta_path.write_text(json.dumps(meta, indent=1), encoding="utf-8")
+    if made_with is not None:
+        # made_with (independent.made_with): written into each new record; a record made with something else is
+        # not taken as done (records from before it was written carry none, and stand as they were made)
+        other = [b for b in chosen if (base / f"block_{b:03d}.json").exists()
+                 and json.loads((base / f"block_{b:03d}.json").read_text(encoding="utf-8")).get("made_with", made_with)
+                 != made_with]
+        if other:
+            raise yoke.Refusal("INVALID_REQUEST", f"{len(other)} block record(s) made with another config, code or DC "
+                                                  f"rule (blocks {other[:10]}): measure them apart, not mixed in")
     todo_all = [b for i, b in enumerate(chosen) if i % shard[1] == shard[0]
                 and not (base / f"block_{b:03d}.json").exists()]
     todo = todo_all if count is None else todo_all[:count]
@@ -552,6 +561,8 @@ def run(target, count=None, say=print, choice=None, shard=(0, 1)):
             del slices
             rec["times"]["fetch_s"] = fetch_s
             rec["times"]["block_s"] = round(time.monotonic() - started, 1)
+            if made_with is not None:
+                rec["made_with"] = made_with
             (base / f"block_{k:03d}.json").write_text(json.dumps(rec), encoding="utf-8")
             n = len(rec["tones"])
             line = (f"block {k} ({chosen[k]}): at the published cuts, recovered here "

@@ -158,11 +158,30 @@ def _git(*args):
     return subprocess.run(["git", "-C", str(yoke.ROOT), *args], capture_output=True, text=True).stdout.strip()
 
 
+# Each step's config as frozen: (the commit that froze it, the SHA-256 of the config then, its line ends
+# as LF). A committed edit after the freeze is a change to the experiment, not a new freeze: it is a
+# deviation, logged and reported, like changed code.
+FROZEN_CONFIGS = {10: ("359359d685ddeba80a0967955daf125fa6226b26",
+                       "0af3a6340e1abdf40555a7862f1d07cbd53e75665495ca697469fc5b7714f188"),
+                  12: ("27f35d51fcfc65cf66298a49fc2384a2a7a29a89",
+                       "de7a5b9d9675a886c537c7d7a79366d48d95ab57de2841a898dc8c57fc53ee7d")}
+
+
+def deviation_history():
+    """Every deviation logged for this step (data/stepN/deviations.json), oldest first."""
+    log = ROOT / "deviations.json"
+    return json.loads(log.read_text(encoding="utf-8")) if log.exists() else []
+
+
 def frozen(cfg, deviation=None, stage=""):
-    """Refuse unless the config is committed as it stands and the code is as
-    fingerprinted; a deviation is logged and allowed."""
+    """Refuse unless the config is committed as it stands, is the config as
+    frozen (FROZEN_CONFIGS), and the code is as fingerprinted; a deviation is
+    logged and allowed."""
     rel = CONFIG.relative_to(yoke.ROOT).as_posix()
     problems = []
+    pinned = FROZEN_CONFIGS.get(STEP)
+    if pinned and load()[1] != pinned[1]:
+        problems.append(f"{rel} differs from the config frozen at {pinned[0][:7]}")
     if not _git("ls-files", rel):
         problems.append(f"{rel} is not committed")
     elif _git("status", "--porcelain", "--", rel):
@@ -282,13 +301,20 @@ def _choice():
     return json.loads(p.read_text(encoding="utf-8"))
 
 
+def made_with():
+    """What a block record is made with, written into it: the config, the code's fingerprints (one hash of
+    them all) and the DC rule the looks were read with."""
+    return {"config_sha256": load()[1], "code_sha256": _sha(json.dumps(fingerprint(), sort_keys=True).encode()),
+            "dc_bins": seti.dc_rule()}
+
+
 def measure_blocks(cfg, shard=(0, 1), count=None, deviation=None, say=print):
     frozen(cfg, deviation, "measure")
     choice = _choice()
     if choice["config_sha256"] != load()[1] and not deviation:
         raise yoke.Refusal("INVALID_REQUEST", "The blocks were chosen under another config.")
     return matched.run(cfg["target"], count, say=say, choice={k: choice[k] for k in ("chosen", "of", "crowded_hits")},
-                       shard=shard)
+                       shard=shard, made_with=made_with())
 
 
 def curved(cfg, shard=(0, 1), count=None, deviation=None, say=print):
@@ -407,10 +433,27 @@ def _paired(by_block, seed=2, boot=4000):
             "how": f"block bootstrap, {boot} draws, seed {seed}"}
 
 
+def regression_problem():
+    """Step 12's verdict needs tools/regress_step10.py to have passed (comparable.md step 12): what is
+    wrong with its record, or None."""
+    p = yoke.DATA / "analysis" / "regress_step10.json"
+    if not p.exists():
+        return "the regression against step 10 (tools/regress_step10.py) has not been run"
+    r = json.loads(p.read_text(encoding="utf-8"))
+    ok = r.get("passed", r.get("all_match", r.get("ok")))
+    return None if ok is True else "the regression against step 10 did not pass (data/analysis/regress_step10.json)"
+
+
 def verdict(cfg, deviation=None, progress=False, say=print):
     """The frozen criteria, only when every chosen block is whole (fail
     closed). With progress: how far the runs are, and no verdict."""
     info = frozen(cfg, deviation, "verdict")
+    if STEP == 12 and not progress:
+        why = regression_problem()
+        if why and not deviation:
+            raise yoke.Refusal("INVALID_REQUEST", f"Step 12: {why}.")
+        if why:
+            info["problems"].append(why)
     crit = cfg["criteria"]
     cut, limit = crit["cut"], crit["rate"]
     target = cfg["target"]
@@ -463,7 +506,7 @@ def verdict(cfg, deviation=None, progress=False, say=print):
                         matched_tables._got(t, "turboseti", cut, "three_looks")) for t in r["tones"]] for r in recs])
     out = {"target": target, "session": session, "config_sha256": load()[1], "config_commit": info["config_commit"],
            "git_commit": _git("rev-parse", "HEAD"), "code_fingerprints": len(cfg["code"]),
-           "deviations": info["problems"], "store_sessions": sessions, "blocks": len(recs), "complete": True,
+           "deviations": info["problems"], "deviation_history": deviation_history(), "store_sessions": sessions, "blocks": len(recs), "complete": True,
            "classes": {k: sum(r["class"] == k for r in recs) for k in ("clean", "crowded")},
            "of": meta["of"], "weights": weights, "cut": cut, "rate_limit": limit,
            "false_rate": rates, "recovery_three_looks": rec_, "false_associations": fa,
@@ -527,6 +570,12 @@ def markdown(r, cfg):
     if r["deviations"]:
         lines += ["**Deviations from the frozen config:** " + "; ".join(r["deviations"])
                   + f" (data/step{STEP}/deviations.json).", ""]
+    if r.get("deviation_history"):
+        lines += [f"**Every deviation logged for this step** ({len(r['deviation_history'])}, oldest first; "
+                  "restoring the code does not take one back):", ""]
+        lines += [f"- {d['utc']}, {d['stage']}, at {str(d.get('git_commit'))[:7]}: {'; '.join(d['problems'])}. "
+                  f"Why: {d['why']}" for d in r["deviation_history"]]
+        lines.append("")
     lines += [f"{r['blocks']} blocks ({r['classes']['crowded']} crowded of {r['of']['crowded']}, "
               f"{r['classes']['clean']} clean of {r['of']['clean']}), every one whole (the verdict is refused "
               "otherwise), weighted by each class's share of the session's blocks. Code at "
