@@ -33,7 +33,7 @@ answered it.
 | 8 | Statistical analysis and uncertainty | 1 | high | **done** (20 Nov 2026): `tools/statistical_checks.py` on all three sessions; see below |
 | 9 | Core narrowband detection algorithm (`searching.py`) | 2 | high | **in progress** (20 Nov 2026): four findings confirmed with the search's own code, the blocks queued; see below |
 | 10 | Curved Doppler search | 2 | high | **in progress** (20 Nov 2026): the two untraced signals found, the matcher's two weaknesses being measured; see below |
-| 11 | ON/OFF cadence matching (`onoff.py`) | 2 | high | to do |
+| 11 | ON/OFF cadence matching (`onoff.py`) | 2 | high | **in progress** (20 Nov 2026): three findings confirmed with `onoff.py`'s own functions, measured in the queued blocks run; see below |
 | 12 | Candidate vetting and ranking | 2 | high | to do |
 | 13 | Instrument calibration and sensitivity | 2 | high | to do |
 | 14 | Data acquisition and integrity | 2 | high | to do |
