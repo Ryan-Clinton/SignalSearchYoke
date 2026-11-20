@@ -43,7 +43,7 @@ answered it.
 | 18 | The report and its claims | 3 | high | **in progress** (20 Nov 2026): version 1.6 written with what the audits found; record checks planned; see below |
 | 19 | Public repository and release readiness | 3 | high | **in progress** (20 Nov 2026): documents brought into line with the code, a consistency test; the release, tag and Zenodo deposit left for Ryan's go; see below |
 | 20 | Parallel processing and performance | 4 | high | **in progress** (20 Nov 2026): every record written whole, broken records set aside; the shared scheduler planned; see below |
-| 21 | Database and evidence storage | 4 | medium | to do |
+| 21 | Database and evidence storage | 4 | medium | **in progress** (20 Nov 2026): checks saved whole, six looks required, source versions kept, content hashed, integrity checked, indexes added; evidence revisions planned; see below |
 | 22 | Distributed volunteer computing (`docs/multiuser.md`) | 4 | high | to do |
 | 23 | Testing and regression coverage | 4 | high | to do |
 | 24 | Large-scale survey strategy | 4 | medium | to do |
@@ -639,6 +639,13 @@ machine, which is planned, not claimed.
 | F16-07: step 12's replay is not in the reproduction guide | medium | **agreed; planned.** |
 | F16-08: extraction filters need Python 3.11.4 | low | **confirmed; fixed**: refused with a message on a Python without them. |
 
+### 16, re-audited at 1829094, 20 November 2026
+
+| Finding | Severity | Verdict and what was done |
+|---|---|---|
+| A command could rewrite one output and leave another stale | high | **confirmed; fixed.** `evidence.EXPECTED` names what each table command writes (from a run that wrote them); every one must be rewritten, or the reproduction fails (a test keeps the map in step with the commands). The full reproduction of the e325c72 package passes under it: 101 pages and records the same. |
+| Python and library differences ignored silently | medium | **fixed**: they are reported as notes, not failures. |
+
 ## 17. Experiment freezing and scientific provenance: 20 November 2026
 
 **Verdict:** the five high findings are real in the code and fixed; none
@@ -719,3 +726,22 @@ equivalence tests.
 | P20-07: one temporary name for every writer | medium | **confirmed; fixed.** Each writer has its own temporary file; on Windows a replace refused while another writer replaces the same file is tried again, and no temporary file is left (tested: six threads writing one record). |
 | P20-08: the queue rewrites jobs.txt in place | medium | **agreed; planned.** |
 | P20-09: no scheduler fault tests | high | **agreed; planned** with the scheduler. |
+
+## 21. Database and evidence storage: 20 November 2026
+
+**Verdict:** the lifecycle defects are real in the code and fixed where they
+can be without moving the store's history; the store itself passes SQLite's
+own checks. Tests: `tests/test_store_lifecycle.py`.
+
+| Finding | Severity | Verdict and what was done |
+|---|---|---|
+| A21-01: checks go stale as the store grows | high | **agreed; planned** with the evidence revisions of audit 22 (also F12-03). |
+| A21-02: checks saved one by one, so part of a set looked done | high | **confirmed; fixed.** A candidate's checks are saved in one transaction (`store.save_checks`), and a candidate counts as checked only with a whole set (`store.checked_events`: all ten), tested with a set cut off at three. |
+| A21-03: a known ETag could be replaced by none | high | **confirmed; fixed.** Where the store knows a file's ETag or size, a read without one, or with another, is refused (tested). Separating a file from its place in a cadence is **planned**. |
+| A21-04: a block with fewer than six looks could be saved | high | **confirmed; fixed.** `store.save_block` refuses, with nothing changed, unless it has six files (all different), six hit lists and six scans (tested). |
+| A21-05, A21-06: block history and event lineage | medium | **agreed; planned.** |
+| A21-07: the store's content compared by counts | medium | **confirmed; fixed.** `store.content` adds a hash of every row of every table, so a changed value shows (tested). |
+| A21-08, A21-09: schema versions and references | medium | **agreed; planned.** |
+| A21-10: no integrity check on the packaged store | medium | **confirmed; fixed.** The evidence package refuses a store that fails SQLite's `integrity_check` or `foreign_key_check`; the store as it stands passes both. |
+| A21-11: the store and the records not one snapshot | medium | as F16-06, **planned**. |
+| A21-12: indexes for vetting a growing store | high | **built**: a file's current hits by frequency, a candidate's checks, a session's current events by frequency. Measuring them at 1 to 50 million hits is **planned**. |

@@ -45,6 +45,7 @@ VERSION = ("5 (20 Nov 2026: check 8 leaves the candidate's own hits out of the s
            "with a - b = 1 made a*f1 - b*f2 = f by themselves; check 6 keeps the same target's other sessions apart, "
            "as a repeat at the target, not interference; check 1 calls a look of unknown completeness or a missing "
            "stamp not sound. No recorded verdict of version 4 changes: tools/vetting_checks.py)")
+N_CHECKS = 10                                   # the checks vet() makes on every candidate
 C = 299792458.0
 GBT_LAT, GBT_LON = 38.4331, -79.8398            # degrees (north, east)
 EARTH_OMEGA, EARTH_R = 7.2921159e-5, 6.371e6    # rad/s, m

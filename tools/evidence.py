@@ -55,6 +55,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+import store  # noqa: E402
 import yoke  # noqa: E402
 
 FOLDERS = ("measurements", "step10", "step12", "results", "analysis", "matched", "curved_pass")
@@ -73,6 +74,20 @@ TABLES = (("matched.py", "tables", "KIC8462852"), ("matched_tables.py", "bliss",
 # the machine's Python and libraries (a record's written_utc, and in its provenance GENERATED); in a page,
 # the UTC time on its "written by" line and the time and commit after "written" or "finished" in the
 # report's list of records. Every other time, value and provenance field is compared.
+# What each table command must write, every time (from a run that wrote them, data/evidence's made.json):
+# an output left as it was fails the reproduction.
+EXPECTED = {
+    ("matched.py", "tables", "KIC8462852"): ("data/measurements/matched.json",
+                                             "docs/results/KIC8462852-AGBT17A_999_68-matched.md"),
+    ("matched_tables.py", "bliss", "KIC8462852"): ("data/measurements/matched-bliss.json",
+                                                   "docs/results/KIC8462852-AGBT17A_999_68-bliss.md"),
+    ("curved_pass.py", "tables", "KIC8462852"): ("data/measurements/curved-pass.json",),
+    ("curved_pass.py", "orbit-tables", "KIC8462852"): ("data/measurements/curved-orbits.json",),
+    ("curved_pass.py", "vet-tables", "KIC8462852"): ("data/measurements/curved-pass-vetting.json",),
+    ("curved_pass.py", "turboseti-tables", "KIC8462852"): ("data/measurements/curved-turboseti-blocks.json",),
+    ("tools/operating_points.py",): ("data/analysis/operating_points.json",),
+    ("tools/report.py",): ("docs/report/recovery.svg", "docs/report/report.md"),
+}
 STAMP_KEYS = {"written_utc"}
 GENERATED = {"git_commit", "uncommitted_changes", "uncommitted_diff_sha256", "created_utc", "python", "libraries"}
 STAMP_TIME = re.compile(r"\b\d{4}-\d\d-\d\dT\d\d:\d\d(:\d\d)?Z")
@@ -197,8 +212,11 @@ def build(out_dir=None, say=print):
         src = sqlite3.connect(f"file:{yoke.DATA / STORE}?mode=ro", uri=True)
         dst = sqlite3.connect(copy)
         src.backup(dst)
+        bad = store.integrity(dst)
         dst.close()
         src.close()
+        if bad:
+            raise yoke.Refusal("INTERNAL_ERROR", "the store fails SQLite's checks, not packaged: " + "; ".join(bad[:5]))
         original_store = _sha(copy)
         hosts = store_inventory(copy)["computer_names"]
         store_rows, inv = _scrub_store(copy, hosts)
@@ -345,8 +363,16 @@ def compare(before, after):
     apart from its stamps, and nothing may appear that was not there:
     {"same": n, "changed": [(path, diff)], "missing": [...], "new": [...]}."""
     out = {"same": 0, "changed": [], "missing": sorted(p for p in before if p not in after),
-           "new": sorted(p for p in after if p not in before)}
+           "new": sorted(p for p in after if p not in before), "environment": set()}
     for p in sorted(set(before) & set(after)):
+        if Path(p).suffix == ".json":            # the machine's Python and libraries: not a failure, but said
+            try:
+                pa, pb = (json.loads(x).get("provenance") or {} for x in (before[p], after[p]))
+                for k in ("python", "libraries"):
+                    if isinstance(pa, dict) and isinstance(pb, dict) and pa.get(k) != pb.get(k):
+                        out["environment"].add(f"{k}: {pa.get(k)} then, {pb.get(k)} now")
+            except (ValueError, AttributeError):
+                pass
         ok, diff = (True, []) if before[p] == after[p] else same(before[p], after[p], Path(p).suffix)
         if ok:
             out["same"] += 1
@@ -403,7 +429,12 @@ def reproduce(path, keep=None, say=print):
         touched[cmd] = sorted(now - seen)
         seen |= now
     pages = {p: b for p, b in before.items() if p.suffix == ".md"}
+    (tmp / "made.json").write_text(json.dumps({" ".join(c): [x.relative_to(tree).as_posix() for x in ps]
+                                               for c, ps in touched.items()}, indent=1), encoding="utf-8")
     missed = not_made_again(touched, pages)
+    for c, outs in EXPECTED.items():
+        made = {x.relative_to(tree).as_posix() for x in touched.get(c, [])}
+        missed += [f"not made again by {' '.join(c)}: {o}" for o in outs if o not in made]
     for m in missed:
         say(f"  {m}")
     res = compare(before, _snapshot(*watched))
@@ -419,6 +450,8 @@ def reproduce(path, keep=None, say=print):
         say(f"  missing: {rel(p)}")
     for p in res["new"]:
         say(f"  new: {rel(p)}")
+    for e in sorted(res["environment"]):
+        say(f"  note, made with another environment ({e}); the results compared the same")
     return not (res["changed"] or res["missing"] or res["new"] or missed)
 
 

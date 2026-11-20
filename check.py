@@ -210,9 +210,7 @@ def check_event(db, row, say=print, report_dir=REPORTS):
     if path.exists() and json.loads(path.read_text(encoding="utf-8")).get("event_id") not in (None, row["event_id"]):
         lead = f"{lead}-e{row['event_id']}"
     result = vet_from_store(db, e, looks, session, target, own, report_dir=report_dir, lead=lead)
-    for c in result["checks"]:
-        store.save_check(db, lead, f"{c['n']}. {c['name']}", c["result"], c["evidence"], vetting.VERSION,
-                         event_id=row["event_id"], strength=c["strength"])
+    store.save_checks(db, lead, result["checks"], vetting.VERSION, row["event_id"])
     record = {"lead": lead, "event_id": row["event_id"], "session": session, "block": block_idx,
               "frequency_mhz": e["frequency_mhz"], "drift_hz_s": e["drift_hz_s"], "snr": e["snr"],
               "label": e["label"], "supersedes_event_id": e["supersedes_event_id"], **result}
@@ -232,8 +230,7 @@ def run(args, say=print):
         rows = db.execute("SELECT * FROM events WHERE label='candidate' AND superseded_run IS NULL"
                           " ORDER BY snr DESC").fetchall()
         if not args.all:
-            done = {r["event_id"] for r in db.execute("SELECT DISTINCT event_id FROM checks WHERE version=?",
-                                                       (vetting.VERSION,))}
+            done = store.checked_events(db, vetting.VERSION, vetting.N_CHECKS)
             rows = [r for r in rows if r["event_id"] not in done]
     out = [check_event(db, r, say) for r in rows]
     if not rows:

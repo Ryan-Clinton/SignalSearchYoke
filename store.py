@@ -228,11 +228,26 @@ def connect_readonly(where=None):
 
 
 def content(db):
-    """Rows and the highest rowid of every table: compared before and after
-    a run that must not change the store."""
+    """Rows, the highest rowid and a hash of every row of every table: compared before and after a run
+    that must not change the store (a changed value shows, not only a changed count)."""
+    import hashlib
     names = [r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'"
                                       " AND name NOT LIKE 'sqlite_%' ORDER BY name")]
-    return {n: list(db.execute(f'SELECT count(*), max(rowid) FROM "{n}"').fetchone()) for n in names}
+    out = {}
+    for n in names:
+        h = hashlib.sha256()
+        for row in db.execute(f'SELECT * FROM "{n}" ORDER BY rowid'):
+            h.update(repr(tuple(row)).encode())
+        out[n] = list(db.execute(f'SELECT count(*), max(rowid) FROM "{n}"').fetchone()) + [h.hexdigest()[:16]]
+    return out
+
+
+def integrity(db):
+    """SQLite's own checks of a store: its pages (integrity_check) and its references (foreign_key_check,
+    which integrity_check does not cover). [] when both are clean."""
+    bad = [r[0] for r in db.execute("PRAGMA integrity_check") if r[0] != "ok"]
+    bad += [f"foreign key: {tuple(r)}" for r in db.execute("PRAGMA foreign_key_check")]
+    return bad
 
 
 MIGRATIONS = [("runs", "search_version", "TEXT"), ("hits", "superseded_run", "INTEGER"),
@@ -255,6 +270,13 @@ def _migrate(db):
                 db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {kind}")
         db.execute("CREATE INDEX IF NOT EXISTS hits_current ON hits (session, block_idx, superseded_run)")
         db.execute("CREATE INDEX IF NOT EXISTS events_current ON events (session, block_idx, superseded_run)")
+        # what vetting asks of a growing store: a file's current hits near a frequency, a candidate's checks,
+        # a session's current events by frequency
+        db.execute("CREATE INDEX IF NOT EXISTS hits_file_frequency ON hits (file_id, f_start_mhz)"
+                   " WHERE superseded_run IS NULL")
+        db.execute("CREATE INDEX IF NOT EXISTS checks_event ON checks (event_id, version)")
+        db.execute("CREATE INDEX IF NOT EXISTS events_frequency ON events (session, f_start_mhz)"
+                   " WHERE superseded_run IS NULL")
 
 
 def now():
@@ -311,7 +333,9 @@ def upsert_file(db, index, session=None, target=None, cadence_target=None, posit
     old = db.execute("SELECT etag, size FROM files WHERE url=?", (url,)).fetchone()
     if old is not None:
         for k in ("etag", "size"):
-            if old[k] is not None and index.get(k) is not None and old[k] != index.get(k):
+            if old[k] is not None and index.get(k) != old[k]:
+                # a different value, or none where one was known: the version read cannot be shown to be the
+                # one the store's results were made from
                 raise yoke.Refusal("SOURCE_CHANGED", f"{url}: its {k} is now {index.get(k)!r}, the store's "
                                                      f"{old[k]!r}; its results are of the version recorded")
     scan = url.rsplit("_", 1)[-1].split(".")[0] if "_" in url else None
@@ -375,7 +399,13 @@ def save_block(db, run_id, session, block_idx, f_lo, f_hi, file_ids, looks_hits,
     """One block's hits (all six looks) and cadence results, in one
     transaction. An earlier search of the block is kept, marked superseded
     by this run; `same(old_event_row, new_event)` says which earlier event
-    a new one replaces."""
+    a new one replaces. Refused, with nothing changed, unless it has six
+    looks: six files, six hit lists and (when given) six scans."""
+    if len(file_ids) != 6 or len(looks_hits) != 6 or (scans is not None and len(scans) != 6) \
+            or len(set(file_ids)) != 6:
+        raise yoke.Refusal("INVALID_REQUEST", f"block {block_idx}: {len(file_ids)} files, {len(looks_hits)} hit lists"
+                                              f"{'' if scans is None else f', {len(scans)} scans'}; six of each, "
+                                              "all different files, are needed")
     with db:
         earlier = [dict(r) for r in db.execute(
             "SELECT event_id, f_start_mhz, drift_hz_s, label FROM events"
@@ -464,6 +494,23 @@ def save_check(db, lead, name, result, evidence, version, event_id=None, strengt
         db.execute("INSERT INTO checks (event_id, lead, name, result, strength, evidence, version, checked_utc)"
                    " VALUES (?,?,?,?,?,?,?,?)",
                    (event_id, lead, name, result, strength, json.dumps(evidence, default=yoke.jsonable), version, now()))
+
+
+def save_checks(db, lead, checks, version, event_id):
+    """All of a candidate's checks in one transaction: all of them, or none (a run cut off part way leaves
+    nothing that looks done)."""
+    t = now()
+    with db:
+        db.executemany("INSERT INTO checks (event_id, lead, name, result, strength, evidence, version, checked_utc)"
+                       " VALUES (?,?,?,?,?,?,?,?)",
+                       [(event_id, lead, f"{c['n']}. {c['name']}", c["result"], c["strength"],
+                         json.dumps(c["evidence"], default=yoke.jsonable), version, t) for c in checks])
+
+
+def checked_events(db, version, n_checks):
+    """Events with a whole set of checks of this version (n_checks distinct checks)."""
+    return {r[0] for r in db.execute("SELECT event_id FROM checks WHERE version=? GROUP BY event_id"
+                                     " HAVING count(DISTINCT name) >= ?", (version, n_checks))}
 
 
 def candidates(db, session):
