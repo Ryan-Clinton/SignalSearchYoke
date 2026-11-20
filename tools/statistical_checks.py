@@ -78,6 +78,12 @@ def weighted_share(found, n, idx, weights):
     return out
 
 
+def pooled_share(found, n, idx):
+    """The sample's share found, all blocks drawn together (Wilson's estimand)."""
+    ix = np.concatenate([v for v in idx.values()])
+    return found[ix].sum() / n[ix].sum()
+
+
 def weighted_mean(x, idx, weights):
     return sum(weights[c] * x[ix].mean() for c, ix in idx.items() if len(ix))
 
@@ -118,19 +124,30 @@ def lag_correlation(blocks, values, lag):
     return {"pairs": len(pairs), "r": round(float(np.corrcoef(a, b)[0, 1]), 3)}
 
 
-def window_interval(blocks, diff_found, n, w, rng, boot=BOOT):
-    """The pooled paired difference with windows of w consecutive block numbers resampled whole."""
-    groups = {}
-    for i, b in enumerate(blocks):
-        groups.setdefault(b // w, []).append(i)
-    gs = [np.array(g) for g in groups.values()]
-    draws = []
-    for _ in range(boot):
-        pick = np.concatenate([gs[i] for i in rng.integers(0, len(gs), len(gs))])
-        draws.append(diff_found[pick].sum() / n[pick].sum())
+def class_windows(blocks, classes, w):
+    """Per class, the index arrays of its blocks in windows of w consecutive block numbers."""
+    out = {c: {} for c in CLASSES}
+    for i, (b, c) in enumerate(zip(blocks, classes)):
+        out[c].setdefault(b // w, []).append(i)
+    return {c: [np.array(g) for g in v.values()] for c, v in out.items()}
+
+
+def resample_windows(groups, rng):
+    """Windows drawn with replacement within each class; their blocks' indices by class."""
+    return {c: (np.concatenate([gs[i] for i in rng.integers(0, len(gs), len(gs))]) if gs else np.array([], int))
+            for c, gs in groups.items()}
+
+
+def window_interval(blocks, classes, fa, fb, n, weights, w, rng, boot=BOOT):
+    """The class-weighted paired difference, windows of w consecutive block numbers resampled whole
+    within each class (the same estimand as the block bootstrap at w = 1)."""
+    groups = class_windows(blocks, classes, w)
+    draws = [weighted_share(fa, n, s, weights) - weighted_share(fb, n, s, weights)
+             for s in (resample_windows(groups, rng) for _ in range(boot))]
     lo, hi = np.percentile(draws, [2.5, 97.5])
-    return {"windows_of": w, "windows": len(gs), "interval": [round(float(lo), 4), round(float(hi), 4)],
-            "width": round(float(hi - lo), 4)}
+    windows = {c: len(gs) for c, gs in groups.items()}
+    return {"windows_of": w, "windows": windows, "fewest_windows": min(v for v in windows.values() if v),
+            "interval": [round(float(lo), 4), round(float(hi), 4)], "width": round(float(hi - lo), 4)}
 
 
 # --- the sessions ------------------------------------------------------------------------
@@ -160,10 +177,12 @@ def _at(target, weights, blocks, classes, n, found, false, co, ct, rng):
     for p, f in (("ours", fo), ("turboseti", ft)):
         out[p] = {"found": int(f.sum()), "share_pooled": round(float(f.sum() / n.sum()), 4),
                   "wilson_pooled": list(measure.wilson(int(f.sum()), int(n.sum()))),
+                  "clustered_pooled": boot_interval(lambda s, f=f: pooled_share(f, n, s), idx, rng),
                   "share_weighted": round(weighted_share(f, n, idx, weights), 4),
                   "clustered_weighted": boot_interval(lambda s, f=f: weighted_share(f, n, s, weights), idx, rng)}
         w = out[p]["wilson_pooled"]
-        c = out[p]["clustered_weighted"]
+        c = out[p]["clustered_pooled"]
+        # the same estimand (the sample's pooled share) both ways
         out[p]["width_ratio_clustered_to_wilson"] = round((c[1] - c[0]) / (w[1] - w[0]), 2) if w[1] > w[0] else None
     out["difference_weighted"] = round(weighted_share(fo, n, idx, weights) - weighted_share(ft, n, idx, weights), 4)
     out["difference_interval"] = boot_interval(
@@ -178,7 +197,12 @@ def _at(target, weights, blocks, classes, n, found, false, co, ct, rng):
     xo, xt = false["ours"][co], false["turboseti"][ct]
     out["false_a_block"] = [round(weighted_mean(xo, idx, weights), 4), round(weighted_mean(xt, idx, weights), 4)]
     out["false_difference"] = round(weighted_mean(xo - xt, idx, weights), 4)
-    out["false_difference_interval"] = boot_interval(lambda s: weighted_mean(xo - xt, s, weights), idx, rng)
+    if xo.sum() == 0 and xt.sum() == 0:
+        out["false_difference_interval"] = None
+        out["false_difference_note"] = ("no false candidate in either: says nothing about a difference in the "
+                                        "underlying rates; each rate's own upper bound is in the published curves")
+    else:
+        out["false_difference_interval"] = boot_interval(lambda s: weighted_mean(xo - xt, s, weights), idx, rng)
     out["false_blocks_with_any"] = [int((xo > 0).sum()), int((xt > 0).sum())]
     return out
 
@@ -209,13 +233,13 @@ def _selection(weights, classes, n, found, false, rng, boot=BOOT):
     return out
 
 
-def _correlation(blocks, n, found, false, co, ct, rng):
+def _correlation(blocks, classes, weights, n, found, false, co, ct, rng):
     d = (found["ours"][co] - found["turboseti"][ct]) / np.maximum(n, 1)
     return {"recovery_difference": {str(g): lag_correlation(blocks, d, g) for g in LAGS},
             "false_ours": {str(g): lag_correlation(blocks, false["ours"][co], g) for g in LAGS},
             "false_turboseti": {str(g): lag_correlation(blocks, false["turboseti"][ct], g) for g in LAGS},
-            "difference_by_window": [window_interval(blocks, found["ours"][co] - found["turboseti"][ct], n, w, rng)
-                                     for w in WINDOW_SIZES]}
+            "difference_by_window": [window_interval(blocks, classes, found["ours"][co], found["turboseti"][ct], n,
+                                                     weights, w, rng) for w in WINDOW_SIZES]}
 
 
 def session(target, label, say=_say):
@@ -231,7 +255,7 @@ def session(target, label, say=_say):
            "points": {k: _at(target, weights, blocks, classes, n, found, false, co, ct, rng)
                       for k, (co, ct) in pts.items()},
            "selection": _selection(weights, classes, n, found, false, rng),
-           "correlation": _correlation(blocks, n, found, false, "30", "30", rng)}
+           "correlation": _correlation(blocks, classes, weights, n, found, false, "30", "30", rng)}
     f = out["points"]["frozen (30 each)"]
     say(f"{label}: at 30 found {f['ours']['found']} / {f['turboseti']['found']}; clustered/Wilson width "
         f"{f['ours']['width_ratio_clustered_to_wilson']} / {f['turboseti']['width_ratio_clustered_to_wilson']}; "
@@ -311,6 +335,26 @@ def coverage(trials=300, boot=400, seed=SEED, say=_say):
     return out
 
 
+def window_coverage(trials=200, boot=300, seed=SEED, ars=(0.5, 0.8, 0.95), ws=(1, 4, 8, 16), classes=(60, 60),
+                    say=_say):
+    """The stratified window bootstrap's coverage of the true weighted difference, blocks correlated
+    along frequency (AR(1) block effects, block numbers in order), by window length."""
+    rng = np.random.default_rng(seed)
+    out = {}
+    for ar in ars:
+        hits = {w: 0 for w in ws}
+        for _ in range(trials):
+            labels, fa, fb, n, wts, truth, _ = simulate(rng, block_sd=1.0, ar=ar, classes=classes)
+            blocks = list(range(len(labels)))
+            for w in ws:
+                iv = window_interval(blocks, list(labels), fa, fb, n, wts, w, rng, boot)["interval"]
+                hits[w] += iv[0] <= truth <= iv[1]
+        out[str(ar)] = {str(w): {"coverage": round(hits[w] / trials, 3),
+                                 "windows_a_class": -(-classes[0] // w)} for w in ws}
+        say(f"windows, AR {ar}: " + ", ".join(f"{w}: {out[str(ar)][str(w)]['coverage']}" for w in ws))
+    return out
+
+
 def main():
     what = sys.argv[1] if len(sys.argv) > 1 else "all"
     rec = {"kind": "measured", "seed": SEED, "boot": BOOT, "rate": RATE,
@@ -320,6 +364,7 @@ def main():
         rec["sessions"] = [session(t, label) for t, _, label in SESSIONS]
     if what in ("all", "coverage"):
         rec["coverage"] = coverage()
+        rec["window_coverage"] = window_coverage()
     yoke.write(OUT if what == "all" else OUT.with_name(f"statistical_checks_{what}.json"), rec, indent=1, stamp=True)
 
 

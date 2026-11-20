@@ -32,7 +32,7 @@ answered it.
 | 7 | BLISS comparison | 1 | high | **in progress** (20 Nov 2026): provenance enforced, two-ON split measured, wider same-hit control queued; see below |
 | 8 | Statistical analysis and uncertainty | 1 | high | **done** (20 Nov 2026): `tools/statistical_checks.py` on all three sessions; see below |
 | 9 | Core narrowband detection algorithm (`searching.py`) | 2 | high | **in progress** (20 Nov 2026): four findings confirmed with the search's own code, the blocks queued; see below |
-| 10 | Curved Doppler search | 2 | high | to do |
+| 10 | Curved Doppler search | 2 | high | **in progress** (20 Nov 2026): the two untraced signals found, the matcher's two weaknesses being measured; see below |
 | 11 | ON/OFF cadence matching (`onoff.py`) | 2 | high | to do |
 | 12 | Candidate vetting and ranking | 2 | high | to do |
 | 13 | Instrument calibration and sensitivity | 2 | high | to do |
@@ -371,6 +371,15 @@ Nothing changes a cut, a record or a frozen verdict.
 | ST-07: multiplicity; ratios without intervals | medium | **built in part.** The ratio of signals found at 30, with a block-clustered interval: 10.2 (9.7 to 10.8) in 2017, 10.4 (9.6 to 11.3) in 2016, 9.7 (9.1 to 10.4) in 2019: a count ratio at these cuts, not a ratio of sensitivity. Labelling each reported comparison prespecified, supplementary or exploratory is **planned** with the report's next revision. |
 | ST-08: recovery intervals' coverage untested | medium | **built.** Six simulated cases (300 experiments each): the block-clustered interval held the true difference 91% (independent signals), 92% (shared block effect), 95% (unequal class sampling), 93% (rare recoveries), 97% (each finding some the other misses) and **62% with blocks correlated along frequency**: blocks resampled singly do not cover that case, which is what the window resampling is for. Bias under 0.002 throughout. A test fails if the pairing is broken. |
 
+### 8, re-audited at 8199c56, 20 November 2026
+
+| Finding | Severity | Verdict and what was done |
+|---|---|---|
+| Wilson's interval was set beside a clustered one on another quantity (pooled against class-weighted) | high | **confirmed; fixed.** Both now on the sample's pooled share; the weighted share keeps its own clustered interval. This search's share at 30, Wilson against clustered: 2017 0.332 to 0.348 against 0.334 to 0.344 (0.6 as wide); 2016 0.318 to 0.334 against 0.316 to 0.336 (1.2 times); 2019 0.330 to 0.353 against 0.338 to 0.345 (0.33). The clustered interval comes out narrower where it does because each block holds the same planned grid of strengths and drifts, so block totals vary less than independent draws would; in 2016, where blocks differ most, it is wider. |
+| The window bootstrap dropped the class weighting | high | **confirmed; fixed.** Windows are now drawn within each class and the difference weighted as the main estimate (tested: a case where pooled and weighted differ). The paired difference at 30 by window of 1, 4, 16 and 32 blocks: 2017 0.0092, 0.0083, 0.0073, 0.0086 wide; 2016 0.0227, 0.0281, 0.0345, 0.0402 (widening, the correlation found before); 2019 flat, with as few as 2 windows in its crowded class. |
+| The window bootstrap's coverage was not tested | high | **built.** Simulated blocks correlated along frequency (AR(1), 120 blocks in two classes, 200 experiments each): at correlation 0.5, windows of 1, 4, 8 and 16 cover 88%, 91%, 90%, 85%; at 0.8, 65%, 80%, 82%, 80%; at 0.95, 34%, 46%, 54%, 60%. So windows of 4 to 8 blocks restore most of the coverage under moderate correlation, and nothing tried reaches 95% under strong correlation. 2016's neighbouring blocks correlate at 0.63, between the first two cases: its window intervals are the ones to quote, read as about 80 to 90% intervals. |
+| 2019's false-rate difference shown as [0, 0] | medium | **confirmed; fixed.** With no false candidate in either it is now no interval and a note that it says nothing about a difference in the underlying rates (tested). |
+
 ## 9. Core narrowband detection algorithm: 20 November 2026
 
 **Verdict:** four of the seven findings are confirmed with `searching.py`'s
@@ -391,3 +400,23 @@ tested); `tests/test_detector_checks.py` pins each behaviour down.
 | F9-05: the noise estimate scatters more at wide boxes | high | **confirmed.** On Gaussian noise, the measured spread over its expected value: standard deviation 3.6% at width 1, 5.0% at 4, 7.4% at 10, 11.7% at 27 (512 blocks each); 5th to 95th percentile 0.94 to 1.06 at width 1 and 0.80 to 1.18 at 27. A signal at the cut at fast drift is therefore over or under it by up to a fifth from block to block. |
 | F9-06: the SNR is rounded before matched.py compares it with the cut | medium | **confirmed in the code.** A hit at 9.96 is shadow to the search but counts at 10 in matched.py. The queued run counts, per cut, the hits whose exact SNR is under it and rounded value at it. Records keep the rounded value only. |
 | F9-07: the exhaustive drift search is costly | low | **noted.** The records time each stage per block (search, judging, planting); a stepped drift grid would be a new detector version with completeness measured again. |
+
+## 10. Curved Doppler search: 20 November 2026
+
+**Verdict:** the two weaknesses in the matcher are real in the code, and
+how much they matter is being measured; the two signals left untraced
+between the curved runs are found. `curved_pass.py` is frozen (steps 10 and
+12 fingerprint its matcher), so the checks run a diagnostic copy that keeps
+every hypothesis (`tools/curved_checks.py`; deduplicated first-wins it gives
+`second_pass` exactly, tested on a cadence with eight curved signals and all
+20 choices). Nothing published changes.
+
+| Finding | Severity | Verdict and what was done |
+|---|---|---|
+| CD-01: the first hypothesis for a set of hits wins, before its OFF evidence is judged | high | **confirmed in the code; being measured.** The same three hits reached from another pair of ON looks give another fitted acceleration and other OFF predictions. On ten 2017 blocks read again (36, 128 and eight chosen by seed 12) the run counts sets of hits whose hypotheses disagree, and false candidates and planted signals found at 30 and 10⁻³ when any hypothesis being a candidate is enough. |
+| CD-02: an OFF look that cannot be measured counts as clean | high | **confirmed in the code; being measured.** `off_max` starts at −∞ and an unmeasured look adds nothing, so a candidate with no OFF look measured passes. The run counts candidates with no OFF look measured and with some, and what not taking them would change. |
+| CD-03: the pass needs hits in two ON looks to start | high | **confirmed; a limit by design.** A census of misses by stage and a one-hit start are **planned** as a new version with its own false-candidate control. |
+| CD-04: 6,555 against 6,557, and the exploratory runs' checks | medium | **traced in part.** Signal by signal, the two are block 36's signal 61 and block 128's signal 62: both strength 400, drift +1.83 and −1.84 Hz/s, acceleration +3 and −3 ×10⁻⁴ Hz/s², each recovered in the recheck by two hits and a track and missed in the vetting run. The blocks run records every hypothesis near each. Fingerprints and completeness checks on the exploratory runs' records are **planned**; `run` and `tables` are fingerprinted functions of a frozen file, so this goes in a wrapper, not the file. |
+| CD-05, CD-06: curvature and orbits covered only in part | high / medium | **agreed; stated.** Results are recovery over the tested acceleration range and orbital grid, not completeness for accelerating transmitters. A completeness map over drift, acceleration and strength, and eccentric orbits, are **planned**. |
+| CD-07: the pass's extra false candidates are not general | high | **agreed.** Paired block-level intervals for the pass's increments use audit 8's tools; **planned** with the blocks run's results. |
+| CD-08: no comparison with a truly curved search | medium | **planned**, on the same planted signals and controls. |
