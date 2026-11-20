@@ -70,8 +70,7 @@ def recheck(db, recs, say=print):
         old_c = {c["n"]: (c["result"], c["strength"]) for c in r["checks"]}
         new_c = {c["n"]: (c["result"], c["strength"]) for c in new["checks"]}
         changed = {n: [old_c.get(n), new_c.get(n)] for n in sorted(set(old_c) | set(new_c))
-                   if (old_c.get(n) or (None, None))[1] != (new_c.get(n) or (None, None))[1]
-                   or ((old_c.get(n) or (None,))[0] != (new_c.get(n) or (None,))[0] and n in (1, 6))}
+                   if old_c.get(n) != new_c.get(n)}
         rows.append({"lead": r["lead"], "verdict_recorded": r["verdict"], "verdict_now": new["verdict"],
                      "checks_changed": changed})
         say(f"{r['lead']}: {r['verdict']} -> {new['verdict']}; changed {changed}")

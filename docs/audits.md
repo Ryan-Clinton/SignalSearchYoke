@@ -487,6 +487,16 @@ they are checked again under version 5 before the next ranking. Tests:
 | F12-08: ranking validated against 11 weak candidates | high | **agreed; planned**: a ranking challenge on observations chosen beforehand, with precision in the first 1, 10, 100 and 1,000. |
 | F12-09: ranking scored without its OFF null | medium | **confirmed; fixed.** `ranking.context` now refuses without `off_null.json` unless a partial ranking is asked for, which says the OFF term is left out. The null is recorded for the session ranked. |
 
+### 12, re-audited at 8a59ebb, 20 November 2026
+
+| Finding | Severity | Verdict and what was done |
+|---|---|---|
+| F12-06's guard wrote a record ranking could not find, and still overwrote a superseded event's record | high | **confirmed; fixed.** The event number is now the record's identity: `check.record_for` finds an event's record under its lead id or the lead id with its event number added, ranking uses it, and an event never takes over another event's record, superseded or not (tested). |
+| Check 6's background still counted the same target's files | medium | **confirmed; fixed.** The background takes the same files as the matches. |
+| Check 8 still let one tone be both parents | medium | **confirmed; fixed.** Strong hits within the tolerance of the candidate (its own tone, however often detected) are left out, and f2 may not be the tone f1 is; two other tones still make the relation (tested). The scan-every-hit reference in `tools/check8_equivalence.py` carries the same rule pair by pair, and still gives what the indexed version gives. |
+| Partial ranking not reachable; the OFF null not checked for the session | medium | **confirmed; fixed.** `ranking.py rank --partial` ranks without it and says so; otherwise an OFF null measured on another session's cadences is refused like a missing one (tested), and the message names the real command (`offnull`). |
+| The version 4 against 5 comparison checked results only for checks 1 and 6 | medium | **confirmed; fixed.** It now compares every check's result and strength: all 11 candidates are the same in every check under version 5 as recorded. |
+
 ## 13. Instrument calibration and sensitivity: 20 November 2026
 
 **Verdict:** the conversion from SNR to flux and EIRP is right under its

@@ -195,19 +195,25 @@ def _relations_and_chance(f, freqs, strong0, trials=200):
                     found.append(f"{clock:g} MHz spacing")
                     if first:
                         return found
-        if len(strong_sorted) >= 2:
+        # The parents must be two signals other than the candidate: strong hits within the tolerance of x
+        # (the candidate's own tone, however often it was detected) are left out, and f1 and f2 must not be
+        # the same tone (a need within the tolerance of its own f1 is not a second signal).
+        strong_x = strong_sorted[np.abs(strong_sorted - x) > tol_mhz] if len(strong_sorted) else strong_sorted
+        if len(strong_x) >= 2:
             # a·f1 − b·f2 = x or a·f1 + b·f2 = x: for each f1 the f2 it
             # needs, looked up in the sorted list (the same test as every
             # pair, without the N×N tables a whole sweep makes too big); a
             # need beyond the strong hits' range by more than the tolerance
             # cannot match and is not looked up.
-            s_lo, s_hi = strong_sorted[0], strong_sorted[-1]
+            s_lo, s_hi = strong_x[0], strong_x[-1]
             for a in (1, 2, 3):
                 for b in (1, 2, 3):
                     t = tol_mhz / b
-                    need = np.concatenate([(a * strong_sorted - x) / b, (x - a * strong_sorted) / b])
-                    need = need[(need >= s_lo - t - _SLACK_MHZ) & (need <= s_hi + t + _SLACK_MHZ)]
-                    if len(need) and _near_any(strong_sorted, need, t):
+                    f1 = np.concatenate([strong_x, strong_x])
+                    need = np.concatenate([(a * strong_x - x) / b, (x - a * strong_x) / b])
+                    keep = (need >= s_lo - t - _SLACK_MHZ) & (need <= s_hi + t + _SLACK_MHZ) & (np.abs(need - f1) > t)
+                    need = need[keep]
+                    if len(need) and _near_any(strong_x, need, t):
                         found.append(f"{a}f1+-{b}f2")
                         if first:
                             return found

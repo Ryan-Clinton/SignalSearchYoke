@@ -42,6 +42,17 @@ def lead_id(target, session, f_mhz):
     return f"SETI-{target}-{session}-{f_mhz:.6f}"
 
 
+def record_for(lead, event_id):
+    """The check record of an event: the file named by its lead id, or one of the same lead with the event
+    number added (written when another event already held the name); None if neither is this event's."""
+    for path in [records_dir() / f"{lead}.json"] + sorted(records_dir().glob(f"{lead}-e*.json")):
+        if path.exists():
+            rec = json.loads(path.read_text(encoding="utf-8"))
+            if rec.get("event_id") == event_id:
+                return path, rec
+    return None, None
+
+
 def records_dir():
     return yoke.DATA / "checks"
 
@@ -173,7 +184,10 @@ def vet_from_store(db, e, looks, session, target, own=(), on_positions=None, hit
     others = [h for h in recurrence_hits(db, e, looks, session, on_positions) if h.pop("hit_id") not in own]
     for h in others:
         h.pop("file_id")
-    background = recurrence_background(db, e, [fl["file_id"] for fl in recurrence_files(db, session, on_positions)])
+    # The same eligibility for the background as for the matches: check 6 leaves the same target's other
+    # sessions out of its matches, so their files are left out of the background too.
+    background = recurrence_background(db, e, [fl["file_id"] for fl in recurrence_files(db, session, on_positions)
+                                               if fl["target"] != target.get("name")])
     own_f = [r["f_start_mhz"] for r in db.execute(
         f"SELECT f_start_mhz FROM hits WHERE hit_id IN ({','.join('?' * len(own))})", tuple(own))] if own else []
     return vetting.vet(e, looks, target, others, hits if hits is not None else session_hits(db, session),
@@ -189,13 +203,12 @@ def check_event(db, row, say=print, report_dir=REPORTS):
     own = {h for h in (r["hit_id"] for r in db.execute("SELECT hit_id FROM event_hits WHERE event_id=?",
                                                          (row["event_id"],)))}
     lead = lead_id(target["name"], session, e["frequency_mhz"])
-    # Two events can share a lead id (the frequency to 1 Hz): the later one gets its event number added
-    # rather than replacing the other's record, unless it supersedes that event.
+    # Two events can share a lead id (the frequency to 1 Hz): an event whose name another event's record
+    # already holds (one it supersedes too, so that record is kept) gets its event number added.
+    # record_for finds either.
     path = records_dir() / f"{lead}.json"
-    if path.exists():
-        prior = json.loads(path.read_text(encoding="utf-8")).get("event_id")
-        if prior not in (None, row["event_id"], e["supersedes_event_id"]):
-            lead = f"{lead}-e{row['event_id']}"
+    if path.exists() and json.loads(path.read_text(encoding="utf-8")).get("event_id") not in (None, row["event_id"]):
+        lead = f"{lead}-e{row['event_id']}"
     result = vet_from_store(db, e, looks, session, target, own, report_dir=report_dir, lead=lead)
     for c in result["checks"]:
         store.save_check(db, lead, f"{c['n']}. {c['name']}", c["result"], c["evidence"], vetting.VERSION,

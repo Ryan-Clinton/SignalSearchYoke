@@ -132,6 +132,17 @@ def off_null(say=print):
     return record
 
 
+def null_applies(rec, db, session):
+    """The OFF null was measured on this session's cadences: their names hold its target and the MJD day
+    of one of its files."""
+    files = db.execute("SELECT target, cadence_target, tstart_mjd FROM files WHERE session=? AND is_on=1",
+                       (session,)).fetchall()
+    names = {f["cadence_target"] or f["target"] for f in files}
+    days = {int(f["tstart_mjd"]) for f in files if f["tstart_mjd"]}
+    cads = [str(c.get("cadence", "")) for c in rec.get("cadences", [])]
+    return bool(cads) and all(any(n in c for n in names) and any(f"guppi_{d}_" in c for d in days) for c in cads)
+
+
 def context(db, session, partial=False):
     """The session's fixed inputs: its hits (sorted frequencies), the band
     searched, the listed bands' share of it, crowding's distribution over
@@ -146,10 +157,13 @@ def context(db, session, partial=False):
     grid = np.concatenate([np.arange(lo, hi, GRID_MHZ) for lo, hi in blocks]) if blocks else np.array([])
     counts = np.sort(np.searchsorted(freqs, grid + CROWD_MHZ, "right") - np.searchsorted(freqs, grid - CROWD_MHZ))
     null_path = _p("off_null.json")
-    if not null_path.exists() and not partial:
-        raise yoke.Refusal("NOT_FOUND", "No OFF null (data/measurements/off_null.json): run ranking.py off-null, "
-                                        "or ask for a partial ranking, which leaves the OFF term out")
     null_rec = json.loads(null_path.read_text(encoding="utf-8")) if null_path.exists() else None
+    if null_rec is not None and not null_applies(null_rec, db, session):
+        null_rec = None                      # measured on another session's cadences: not this one's chance
+    if null_rec is None and not partial:
+        raise yoke.Refusal("NOT_FOUND", "No OFF null for this session (data/measurements/off_null.json, measured on "
+                                        "its own cadences): run `ranking.py offnull`, or `ranking.py rank --partial`, "
+                                        "which leaves the OFF term out")
     null = np.array(null_rec["values"]) if null_rec else None
     calibration = {
         "ranking_version": VERSION, "checks_version": vetting.VERSION, "cap": CAP,
@@ -230,10 +244,9 @@ def real(db, session, ctx=None):
                       " superseded_run IS NULL AND session=?", (session,)).fetchall()
     out = []
     for r in rows:
-        lead = check.lead_id(ctx["target"]["name"], session, r["f_start_mhz"])
-        path = check.records_dir() / f"{lead}.json"
-        rec = json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
-        if rec is None or rec.get("version") != vetting.VERSION or rec.get("event_id") != r["event_id"]:
+        _, rec = check.record_for(check.lead_id(ctx["target"]["name"], session, r["f_start_mhz"]), r["event_id"])
+        lead = rec["lead"] if rec else None
+        if rec is None or rec.get("version") != vetting.VERSION:
             raise yoke.Refusal("NOT_CHECKED", f"Candidate {r['event_id']} has no record from this version of the "
                                               "checks: run check.py first.")
         out.append(dict(scored(rec, ctx, r["f_start_mhz"], r["snr"]), lead=lead, event_id=r["event_id"],
@@ -244,13 +257,14 @@ def real(db, session, ctx=None):
     return out
 
 
-def rank(say=print):
+def rank(say=print, partial=False):
     db = store.connect()
     sessions = [r[0] for r in db.execute("SELECT DISTINCT session FROM events WHERE label='candidate' AND"
                                          " superseded_run IS NULL")]
-    record = {"cap": CAP, "terms": TERMS, "version": VERSION, "checks_version": vetting.VERSION, "sessions": {}}
+    record = {"cap": CAP, "terms": TERMS, "version": VERSION, "checks_version": vetting.VERSION, "sessions": {},
+              "partial": partial}
     for session in sessions:
-        ctx = context(db, session)
+        ctx = context(db, session, partial=partial)
         ranked = real(db, session, ctx)
         record["sessions"][session] = {"band_share": round(ctx["band_share"], 4), "span_mhz": round(ctx["span_mhz"], 3),
                                        "off_null_tracks": None if ctx["off_null"] is None else len(ctx["off_null"]),
@@ -499,7 +513,9 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("offnull")
-    sub.add_parser("rank")
+    rk = sub.add_parser("rank")
+    rk.add_argument("--partial", action="store_true",
+                    help="rank without the OFF null (the OFF term left out; the record says partial)")
     b = sub.add_parser("birdies")
     b.add_argument("--runs", type=int, default=10)
     b.add_argument("--add", action="store_true", help="add to the birdies already kept")
@@ -509,7 +525,7 @@ def main(argv=None):
     if a.cmd == "offnull":
         off_null()
     elif a.cmd == "rank":
-        rank()
+        rank(partial=a.partial)
     elif a.cmd == "birdies":
         birdies(a.runs, add=a.add)
     elif a.cmd == "heldout":

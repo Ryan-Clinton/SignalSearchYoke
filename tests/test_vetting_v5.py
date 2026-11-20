@@ -38,16 +38,18 @@ class Version5(unittest.TestCase):
     def _c(self, result, n):
         return next(c for c in result["checks"] if c["n"] == n)
 
-    def test_check_8_leaves_the_candidates_own_hits_out(self):
+    def test_check_8_needs_two_other_signals(self):
+        """The candidate's own tone (detected any number of times) cannot be a parent, and one tone cannot
+        be both parents; two other tones still make the relation."""
         import vetting
         f = self.ev["frequency_mhz"]
-        far = {"frequency_mhz": f + 7.123456, "drift_hz_s": 0.0, "snr": 50.0}   # a second strong zero-drift hit
-        own = [{"frequency_mhz": f, "drift_hz_s": 0.0, "snr": 80.0}]
-        session = own + [far]
-        with_own = vetting.vet(self.ev, self.looks, None, (), session)
-        without = vetting.vet(self.ev, self.looks, None, (), session, own_mhz=[f])
-        self.assertIn("2f1+-1f2", self._c(with_own, 8)["evidence"]["relations"])
-        self.assertNotIn("2f1+-1f2", self._c(without, 8)["evidence"]["relations"])
+
+        def rel(extra):
+            hits = [{"frequency_mhz": x, "drift_hz_s": 0.0, "snr": 50.0} for x in extra]
+            return self._c(vetting.vet(self.ev, self.looks, None, (), hits), 8)["evidence"]["relations"]
+        self.assertNotIn("2f1+-1f2", rel([f, f, f + 7.123456]))           # its own tone, three times over
+        self.assertNotIn("2f1+-1f2", rel([f + 3.0, f + 3.0 + 1e-9]))      # 3f1 - 2f2 from one tone at f + 3
+        self.assertIn("2f1+-1f2", rel([f + 3.0, f + 6.0]))                # 2(f + 3) - (f + 6) = f
 
     def test_check_6_keeps_the_same_target_apart(self):
         import vetting
@@ -68,6 +70,32 @@ class Version5(unittest.TestCase):
         self.assertEqual(self._c(vetting.vet(self.ev, infos, None, (), self.hits), 1)["result"], "not sound")
         infos[1].complete = True
         self.assertEqual(self._c(vetting.vet(self.ev, infos, None, (), self.hits), 1)["result"], "sound")
+
+
+class Records(unittest.TestCase):
+    def test_two_events_sharing_a_lead_id_both_found(self):
+        import json
+        import check
+        d = check.records_dir()
+        d.mkdir(parents=True, exist_ok=True)
+        lead = "SETI-T-S-1000.000000"
+        (d / f"{lead}.json").write_text(json.dumps({"lead": lead, "event_id": 1}), encoding="utf-8")
+        (d / f"{lead}-e2.json").write_text(json.dumps({"lead": f"{lead}-e2", "event_id": 2}), encoding="utf-8")
+        self.assertEqual(check.record_for(lead, 1)[1]["lead"], lead)
+        self.assertEqual(check.record_for(lead, 2)[1]["lead"], f"{lead}-e2")
+        self.assertEqual(check.record_for(lead, 3), (None, None))
+
+    def test_off_null_only_for_its_own_session(self):
+        import sqlite3
+        import ranking
+        db = sqlite3.connect(":memory:")
+        db.row_factory = sqlite3.Row
+        db.execute("CREATE TABLE files (session, target, cadence_target, tstart_mjd, is_on)")
+        db.executemany("INSERT INTO files VALUES (?,?,?,?,?)",
+                       [("A", "KIC8462852", None, 57898.26, 1), ("B", "NGC6946", None, 58795.22, 1)])
+        rec = {"cadences": [{"cadence": "spliced_x_guppi_57898_22410_DIAG_KIC8462852_0031.h5"}]}
+        self.assertTrue(ranking.null_applies(rec, db, "A"))
+        self.assertFalse(ranking.null_applies(rec, db, "B"))
 
 
 if __name__ == "__main__":

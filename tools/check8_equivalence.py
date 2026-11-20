@@ -38,7 +38,9 @@ CHANCE_SMALL, _near_any = vetting.CHANCE_SMALL, vetting._near_any
 
 
 def old(f, session_hits, step, trials=200, chance=True):
-    """Check 8 as it was before bce4704 (vetting.py, inside vet())."""
+    """Check 8 as it was before bce4704 (vetting.py, inside vet()), a scan of every hit, with the parents
+    rule of checks version 5 written out pair by pair: f1 and f2 strong hits not within the tolerance of
+    the candidate, and f2 not the same tone as f1."""
     freqs = np.array([h["frequency_mhz"] for h in session_hits]) if session_hits else np.array([])
     strong0 = np.array([h["frequency_mhz"] for h in session_hits
                         if abs(h["drift_hz_s"]) < step and h["snr"] >= 20]) if session_hits else np.array([])
@@ -59,11 +61,17 @@ def old(f, session_hits, step, trials=200, chance=True):
                 ok = (m >= 1) & (np.abs(np.abs(freqs - x) - m * clock) <= tol_mhz)
                 if ok.any():
                     found.append(f"{clock:g} MHz spacing")
-            if len(strong0) >= 2:
+            parents = strong_sorted[np.abs(strong_sorted - x) > tol_mhz]
+            if len(parents) >= 2:
                 for a in (1, 2, 3):
                     for b in (1, 2, 3):
-                        need = np.concatenate([(a * strong_sorted - x) / b, (x - a * strong_sorted) / b])
-                        if _near_any(strong_sorted, need, tol_mhz / b):
+                        t = tol_mhz / b
+                        hit = False
+                        for f1 in parents:
+                            for need in ((a * f1 - x) / b, (x - a * f1) / b):
+                                if abs(need - f1) > t and np.any(np.abs(parents - need) <= t):
+                                    hit = True
+                        if hit:
                             found.append(f"{a}f1+-{b}f2")
         return found
     rel = relations(f)
