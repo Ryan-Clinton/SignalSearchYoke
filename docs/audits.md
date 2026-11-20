@@ -25,8 +25,8 @@ answered it.
 |---|---|---|---|---|
 | 1 | Scientific methodology | 1 | critical | **done** (19 Nov 2026), re-audited the same day; see below |
 | 2 | Signal injection accuracy | 1 | critical | **re-audited** (20 Nov 2026): paired reruns running; see below |
-| 3 | turboSETI comparison fairness | 1 | critical | **in progress** (20 Nov 2026): findings judged, block experiments queued; see below |
-| 4 | False-positive methodology | 1 | critical | to do |
+| 3 | turboSETI comparison fairness | 1 | critical | **re-audited** (20 Nov 2026): the experiment corrected, 16 blocks queued; see below |
+| 4 | False-positive methodology | 1 | critical | **in progress** (20 Nov 2026): record-based checks done, the time-order test queued; see below |
 | 5 | The 2016 interference failure | 1 | critical | to do |
 | 6 | Detector completeness and missed signals | 1 | high | to do |
 | 7 | BLISS comparison | 1 | high | to do |
@@ -238,4 +238,34 @@ tolerances. None of turboSETI's credited events had a row in each ON look,
 but where a row was there it was the hit the tables matched. Searching at
 30 gave the same hits as the cut tables. These are one block's numbers;
 the 16-block results follow.
+
+### 3, re-audited at 03f5836, 20 November 2026
+
+| Finding | Severity | Verdict and what was done |
+|---|---|---|
+| This search's hits written for turboSETI's event stage were numbered strongest first; turboSETI numbers its own in channel order, and find_events deduplicates by that number | high | **built.** Confirmed (`tophitsearch` walks the channels in order). Now numbered in channel order (`turbo_checks.turbo_order`, tested). It mattered: on the smoke block this search's hits through turboSETI's test found **67** at SNR 10 numbered by channel against **48** by SNR; the strongest-first numbering is kept as a measurement of how much find_events' deduplication depends on numbering alone (20 signals on that block). |
+| (found here) Event rows were grouped by TopHitNum, not by the event | high | **built.** `matched._turbo_kept` groups by `hit_id`, which in the published adapter is find_events' Hit_ID; the diagnostic had put TopHitNum there. Now Hit_ID as `hit_id`, TopHitNum as `top_hit_num`. |
+| The crossed pipelines had no false-candidate control, and equal cuts are not matched operating points across SNR scales | high | **built.** All four detector and cadence-test pairs now run the 19 wrong choices on the unplanted blocks at a grid of cuts (5 to 100), distinct candidates by shared hits as matched.py counts them; each pair's matched cut by step 4's rule on these blocks, by session, and its recovery there. Eight blocks a session: exploratory. |
+| The frequency and drift discrepancy | high | **built**: measured on synthetic tones (above); the mechanism read from turboSETI's code (drift blocks rolled by whole channels, a Taylor tree of one channel a spectrum, no sum over a smeared signal's channels), stated as an inference; the blocks score both pipelines also with drift-scaled tolerances. |
+| Event members: a missing row was counted as verified | medium | **built.** Per ON look: verified, disagrees or unknown, within the event the signal matches best (rows grouped by Hit_ID). Smoke block: 19 looks verified, 0 disagreeing, 32 unknown. |
+| A hit in the top-hit window does not show suppression | medium | **built in part**: renamed "suppression suspected, not shown". Showing it would need turboSETI's rejected candidates, which it does not output. |
+| Block results reused whatever code made them | medium | **built**: each block's record holds a fingerprint of the code (the tools and the modules they use) and is made again when it differs. |
+| Offline tests | medium | **built**: `tests/test_turbo_checks.py` (numbering order, verified, disagreeing and unknown members, each loss stage, the scaled tolerances put back). |
+
+## 4. False-positive methodology: 20 November 2026
+
+**Verdict:** the false-candidate count is a reproducible stress test of
+many wrong ON/OFF assignments, not a calibrated false-alarm rate for real
+cadences. Every finding was checked against the code and the records.
+
+| Finding | Severity | Verdict and what was done |
+|---|---|---|
+| F4-01: the rate is distinct candidates over all 19 wrong choices, not one assignment | high | **built** (`tools/false_checks.py assignments`, from the records, unweighted by class). One wrong choice yields about a nineteenth of the union: 2017 this search at 30, 0.0091 a block for one choice against 0.1736 over 19 (x19.0); 2016 at 30, 1.7468 against 32.5455 (x18.63); turboSETI x19 throughout. Almost every candidate appears in one wrong choice only (98.4% in 2016 at 30), so the union is the sum of 19 nearly separate draws. The published rate keeps its name and definition; the report now calls it what it is. |
+| F4-02: the wrong choices are not exchangeable with the real one, and a choice's looks are put in ON, OFF pairs, not time order | high | **built in part.** Confirmed in `matched.our_events`. This search's verdict reads only each look's ON flag, and its projections use each look's own start time, so the order should matter little to it; measured rather than assumed: `false_checks.py chronological` judges every wrong choice of 16 blocks in time order beside the published order (queued). turboSETI's event stage needs ON and OFF to alternate, so it is not run in time order. Exchangeability itself cannot be shown from these six looks: **planned** (control B below). |
+| F4-03: the combined interval drops a class with no candidates unless every class has none | high | **built** (`false_checks.py interval`). Confirmed in `matched_tables._rate`. Mended: a class with none drawn from the posterior of a Poisson rate over its blocks, flat prior (Gamma(1, 1/blocks), whose 97.5% point is the exact upper limit `_rate` already gives the class). Coverage simulation, 1,000 trials each: 2019 layout: 61 clean, 3 crowded; clean 0.01, crowded 0.3: published 0.992, mended 0.989; 2019 layout: clean 0.03, crowded 1.0: published 0.851, mended 0.982; 2017 layout: 60 clean, 61 crowded; clean 0.005, crowded 0.3: published 0.917, mended 0.983; 2017 layout: clean 0.05, crowded 0.5: published 0.912, mended 0.922. Mended intervals: 2019 this search at 8, [0.0014, 0.0801] (published [0.0, 0.0469]); at 30, [0.0034, 0.0848] (published [0.0, 0.1153]); 2017 at 30, [0.0309, 0.1477] (published [0.0227, 0.13]), turboSETI [0.0052, 0.1499]. With three crowded blocks (2019) no block bootstrap describes the crowded tail; the simulation shows how far that costs. `_rate` and the frozen verdicts are unchanged. |
+| F4-04: what counts as one false signal | high | **built** (`false_checks.py grouping`). By frequency and drift within the tolerances, the groups are almost those of shared hits (2016 this search at 30: 3938 by shared hits, 3937 by frequency and drift, none split); within 3 kHz they merge heavily (1235 groups, 3261 shared-hit groups joined with others). So the published count is stable to a physical-looking rule and the 3 kHz count is a different unit; which is one transmitter is not shown. |
+| F4-05: concentrated interference and correlated blocks | high | **built in part** (`false_checks.py windows`): the false rate's interval with windows of 4 and 16 consecutive blocks resampled within each class; 2016 this search at 30: by block [14.6185, 69.675], by 4 [11.4274, 70.4456], by 16 [2.7473, 80.3749]. A tail absent from a session cannot be drawn from it; the three sessions' rates (0.068, 39.1 and 0 at 30) are the measure of session-to-session spread so far: **planned**, more sessions (audit 24). |
+| F4-06: the matched cuts are chosen on the blocks they are judged on | high | **stated; in part already held out.** The frozen cut of steps 10 and 12, 30, was step 4's matched cut on the 2017 session, then tested on 2016 (failed) and 2019 (held): that is the out-of-sample test of one threshold. Choosing thresholds on some sessions and testing them on others more widely: **planned** (control C, audit 24). |
+| F4-07: cadence candidates before vetting are not vetted false alarms | medium | **built**: the report names the count a cadence-candidate yield before vetting. Measuring the yield after vetting, and how often vetting rejects planted signals: **planned** in audits 5 and 12. |
+| Control B: real, time-ordered negative-control cadences from other directions | — | **planned**: a new experiment, sessions chosen beforehand as steps 10 and 12 were. |
 
