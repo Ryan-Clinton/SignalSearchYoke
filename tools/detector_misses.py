@@ -51,6 +51,15 @@ from trace_bliss_only import OUT  # noqa: E402
 NEAR = 2000                     # channels either side in which hits are listed
 REACH = 3                       # channels either side for the neighbourhood
 CAPS = (5000, 10000, 20000)     # the cap tried in turn when a look reaches MAX_HITS
+CODE = ("tools/detector_misses.py", "matched.py", "onoff.py", "searching.py", "seti.py", "measure.py")
+
+
+def fingerprint():
+    import hashlib
+    h = hashlib.sha256()
+    for f in CODE:
+        h.update((ROOT / f).read_bytes().replace(b"\r\n", b"\n"))
+    return h.hexdigest()[:16]
 
 
 def _signals():
@@ -242,13 +251,17 @@ def main():
     every = []
     for b, rs in sorted(by_block.items()):
         path = OUT / f"detector_block_{b:03d}.json"
-        if path.exists():
-            old = json.loads(path.read_text(encoding="utf-8"))
+        fp = fingerprint()
+        cached = json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+        # A block's record is reused only when the same code made it (records from before the fingerprint,
+        # a bare list, are made again).
+        if isinstance(cached, dict) and cached.get("code") == fp:
+            old = cached["rows"]
             if sorted(r["tone"] for r in old) != sorted(r["tone"] for r in rs):
                 raise yoke.Refusal("INVALID_REQUEST", f"{path.name} is not of block {b}'s signals; move it aside")
         else:
             old = block(b, rs, urls, block_list, base)
-            yoke.write(path, old, indent=1)
+            yoke.write(path, {"code": fp, "rows": old}, indent=1)
         every += old
         for r in old:
             for lk in r["looks"]:
