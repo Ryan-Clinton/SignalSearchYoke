@@ -30,7 +30,7 @@ answered it.
 | 5 | The 2016 interference failure | 1 | critical | **in progress** (20 Nov 2026): records analysed, blocks read again queued; see below |
 | 6 | Detector completeness and missed signals | 1 | high | to do |
 | 7 | BLISS comparison | 1 | high | **in progress** (20 Nov 2026): provenance enforced, two-ON split measured, wider same-hit control queued; see below |
-| 8 | Statistical analysis and uncertainty | 1 | high | to do |
+| 8 | Statistical analysis and uncertainty | 1 | high | **done** (20 Nov 2026): `tools/statistical_checks.py` on all three sessions; see below |
 | 9 | Core narrowband detection algorithm (`searching.py`) | 2 | high | to do |
 | 10 | Curved Doppler search | 2 | high | to do |
 | 11 | ON/OFF cadence matching (`onoff.py`) | 2 | high | to do |
@@ -341,3 +341,32 @@ adapter.
 | BL-05: hit order: three shuffles, and the shuffle seed depends on the cut | medium | **confirmed; planned.** The seed is `[shuffle, cut]`, so orders differ between cuts. More orders on crowded blocks, with a seed fixed across cuts, are planned as a robustness check; the sorted order stays the reference. |
 | BL-06: the same-hit control covered two blocks chosen for their false candidates | medium | **confirmed; running.** The control is queued on eight blocks chosen beforehand by seed 12 (49, 79, 131, 139, 166, 185, 221, 231), clean and crowded. The hybrid stays an exploratory combination. |
 | BL-07: the BLISS loss table called its categories causes | medium | **confirmed; corrected.** The table and `_bliss_loss` now say first failure seen in the order checked, not a cause shown; the report's detector sentence likewise. |
+
+### 7, re-audited at c6388b4, 20 November 2026
+
+| Finding | Severity | Verdict and what was done |
+|---|---|---|
+| The regenerated BLISS page lost the hybrid (0 of 121 blocks) | high | **confirmed; fixed.** The hybrid's records carry the hash of an earlier `onoff.py`; 3ed45b4 changed only which looks the DOT score pairs. `matched.our_events` always lays the looks out ON, OFF, ON, OFF, ON, OFF, so both versions pick the same pairs. `tests/test_onoff_equivalent.py` runs both versions on all 20 choices at two cuts and finds every event identical; that hash is now accepted by name (`matched.ONOFF_EQUIVALENT`), not by dropping the check. The page is back to its earlier form (4,048 found, the same tables), the loss wording the only change. |
+| Existing records were accepted without the pin check | medium | **built**: `bliss_done` counts a record only with the pinned checkout, local change and response file in both its runs (tested); all 121 records still count. |
+| The general adapter wrote into the 2017 folder; a done status blocked a retry; failures classed by a text match | medium | **built**: its records go to `bliss_general/` and its status to its own file. Each failure is recorded with a kind (`matched.failure_kind`: incompatible input from the adapter's own refusals, a timeout, or a failure to run; tested); only an incompatible input is permanent, and step 12's runner calls BLISS not possible only when every block's record says so. |
+| BL-01: the two-ON and three-ON rates do not add to the whole | low | **stated**: each is counted distinct by shared hits within its own events, so they are not a decomposition. |
+| BL-02, BL-05, the 2019 BLISS run | — | **planned**, as above; BL-06's control is queued. |
+
+## 8. Statistical analysis and uncertainty: 20 November 2026
+
+**Verdict:** the recovery difference is large and holds under every
+interval tried; what was overstated is precision, and for the operating
+points, stability. All of it is from the records (`tools/statistical_checks.py`,
+2,000 resamples, seed 8; tests in `tests/test_statistical_checks.py`).
+Nothing changes a cut, a record or a frozen verdict.
+
+| Finding | Severity | Verdict and what was done |
+|---|---|---|
+| ST-01: Wilson's interval treats planted signals as independent | high | **confirmed and measured.** In simulation, with blocks sharing an effect Wilson's 95% interval holds the true share 36% of the time (12% with blocks correlated along frequency), the block-clustered interval 92%. On the sessions, this search's share at 30: 2017 Wilson 0.332 to 0.348, clustered 0.340 to 0.348; 2016 Wilson 0.318 to 0.334, clustered 0.309 to 0.332 (1.5 times as wide); 2019 0.330 to 0.353 against 0.338 to 0.345. The clustered figure is the class-weighted share, so it can be narrower where the classes differ. Wilson's intervals stay as descriptions of the sample, not of precision. |
+| ST-02: the bootstraps say nothing about other sessions | high | **confirmed; stated.** Within-session intervals only. The paired difference at 30 is 0.309 (0.305 to 0.314) in 2017, 0.290 (0.279 to 0.301) in 2016 and 0.306 (0.302 to 0.311) in 2019: side by side, not pooled, and three sessions from one telescope give no between-session interval. Wider claims need sessions chosen beforehand (audit 24). |
+| ST-03: the false-rate intervals fail under strong correlation | high | **confirmed** (audit 4's simulation: about 41% for every interval tried in the 2016-like case). Not repeated: those intervals are labelled as not holding 95% there. |
+| ST-04: the matched cuts' own uncertainty is left out | high | **confirmed and measured.** Step 4's rule applied again to each resample of the 2017 blocks: this search's cut is 30 in 86% (50 in 11%, 100 in 2%, 20 in 1%); turboSETI's is 30 in only 54%, and 5 to 12 in 37%. The paired difference at the cuts chosen is 0.306 at the median but 0.048 to 0.328 over 95% of resamples: when turboSETI's cut falls low its recovery rises. So 2017's matched comparison is unstable for turboSETI, and the fixed cut of 30 tested on 2016 and 2019 is the confirmatory evidence. In 2016 neither pipeline reaches 0.1 in any resample (this search) or in 95% of them (turboSETI). In 2019 the rule picks 8 and 5 every time. This measures instability, not out-of-sample performance. |
+| ST-05: false rates compared unpaired | medium | **built.** Paired by block, this search minus turboSETI at 30: 2017 +0.020 a block (−0.075 to +0.091, so no difference shown); 2016 +37.8 (13.0 to 67.7); 2019 0 (no false candidates in either). No ratio where a count is zero. |
+| ST-06: windows of 4 and 16 blocks not justified | medium | **measured.** Correlation of the per-block recovery difference between blocks one apart: 0.16 (2017), 0.63 (2016), −0.02 (2019); in 2016 it stays 0.35 to 0.41 at 8 and 16 apart. Interval width with windows of 1 to 32 blocks: flat in 2017 (0.011 to 0.014), doubling in 2016 (0.020 to 0.042), flat in 2019 until too few windows remain (8 or fewer). So 2016's within-session intervals need the widest window, and at 32 blocks only 10 windows remain, too few to trust. |
+| ST-07: multiplicity; ratios without intervals | medium | **built in part.** The ratio of signals found at 30, with a block-clustered interval: 10.2 (9.7 to 10.8) in 2017, 10.4 (9.6 to 11.3) in 2016, 9.7 (9.1 to 10.4) in 2019: a count ratio at these cuts, not a ratio of sensitivity. Labelling each reported comparison prespecified, supplementary or exploratory is **planned** with the report's next revision. |
+| ST-08: recovery intervals' coverage untested | medium | **built.** Six simulated cases (300 experiments each): the block-clustered interval held the true difference 91% (independent signals), 92% (shared block effect), 95% (unequal class sampling), 93% (rare recoveries), 97% (each finding some the other misses) and **62% with blocks correlated along frequency**: blocks resampled singly do not cover that case, which is what the window resampling is for. Bias under 0.002 throughout. A test fails if the pairing is broken. |
