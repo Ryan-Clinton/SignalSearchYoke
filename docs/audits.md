@@ -855,3 +855,5 @@ found is real in the schema and now guarded; nothing has been overwritten
 | Finding | Severity | Verdict and what was done |
 |---|---|---|
 | The sweep registered a second cadence's files before the guard refused it, which would then block the session's own cadence | high | **confirmed; fixed.** The sweep now refuses a second cadence of a session before any file is registered; the three sessions' own cadences pass the check unchanged. |
+| Unknown completeness counted as complete | medium | **confirmed; fixed.** A sweep counts a block as searched completely only when it is known to be; `save_block` records a block's completeness as unknown when any look's is missing (tested: true, false, missing and null). |
+| `check.run` waited on any refusal | medium | **confirmed; fixed.** Only the missing OFF null is waited for; any other refusal still fails the run. The cadence check is `store.cadence_conflict`, tested: its own cadence passes, another of the session is refused, a new session is free. |

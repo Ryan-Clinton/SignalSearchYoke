@@ -620,9 +620,7 @@ def sweep(target, count=1, say=print, get=requests.get, files=None):
         indexes = reading.prepare(urls)
         # One cadence a session in this store (until cadences have ids): refused before any file is registered,
         # so a refused cadence leaves nothing behind that would stop the session's own from resuming.
-        held = [r[0] for r in db.execute("SELECT url FROM files WHERE session=? AND cadence_position IS NOT NULL"
-                                         " ORDER BY cadence_position", (session,))]
-        if held and held != list(urls):
+        if store.cadence_conflict(db, session, urls):
             raise yoke.Refusal("INVALID_REQUEST", f"session {session} already holds another cadence in the store; "
                                                   "a second cadence of a session needs cadence ids (planned)")
         file_ids = [store.upsert_file(db, index, session=session,
@@ -691,7 +689,7 @@ def sweep(target, count=1, say=print, get=requests.get, files=None):
     candidates = [dict(e, block=int(k)) for k, d in done.items() for e in d["events"]]
     covered = sum(d["to_mhz"] - d["from_mhz"] for d in done.values())
     # a block with a look stopped at the hit cap was searched, not searched completely: no limit rests on it
-    whole = sum(d["to_mhz"] - d["from_mhz"] for d in done.values() if d.get("complete") not in (0, False))
+    whole = sum(d["to_mhz"] - d["from_mhz"] for d in done.values() if d.get("complete") in (1, True))
     say(f"{target}, session {session}: {len(done)} of {len(block_list)} blocks searched "
         f"({covered:.1f} MHz), {len(candidates)} candidate(s) so far; every hit in {store.path()}")
     return {"target": target, "session": session, "blocks": len(block_list), "searched": len(done),

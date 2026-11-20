@@ -250,8 +250,11 @@ def run(args, say=print):
         try:
             ranked = ranking.rank(say)
         except yoke.Refusal as e:
-            # the checks are saved; the ranking waits for what it needs (a session's OFF null), said, not hidden
-            waiting = str(e)
+            # the checks are saved; the ranking waits for a session's OFF null, said, not hidden. Anything else
+            # is still a failure.
+            if e.code_name != "NOT_FOUND" or "OFF null" not in e.message:
+                raise
+            waiting = e.message
             say(f"checks saved; not ranked: {waiting}")
     return {"checked": out, "candidates": count, "ranked": ranked is not None, "ranking_waits_for": waiting}
 

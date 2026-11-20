@@ -324,6 +324,15 @@ def run_params(db, run_id):
     return json.loads(row["params"]) if row and row["params"] else {}
 
 
+def cadence_conflict(db, session, urls):
+    """Whether the store already holds another cadence of this session (its six files at their positions are
+    not these URLs): the store keys blocks by session, so it holds one cadence a session until cadences have
+    ids."""
+    held = [r[0] for r in db.execute("SELECT url FROM files WHERE session=? AND cadence_position IS NOT NULL"
+                                     " ORDER BY cadence_position", (session,))]
+    return bool(held) and held != list(urls)
+
+
 def upsert_file(db, index, session=None, target=None, cadence_target=None, position=None, is_on=None):
     """The file's row, from its chunk index; its id. A file already in the store whose ETag or size has
     changed is refused (yoke.Refusal SOURCE_CHANGED): its hits and blocks were made from the version
@@ -479,7 +488,8 @@ def save_block(db, run_id, session, block_idx, f_lo, f_hi, file_ids, looks_hits,
             " VALUES (?,?,?,?,'done',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (session, block_idx, f_lo, f_hi, run_id, timing.get("bytes"), timing.get("fetch_s"),
              timing.get("search_s"), timing.get("wall_s"), timing.get("threads"),
-             None if not scans else int(all(sc.get("complete", True) for sc in scans)),
+             None if not scans or any(sc.get("complete") is None for sc in scans)
+             else int(all(sc["complete"] for sc in scans)),
              sum(1 for hits in looks_hits for h in hits if not h.get("shadow")),
              sum(1 for hits in looks_hits for h in hits if h.get("shadow")),
              count["candidate"], count["interference"], count["unconfirmed"], now(),

@@ -39,6 +39,23 @@ class Lifecycle(unittest.TestCase):
         self.assertEqual(store.content(self.db), before)
         self.assertEqual(len(ids), 6)
 
+    def test_cadence_conflict(self):
+        urls = [f"https://example.invalid/own_{i}.h5" for i in range(6)]
+        for i, u in enumerate(urls):
+            store.upsert_file(self.db, _index(u), session="S3", position=i, is_on=i % 2 == 0)
+        self.assertFalse(store.cadence_conflict(self.db, "S3", urls))                   # its own: resumes
+        self.assertTrue(store.cadence_conflict(self.db, "S3", [u.replace("own", "other") for u in urls]))
+        self.assertFalse(store.cadence_conflict(self.db, "NEW", urls))                  # a new session: fine
+
+    def test_unknown_completeness_is_not_complete(self):
+        ids = [store.upsert_file(self.db, _index(f"https://example.invalid/u_{i}.h5"), session="S4", position=i,
+                                 is_on=i % 2 == 0) for i in range(6)]
+        for scans, want in (([{"complete": True}] * 6, 1), ([{"complete": True}] * 5 + [{"complete": False}], 0),
+                            ([{"complete": True}] * 5 + [{}], None), ([{"complete": True}] * 5 + [{"complete": None}], None)):
+            store.save_block(self.db, 1, "S4", 0, 1.0, 2.0, ids, [[]] * 6, [], {}, scans=scans)
+            got = self.db.execute("SELECT complete FROM blocks WHERE session='S4' AND block_idx=0").fetchone()[0]
+            self.assertEqual(got, want, scans)
+
     def test_checks_saved_whole(self):
         checks = [{"n": n, "name": f"c{n}", "result": "r", "strength": None, "evidence": {}} for n in range(1, 11)]
         store.save_checks(self.db, "L", checks[:3], "v", 77)              # as a run cut off would have left
