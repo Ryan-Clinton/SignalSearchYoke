@@ -24,7 +24,7 @@ answered it.
 | # | Audit | Phase | Priority | Status |
 |---|---|---|---|---|
 | 1 | Scientific methodology | 1 | critical | **done** (19 Nov 2026), re-audited the same day; see below |
-| 2 | Signal injection accuracy | 1 | critical | **done** (19 Nov 2026), see below |
+| 2 | Signal injection accuracy | 1 | critical | **re-audited** (20 Nov 2026): paired reruns running; see below |
 | 3 | turboSETI comparison fairness | 1 | critical | to do |
 | 4 | False-positive methodology | 1 | critical | to do |
 | 5 | The 2016 interference failure | 1 | critical | to do |
@@ -198,4 +198,18 @@ against the other. The planted signals' results stand as a measure of
 recovery at a controlled signal-to-noise; what remains for physical
 sensitivity is a calibrated SEFD at C band (audit 13) and confusion
 between signals (audit 6).
+
+### 2, re-audited at 782bf3c, 20 November 2026
+
+The first round's work stood (SI-03 resolved, SI-06 labelled, the rest
+addressed with limits). Six new points, each checked before building:
+
+| Finding | Severity | Verdict and what was done |
+|---|---|---|
+| C1: the sub-step profile test started its track at channel 200 of 600, so at 2 and 4 Hz/s the signal ran off the array | high | **built.** Confirmed (a positive drift runs to lower channels; at 4 Hz/s the track moves 392 channels). The test now uses 2,048 channels with the track centred, refuses if any of it or its sidelobes would leave, and checks no power is lost at the edge. The worst single-channel difference, 32 against 256 sub-steps, is **6.72% of the peak at 4 Hz/s, as before**: the edge had cut both alike. The detector's S/N part now plants near the cut at every drift (S_in 12, 20 and 40 at 1, 2 and 4 Hz/s, found in 6, 10 and 11 of 20 trials): 32 against 256 sub-steps differs by at most 0.01 in S/N. |
+| C2: equal totals do not show the same signals were found | high | **built; reruns running.** `Judge.judge` had the per-signal results and the records kept only totals. Every comparison is now paired: both found, first only, second only, neither, for each pipeline and cut, overall and by strength and drift (`injection_checks.paired`, tested in `tests/test_injection_checks.py`, including equal totals made of different signals). The voltage, DC and constant-power experiments are run again to record it. |
+| C3: the voltage model has one polarization; Stokes I sums two | medium | **built; running.** The voltage experiment now also runs with two polarizations summed, the tone's power split equally between them with independent phases (an unpolarized or circular signal), its own noise and both pipelines. Recorded as what it is: a simplified noise model, no polyphase filterbank, no 8-bit requantization, a flat receiver response. |
+| C4: "fixed flux" is constant injected power in uncalibrated units, on the first four blocks of each class | medium | **built; running.** Renamed throughout (`injection_checks.py power`, `injection_power.json`, "one injected power in all three ON looks"); the blocks are now four crowded and four clean drawn at random (seed 12). |
+| The DC census assumed the coarse channel's size and the DC bin's place | low | **built.** The census now reads each session's DC bins from its own header (fch1, foff, the HDF5 chunk) and each signal's frequency through each ON look from its record, a channel either side: **2, 4 and 2 signals, as before**. |
+| The macOS CI job was cancelled before it ran | — | **done**: rerun requested (`gh run rerun --failed`). |
 
