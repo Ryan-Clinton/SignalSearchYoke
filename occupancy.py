@@ -53,11 +53,19 @@ _cache = {}
 
 
 def revision(db, session):
-    """What the session's current hits and blocks are now: changes when a block is added or searched again."""
+    """What the session's current hits, blocks and looks are now: their current hits' count and highest id,
+    and a hash of every block row and every current look's completeness (a few hundred rows a session), so a
+    block searched again, or a look's completeness changing, makes it different."""
+    import hashlib
     h = db.execute("SELECT count(*), max(hit_id) FROM hits WHERE session=? AND superseded_run IS NULL",
                    (session,)).fetchone()
-    b = db.execute("SELECT count(*), max(run_id) FROM blocks WHERE session=?", (session,)).fetchone()
-    return tuple(h) + tuple(b)
+    d = hashlib.sha256()
+    for row in db.execute("SELECT * FROM blocks WHERE session=? ORDER BY block_idx", (session,)):
+        d.update(repr(tuple(row)).encode())
+    for row in db.execute("SELECT block_idx, position, complete FROM looks WHERE session=? AND superseded_run IS NULL"
+                          " ORDER BY block_idx, position", (session,)):
+        d.update(repr(tuple(row)).encode())
+    return tuple(h) + (d.hexdigest()[:16],)
 
 
 def load(db, session):

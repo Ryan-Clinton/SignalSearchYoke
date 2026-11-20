@@ -68,6 +68,15 @@ class Lifecycle(unittest.TestCase):
             self.db.execute("UPDATE checks SET result='changed' WHERE event_id=90")
         self.assertNotEqual(store.content(self.db), before)
 
+    def test_occupancy_follows_a_change_in_completeness(self):
+        import occupancy
+        with self.db:
+            self.db.execute("INSERT INTO blocks (session, block_idx, status, run_id, complete) VALUES ('R', 0, 'done', 1, 1)")
+        before = occupancy.revision(self.db, "R")
+        with self.db:
+            self.db.execute("UPDATE blocks SET complete=0 WHERE session='R' AND block_idx=0")   # same run, no hits
+        self.assertNotEqual(occupancy.revision(self.db, "R"), before)
+
     def test_integrity(self):
         self.assertEqual(store.integrity(self.db), [])
 

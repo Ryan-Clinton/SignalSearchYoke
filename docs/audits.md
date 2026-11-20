@@ -801,6 +801,12 @@ audit of this plan"). Two touched code that exists and are fixed.
 | F22-10: comparisons dropped with old submissions | medium | **agreed; written in**: each decision keeps the comparison record. |
 | F22-11: the plan behind the code | medium | **confirmed; fixed**: its status lines now give steps 10 and 12 and ranking version 2 as they are. |
 
+### 22, re-audited at 3a51f29, 20 November 2026
+
+| Finding | Severity | Verdict and what was done |
+|---|---|---|
+| F22-04: the occupancy revision missed a block searched again with only its completeness changed | medium | **confirmed; fixed.** The revision now hashes every block row and every current look's completeness of the session as well as the current hits' count and highest id (0.46 s for 2016's session); a test changes one block's completeness under the same run and the revision changes. |
+
 ## 23. Testing and regression coverage: 20 November 2026
 
 **Verdict:** the two enforcement gaps are real and fixed; the rest is tests
