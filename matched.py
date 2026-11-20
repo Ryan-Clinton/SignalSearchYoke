@@ -524,7 +524,7 @@ def run(target, count=None, say=print, choice=None, shard=(0, 1), made_with=None
         if {int(b): c for b, c in before["chosen"].items()} != chosen and list(base.glob("block_*.json")):
             raise yoke.Refusal("INVALID_REQUEST", f"{base} was begun with another choice of blocks.")
     if not meta_path.exists() or json.loads(meta_path.read_text(encoding="utf-8")) != json.loads(json.dumps(meta)):
-        meta_path.write_text(json.dumps(meta, indent=1), encoding="utf-8")
+        yoke.write(meta_path, meta, indent=1)
     if made_with is not None:
         # made_with (independent.made_with): written into each new record; a record made with something else is
         # not taken as done (records from before it was written carry none, and stand as they were made)
@@ -535,7 +535,7 @@ def run(target, count=None, say=print, choice=None, shard=(0, 1), made_with=None
             raise yoke.Refusal("INVALID_REQUEST", f"{len(other)} block record(s) made with another config, code or DC "
                                                   f"rule (blocks {other[:10]}): measure them apart, not mixed in")
     todo_all = [b for i, b in enumerate(chosen) if i % shard[1] == shard[0]
-                and not (base / f"block_{b:03d}.json").exists()]
+                and not yoke.whole(base / f"block_{b:03d}.json")]
     todo = todo_all if count is None else todo_all[:count]
     say(f"{target} {session}: {len(chosen)} blocks chosen ({sum(v == 'crowded' for v in chosen.values())} crowded), "
         f"{len(chosen) - len(todo_all)} done before, {len(todo)} to run")
@@ -563,7 +563,7 @@ def run(target, count=None, say=print, choice=None, shard=(0, 1), made_with=None
             rec["times"]["block_s"] = round(time.monotonic() - started, 1)
             if made_with is not None:
                 rec["made_with"] = made_with
-            (base / f"block_{k:03d}.json").write_text(json.dumps(rec), encoding="utf-8")
+            yoke.write((base / f"block_{k:03d}.json"), rec, indent=None)
             n = len(rec["tones"])
             line = (f"block {k} ({chosen[k]}): at the published cuts, recovered here "
                     f"{sum(t['ours']['10']['three_looks'] == 'recovered' for t in rec['tones'])}/{n}, turboSETI "
@@ -660,7 +660,7 @@ def add_tracks(target, say=print):
         if need_tracks:
             rec["ours"]["true_plain"] = plain
         rec["tracks_added_utc"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-        p.write_text(json.dumps(rec), encoding="utf-8")
+        yoke.write(p, rec, indent=None)
         n = len(rec["tones"])
         say(f"  block {rec['block']}: completed ({'tracks' if need_tracks else ''}"
             f"{', ' if need_tracks and need_turbo else ''}{'turboSETI ON hits' if need_turbo else ''}), "

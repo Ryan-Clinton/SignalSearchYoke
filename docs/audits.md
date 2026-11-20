@@ -701,3 +701,21 @@ is not made here.
 | F19-06: security checks historical | medium | **agreed; planned** at the release (history scan, Gitleaks, dependency checks). |
 | F19-07: the report generator moved past 1.5 | medium | **done**: version 1.6 is written with the changes, a new revision, not a replacement (audit 18). |
 | F19-08: "et al." as a name suffix in CITATION.cff | low | **confirmed; fixed.** Release date and DOI are added only when they exist. |
+
+## 20. Parallel processing and performance: 20 November 2026
+
+**Verdict:** the records were the risk, and they are fixed first, as the
+audit asks; the shared scheduler and its measured speed-up come after, with
+equivalence tests.
+
+| Finding | Severity | Verdict and what was done |
+|---|---|---|
+| P20-01: block records written straight to their names | high | **confirmed; fixed.** Every block and run record of `matched.py` and `curved_pass.py` (the runs, the recheck, the tracks added, the orbit, vetting and turboSETI stages) goes through `yoke.write`: a temporary file, flushed, then replaced whole. The bytes are the same as before (tested), so records stay comparable with the packaged ones. |
+| P20-02: a record counted done because it exists | high | **confirmed; fixed in part.** A record that does not parse is moved aside (`<name>.bad-<utc>`, kept to look at) and its block made again (`yoke.whole`, tested); provenance on resume and at the verdict is audit 17's. |
+| P20-03: every shard rewrote blocks.json | high | **fixed for torn writes** (written whole, only when it differs); writing it once before the workers start comes with the scheduler. |
+| P20-04: rechecks rewrote records in place | high | **confirmed; fixed** by the same whole writes. |
+| P20-05: fixed shards idle | medium | **agreed; planned**: the shared queue of docs/parallel.md, longest blocks first. |
+| P20-06: archive requests and memory not limited across workers | medium | **agreed; planned.** Seen here too: with WSL holding 12 GB, a third lane was not started tonight. |
+| P20-07: one temporary name for every writer | medium | **confirmed; fixed.** Each writer has its own temporary file; on Windows a replace refused while another writer replaces the same file is tried again, and no temporary file is left (tested: six threads writing one record). |
+| P20-08: the queue rewrites jobs.txt in place | medium | **agreed; planned.** |
+| P20-09: no scheduler fault tests | high | **agreed; planned** with the scheduler. |

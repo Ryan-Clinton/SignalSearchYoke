@@ -346,9 +346,8 @@ def run(target, count=None, say=print, shard=(0, 1), made_with=None):
     block_list = seti.blocks(seti.reading.prepare(urls[:1])[0])
     base = folder(target, session)
     base.mkdir(parents=True, exist_ok=True)
-    (base / "blocks.json").write_text(json.dumps({"chosen": chosen, "of": totals, "a_max": A_MAX, "accels": ACCELS,
-                                                  "strengths": STRENGTHS, "cuts": CUTS, "seed": SEED},
-                                                 indent=1), encoding="utf-8")
+    yoke.write(base / "blocks.json", {"chosen": chosen, "of": totals, "a_max": A_MAX, "accels": ACCELS,
+                                      "strengths": STRENGTHS, "cuts": CUTS, "seed": SEED}, indent=1)
     if made_with is not None:
         other = [b for b in chosen if (base / f"block_{b:03d}.json").exists()
                  and json.loads((base / f"block_{b:03d}.json").read_text(encoding="utf-8")).get("made_with", made_with)
@@ -357,7 +356,7 @@ def run(target, count=None, say=print, shard=(0, 1), made_with=None):
             raise yoke.Refusal("INVALID_REQUEST", f"{len(other)} block record(s) made with another config, code, DC "
                                                   f"rule or source (blocks {other[:10]}): measure them apart")
     todo_all = [b for i, b in enumerate(chosen) if i % shard[1] == shard[0]
-                and not (base / f"block_{b:03d}.json").exists()]
+                and not yoke.whole(base / f"block_{b:03d}.json")]
     todo = todo_all if count is None else todo_all[:count]
     say(f"{target} {session}: {len(chosen)} blocks, {len(chosen) - len(todo_all)} done before, {len(todo)} to run",
         flush=True)
@@ -378,7 +377,7 @@ def run(target, count=None, say=print, shard=(0, 1), made_with=None):
             rec["times"]["block_s"] = round(time.monotonic() - started, 1)
             if made_with is not None:
                 rec["made_with"] = made_with
-            (base / f"block_{k:03d}.json").write_text(json.dumps(rec), encoding="utf-8")
+            yoke.write((base / f"block_{k:03d}.json"), rec, indent=None)
             f10 = rec["false"]["10"]
             say(f"  block {k} ({chosen[k]}): false at cut 10 " + ", ".join(
                 f"{cfg} {len(matched.shared_hits(f10[cfg]))}" for cfg in CONFIGS) + "; recovered at cut 10 " + ", ".join(
@@ -443,7 +442,7 @@ def recheck(target, say=print, shard=(0, 1)):
             del slices
             rec["recheck"] = {"strict_differ": differ, "s": round(time.monotonic() - started, 1),
                               "utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
-            p.write_text(json.dumps(rec), encoding="utf-8")
+            yoke.write(p, rec, indent=None)
             t30 = [t["status_v2"]["30"] for t in rec["tones"]]
             say(f"  block {rec['block']}: strict statuses differing from the record {differ}; at cut 30 "
                 + ", ".join(f"{cfg} strict {sum(x[cfg]['strict'] == 'recovered' for x in t30)} three looks "
@@ -652,7 +651,7 @@ def orbits(target, say=print, shard=(0, 1), count=None):
             rec["class"] = chosen[b]
             rec["times"]["wall_s"] = round(time.monotonic() - started, 1)
             del slices
-            (base / f"block_{b:03d}.json").write_text(json.dumps(rec), encoding="utf-8")
+            yoke.write((base / f"block_{b:03d}.json"), rec, indent=None)
             t30 = [t["status"]["30"] for t in rec["tones"]]
             say(f"  block {b}: three looks at cut 30 " + ", ".join(
                 f"{cfg} {sum(x[cfg]['three_looks'] == 'recovered' for x in t30)}" for cfg in CONFIGS)
@@ -1018,7 +1017,7 @@ def vet_run(target, say=print, shard=(0, 1), count=None, choice=None, name=None)
             rec["class"] = chosen[b]
             rec["times"]["block_s"] = round(time.monotonic() - started, 1)
             del slices
-            (base / f"block_{b:03d}.json").write_text(json.dumps(rec), encoding="utf-8")
+            yoke.write((base / f"block_{b:03d}.json"), rec, indent=None)
             f10 = [r for rows in rec["false"]["10"].values() for r in rows]
             say(f"  block {b}: wrong-choice candidates at cut 10 production "
                 f"{sum(r['by'] == 'production' for r in f10)}, pass {sum(r['by'] == 'pass' for r in f10)} "
@@ -1268,7 +1267,7 @@ def turbo_run(target, say=print, shard=(0, 1), count=None):
             coming = ahead.submit(fetch, todo[i + 1]) if i + 1 < len(todo) else None
             out = _turbo_block(rec["block"], rec, slices, urls, work)
             del slices
-            (base / p.name).write_text(json.dumps(out), encoding="utf-8")
+            yoke.write((base / p.name), out, indent=None)
             t30 = out["tones"]
             say(f"  block {out['block']}: three looks at cut 30, turboSETI "
                 f"{sum(t['turboseti']['30']['three_looks'] == 'recovered' for t in t30)}, production "

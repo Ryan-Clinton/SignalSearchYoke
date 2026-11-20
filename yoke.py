@@ -4,6 +4,7 @@ import contextlib
 import hashlib
 import json
 import os
+import time
 import platform
 import subprocess
 import sys
@@ -116,6 +117,21 @@ def provenance(record_version=1):
             "created_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
 
 
+def whole(path):
+    """Whether a record is there and parses whole. One that is there but does not parse (a write cut off
+    before records were written whole) is moved aside to <name>.bad-<utc>, so its block is made again
+    and the broken bytes are kept to look at."""
+    path = Path(path)
+    if not path.exists():
+        return False
+    try:
+        json.loads(path.read_text(encoding="utf-8"))
+        return True
+    except (OSError, ValueError):
+        path.replace(path.with_name(f"{path.name}.bad-{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())}"))
+        return False
+
+
 def write(path, record, stamp=False, record_version=1, indent=1):
     """Keep `record` at `path` as JSON, whole or not at all."""
     path = Path(path)
@@ -123,10 +139,24 @@ def write(path, record, stamp=False, record_version=1, indent=1):
     if stamp and isinstance(record, dict):
         record = dict(record, provenance=provenance(record_version))
     text = json.dumps(record, indent=indent, default=jsonable)
-    partial = path.with_name(path.name + ".part")
+    # each writer its own temporary file, so two writing the same record cannot write into one
+    partial = path.with_name(f"{path.name}.{os.getpid()}.{os.urandom(4).hex()}.part")
     with open(partial, "w", encoding="utf-8") as f:
         f.write(text)
         f.flush()
         os.fsync(f.fileno())
-    partial.replace(path)
+    # On Windows a replace can be refused while another writer is replacing the same file: try again for a
+    # while, and never leave the temporary file behind
+    try:
+        for attempt in range(50):
+            try:
+                partial.replace(path)
+                break
+            except PermissionError:
+                if attempt == 49:
+                    raise
+                time.sleep(0.02 * (attempt + 1))
+    finally:
+        if partial.exists():
+            partial.unlink()
     return record
