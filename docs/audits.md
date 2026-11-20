@@ -716,6 +716,13 @@ is not made here.
 | F19-07: the report generator moved past 1.5 | medium | **done**: version 1.6 is written with the changes, a new revision, not a replacement (audit 18). |
 | F19-08: "et al." as a name suffix in CITATION.cff | low | **confirmed; fixed.** Release date and DOI are added only when they exist. |
 
+### 19, re-audited at fcbcc9d, 20 November 2026
+
+| Finding | Severity | Verdict and what was done |
+|---|---|---|
+| The README still said "BLISS as published" | medium | **confirmed; fixed**, and the consistency test now refuses that wording. |
+| The tested constraints pin four packages, are not linked, and CI does not use them | medium | **fixed in part.** The README now points at the complete recorded environment (`docs/environments/core-windows.txt`, every package) as constraints for an exact install; using it in CI is **planned**. |
+
 ## 20. Parallel processing and performance: 20 November 2026
 
 **Verdict:** the records were the risk, and they are fixed first, as the

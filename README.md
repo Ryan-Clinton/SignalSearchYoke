@@ -19,7 +19,7 @@ with a PDF), has the method, tables and limits. In short:
 - **2017 session (KIC 8462852, AGBT17A_999_68), 121 blocks, 13,310 planted
   signals.** At the cut where each pipeline's measured false-candidate
   rate is at most 0.1 a block, this search found 4,520 in all three ON
-  looks, turboSETI 442. BLISS as published reached that rate at no cut
+  looks, turboSETI 442. BLISS run as its own pipeline reached that rate at no cut
   tested; BLISS's own hits put through this search's ON/OFF test found
   4,048. The rates are point estimates whose 95% intervals reach above 0.1,
   and these cuts were chosen on the same blocks they were judged on.
@@ -94,6 +94,13 @@ Windows (PowerShell, Python from python.org):
 ```
 py -3 -m venv .venv
 .venv\Scripts\python -m pip install -r requirements.txt
+```
+
+To install exactly the versions the published results were made with (every package, not only
+the four named), add the recorded environment as constraints:
+`-c docs/environments/core-windows.txt` (requirements-tested.txt pins only the four).
+
+```
 .venv\Scripts\python seti.py --help
 .venv\Scripts\python seti.py find KIC8462852
 ```

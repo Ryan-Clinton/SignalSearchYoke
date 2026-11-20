@@ -27,6 +27,9 @@ class Readme(unittest.TestCase):
     def test_sessions(self):
         self.assertNotIn("both sessions", self.text)
 
+    def test_bliss_named_as_the_report_names_it(self):
+        self.assertNotIn("BLISS as published", self.text)
+
 
 if __name__ == "__main__":
     unittest.main()
