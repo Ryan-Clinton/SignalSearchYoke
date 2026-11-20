@@ -11,6 +11,15 @@ difference between the two runs is the switch's alone.
   pick again only after a hit at the cut (or a wide one); a shadow hit's
   track is blanked but the scores around it are not summed again. True sums
   them again after every pick.
+- refresh_reach (default None): how far either side of a blanked track the
+  lines are summed again: None, the plane's margin (most + wmax), as
+  searching.search; "full", twice the most a line can move plus twice the
+  widest box, which takes in every line start whose line can cross a
+  blanked pixel (one in the last spectrum lies on lines of the opposite
+  extreme drift starting up to 2 x most channels away).
+- exact (default False): True adds "snr_exact", the SNR before it is
+  rounded to 0.1 (searching.search keeps only the rounded value, and
+  matched.py's shadow test compares the rounded value with the cut).
 - region (default None): (channels, cap): instead of one cap for the whole
   slice, each region of that many channels may hold at most `cap` hits; a
   full region stops being picked from, the rest go on.
@@ -30,7 +39,7 @@ from searching import (MAX_DRIFT, MAX_HITS, METHOD, SHADOW_MIN, SK_FLAG, SNR_MIN
 
 def search_variant(spectra, foff, tsamp, fch1, snr_min=SNR_MIN, shadow_min=SHADOW_MIN, max_drift=MAX_DRIFT,
                    method=METHOD, sk=True, max_hits=MAX_HITS, details=None, corridor=True, refresh_shadow=False,
-                   region=None):
+                   region=None, refresh_reach=None, exact=False):
     n_t, n_f = spectra.shape
     flags = kurtosis(spectra) > SK_FLAG if sk else None
     flat, noise = flatten(spectra, details=True)
@@ -92,6 +101,8 @@ def search_variant(spectra, foff, tsamp, fch1, snr_min=SNR_MIN, shadow_min=SHADO
                      "noise_factor": round(s_sum / math.sqrt(n_t * w), 3),
                      "smear": round(abs(drift) * tsamp / width_hz, 3) if width_hz else None,
                      "flagged_fraction": track_flags})
+        if exact:
+            hits[-1]["snr_exact"] = snr
         if wide:
             for t, x in enumerate(lit):
                 if x:
@@ -102,8 +113,9 @@ def search_variant(spectra, foff, tsamp, fch1, snr_min=SNR_MIN, shadow_min=SHADO
             plane.blank(i, k, 1)
             lo, hi = i - w - 1, i + w + 2
         if snr >= snr_min or wide or refresh_shadow:
-            a = max(0, lo - plane.margin)
-            b = min(n_f, hi + plane.margin)
+            reach = plane.margin if refresh_reach is None else 2 * plane.most + 2 * plane.wmax + 2
+            a = max(0, lo - reach)
+            b = min(n_f, hi + reach)
             new, new_k = plane.search(a, b, measure=False)
             new[:max(0, edge - a)] = -np.inf
             if b > n_f - edge:

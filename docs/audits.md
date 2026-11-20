@@ -31,7 +31,7 @@ answered it.
 | 6 | Detector completeness and missed signals | 1 | high | to do |
 | 7 | BLISS comparison | 1 | high | **in progress** (20 Nov 2026): provenance enforced, two-ON split measured, wider same-hit control queued; see below |
 | 8 | Statistical analysis and uncertainty | 1 | high | **done** (20 Nov 2026): `tools/statistical_checks.py` on all three sessions; see below |
-| 9 | Core narrowband detection algorithm (`searching.py`) | 2 | high | to do |
+| 9 | Core narrowband detection algorithm (`searching.py`) | 2 | high | **in progress** (20 Nov 2026): four findings confirmed with the search's own code, the blocks queued; see below |
 | 10 | Curved Doppler search | 2 | high | to do |
 | 11 | ON/OFF cadence matching (`onoff.py`) | 2 | high | to do |
 | 12 | Candidate vetting and ranking | 2 | high | to do |
@@ -370,3 +370,24 @@ Nothing changes a cut, a record or a frozen verdict.
 | ST-06: windows of 4 and 16 blocks not justified | medium | **measured.** Correlation of the per-block recovery difference between blocks one apart: 0.16 (2017), 0.63 (2016), −0.02 (2019); in 2016 it stays 0.35 to 0.41 at 8 and 16 apart. Interval width with windows of 1 to 32 blocks: flat in 2017 (0.011 to 0.014), doubling in 2016 (0.020 to 0.042), flat in 2019 until too few windows remain (8 or fewer). So 2016's within-session intervals need the widest window, and at 32 blocks only 10 windows remain, too few to trust. |
 | ST-07: multiplicity; ratios without intervals | medium | **built in part.** The ratio of signals found at 30, with a block-clustered interval: 10.2 (9.7 to 10.8) in 2017, 10.4 (9.6 to 11.3) in 2016, 9.7 (9.1 to 10.4) in 2019: a count ratio at these cuts, not a ratio of sensitivity. Labelling each reported comparison prespecified, supplementary or exploratory is **planned** with the report's next revision. |
 | ST-08: recovery intervals' coverage untested | medium | **built.** Six simulated cases (300 experiments each): the block-clustered interval held the true difference 91% (independent signals), 92% (shared block effect), 95% (unequal class sampling), 93% (rare recoveries), 97% (each finding some the other misses) and **62% with blocks correlated along frequency**: blocks resampled singly do not cover that case, which is what the window resampling is for. Bias under 0.002 throughout. A test fails if the pairing is broken. |
+
+## 9. Core narrowband detection algorithm: 20 November 2026
+
+**Verdict:** four of the seven findings are confirmed with `searching.py`'s
+own code (not a reimplementation), one is smaller than claimed, and none
+changes the production search: it is frozen, and what these suggest goes
+into a new detector version tested on sessions chosen beforehand. The
+checks: `tools/detector_checks.py` (synthetic, run; blocks, queued) and the
+diagnostic copy's two new switches (`tools/search_variants.py`
+`refresh_reach`, `exact`; still identical to the search at their defaults,
+tested); `tests/test_detector_checks.py` pins each behaviour down.
+
+| Finding | Severity | Verdict and what was done |
+|---|---|---|
+| F9-01: after a pick, only line starts within the margin are summed again, so scores holding blanked power survive | high | **confirmed.** The re-sum reaches `most + wmax` either side; a blanked pixel in the last spectrum lies on lines of the opposite extreme drift starting up to `2 x most` away. With the search's own code and a full-reach re-sum beside it: a strong tone at +2 Hz/s leaves one extra pick at SNR 18.2, at −3.9 Hz/s one at 51.3, a wide tone one at 43.6; a pulse in one spectrum leaves none. So a strong signal can bring one stale hit beside it. Its effect on candidates is being measured on 12 blocks (2017 and 2016, chosen by seed 12): hits, false candidates and planted signals found at 30, as published against full reach. |
+| F9-02: each width's noise is measured on a positive drift and used for both signs | high | **confirmed in the code; smaller than claimed in effect.** Measuring each width's noise on the negative drift as well (`searching.Plane` with its sample drift negated): on pure Gaussian noise the two differ block by block by a median of 3% (width 1) to 13% (width 27), and with a doubling step in the noise by about the same, 3% to 14%. So the difference seen is mostly the estimate's own scatter (F9-05), not direction; the twofold figure did not reappear with the search's own measurement. Real blocks are in the queued run. |
+| F9-03: the hit list depends on the cut, since a shadow pick does not trigger the re-sum | high | **confirmed; already being measured.** This is `refresh_shadow` in the diagnostic copy (audit 6): the second lane is running it on four crowded 2016 blocks, with false candidates and planted signals found. matched.py's assumption that one search serves every cut holds for the hits at and over the search's cut, not for those under it. |
+| F9-04: one non-finite sample ends the search | medium | **confirmed.** With one NaN in an unrelated channel the search returns no hits and the tone it found without it is lost, silently. No block of the three sessions lost every planted signal (the fewest found at 10: 17 in 2017, 5 in 2016, 67 in 2019), so no ON look of these runs was emptied this way; the queued run counts non-finite samples in its blocks. A check before the search belongs in the next version; the frozen search is not changed. |
+| F9-05: the noise estimate scatters more at wide boxes | high | **confirmed.** On Gaussian noise, the measured spread over its expected value: standard deviation 3.6% at width 1, 5.0% at 4, 7.4% at 10, 11.7% at 27 (512 blocks each); 5th to 95th percentile 0.94 to 1.06 at width 1 and 0.80 to 1.18 at 27. A signal at the cut at fast drift is therefore over or under it by up to a fifth from block to block. |
+| F9-06: the SNR is rounded before matched.py compares it with the cut | medium | **confirmed in the code.** A hit at 9.96 is shadow to the search but counts at 10 in matched.py. The queued run counts, per cut, the hits whose exact SNR is under it and rounded value at it. Records keep the rounded value only. |
+| F9-07: the exhaustive drift search is costly | low | **noted.** The records time each stage per block (search, judging, planting); a stepped drift grid would be a new detector version with completeness measured again. |
