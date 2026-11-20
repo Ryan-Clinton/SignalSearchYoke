@@ -27,6 +27,8 @@ jobs:
             python-version: "3.12"
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0          # the whole history: tests/test_onoff_equivalent.py reads an earlier onoff.py
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}

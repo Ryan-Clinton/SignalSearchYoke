@@ -60,6 +60,11 @@ class Equivalent(unittest.TestCase):
         for commit in sorted(set(matched.ONOFF_EQUIVALENT.values())):
             old = _old(commit)
             if old is None:
+                # Skipped only where there is no git at all; in a clone without the commit (a shallow checkout)
+                # it fails, so a run that did not compare cannot pass as one that did.
+                import shutil
+                if shutil.which("git") and (ROOT / ".git").exists():
+                    self.fail(f"onoff.py at {commit} is not in this clone (a shallow checkout?): fetch the history")
                 self.skipTest("git not available")
             checked = 0
             for ons in itertools.combinations(range(6), 3):

@@ -45,7 +45,7 @@ answered it.
 | 20 | Parallel processing and performance | 4 | high | **in progress** (20 Nov 2026): every record written whole, broken records set aside; the shared scheduler planned; see below |
 | 21 | Database and evidence storage | 4 | medium | **in progress** (20 Nov 2026): checks saved whole, six looks required, source versions kept, content hashed, integrity checked, indexes added; evidence revisions planned; see below |
 | 22 | Distributed volunteer computing (`docs/multiuser.md`) | 4 | high | **in progress** (20 Nov 2026): the plan's constraints written in; occupancy's cache follows the store, a block's scans required; the system itself not built; see below |
-| 23 | Testing and regression coverage | 4 | high | to do |
+| 23 | Testing and regression coverage | 4 | high | **in progress** (20 Nov 2026): tests isolated from any real data folder, the old-version comparison required in CI; the whole-pipeline and reader tests planned; see below |
 | 24 | Large-scale survey strategy | 4 | medium | to do |
 
 ## What each audit covers
@@ -800,3 +800,20 @@ audit of this plan"). Two touched code that exists and are fixed.
 | F22-09: the verification computer as the limit | high | **agreed; to be measured** in the simulated deployment. |
 | F22-10: comparisons dropped with old submissions | medium | **agreed; written in**: each decision keeps the comparison record. |
 | F22-11: the plan behind the code | medium | **confirmed; fixed**: its status lines now give steps 10 and 12 and ranking version 2 as they are. |
+
+## 23. Testing and regression coverage: 20 November 2026
+
+**Verdict:** the two enforcement gaps are real and fixed; the rest is tests
+to add. Checked first: no test has touched real records here (SSY_DATA is
+set nowhere on this machine, and data/analysis/regress_step10.json is the
+real run's of 03:46).
+
+| Finding | Severity | Verdict and what was done |
+|---|---|---|
+| T23-01: tests kept SSY_DATA if it was set | high | **confirmed; fixed.** tests/synth.py now always gives the tests a fresh folder of their own and refuses if a project module was loaded with another first; `tests/test_isolation.py` passes with SSY_DATA pointed at the real data folder. |
+| T23-02: the old onoff.py comparison could skip in CI | high | **confirmed; fixed.** CI checks out the whole history, and the test fails, not skips, in a clone that lacks the commit; it skips only where there is no git at all. |
+| T23-03: no whole six-look pipeline test | high | **agreed; planned**: synthetic HDF5 files through reading, search, cadence test, store, checks, ranking and evidence. |
+| T23-04: reader not tested against bad servers | high | **agreed; planned**: a mocked range server (200 for 206, 412, wrong Content-Range, truncated) and local HDF5 fixtures compared with h5py. |
+| T23-05: one synthetic layout | medium | **agreed; planned** (property-based tests). |
+| T23-06: migrations and processes | medium | **in part**: writers from four processes are tested (audit 20); an old-schema fixture is **planned**. |
+| T23-07: external pipelines and real records not a release gate | medium | **agreed; planned** as a release workflow. |
