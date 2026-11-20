@@ -35,7 +35,7 @@ answered it.
 | 10 | Curved Doppler search | 2 | high | **in progress** (20 Nov 2026): the two untraced signals found, the matcher's two weaknesses being measured; see below |
 | 11 | ON/OFF cadence matching (`onoff.py`) | 2 | high | **in progress** (20 Nov 2026): three findings confirmed with `onoff.py`'s own functions, measured in the queued blocks run; see below |
 | 12 | Candidate vetting and ranking | 2 | high | **in progress** (20 Nov 2026): five defects fixed as checks version 5, no recorded verdict changed; the ranking challenge planned; see below |
-| 13 | Instrument calibration and sensitivity | 2 | high | to do |
+| 13 | Instrument calibration and sensitivity | 2 | high | **in progress** (20 Nov 2026): calibration records used only where they apply; the coarse-channel response and band-wide sensitivity planned; see below |
 | 14 | Data acquisition and integrity | 2 | high | to do |
 | 15 | Astronomical signal coverage | 2 | medium | to do |
 | 16 | End-to-end reproducibility | 3 | critical | to do |
@@ -486,3 +486,21 @@ they are checked again under version 5 before the next ranking. Tests:
 | F12-07: a real signal in a listed band can never be unexplained | high | **agreed; by design, stated.** The band is an annotation and an indication, never a deletion; the cost is measured (0 of 1,914 planted signals in bands left unexplained at cut 30). A ranking where strong independent evidence can outweigh it is **planned** as a new version. |
 | F12-08: ranking validated against 11 weak candidates | high | **agreed; planned**: a ranking challenge on observations chosen beforehand, with precision in the first 1, 10, 100 and 1,000. |
 | F12-09: ranking scored without its OFF null | medium | **confirmed; fixed.** `ranking.context` now refuses without `off_null.json` unless a partial ranking is asked for, which says the OFF term is left out. The null is recorded for the session ranked. |
+
+## 13. Instrument calibration and sensitivity: 20 November 2026
+
+**Verdict:** the conversion from SNR to flux and EIRP is right under its
+stated assumptions (ChatGPT's own figures agree: 7.4 Jy Hz at S_in 10 and
+3.1×10¹⁴ W at 18.7 for 434.6 pc). The report used its calibration records
+for any session, which is fixed. The rest is about what the calibration
+covers, which the report states and later work extends.
+
+| Finding | Severity | Verdict and what was done |
+|---|---|---|
+| 1: the report used one setup's calibration for any session | high | **confirmed; fixed.** `report.py` took the SEFD, the completeness table, the channel response and the dropped-data record whatever the session. Each is now used only where it applies: the SEFD over its measured band (1,800 to 2,750 MHz), completeness on its own cadence (the 2017 files), the response with the product's channel width and sampling, the dropped data for its session; otherwise the flux is marked assumed (10 Jy) and no completeness thresholds are given (`tests/test_report_calibration.py`, with the real records: they apply to 2017 and not to the 2019 C-band session). The published 2017 figures are unchanged. |
+| 2: the 2017 SEFD comes from a 2019 calibrator | high | **agreed; stated.** 10.65 Jy is a reference scale from one accepted 3C295 pair (2 December 2019), not a calibration of the 2017 session; the 10 to 12.5 Jy bracket is published values, not an interval. The report's next revision says so where the EIRP figures are given. |
+| 3: completeness measured on 5 blocks (14.65 MHz) of 801.3 usable | high | **agreed; stated** in the next revision: the thresholds are measured on those blocks; band-wide sensitivity by region, on blocks chosen beforehand, is **planned**. |
+| 4: the coarse-channel response is not calibrated | high | **agreed; planned**: recovery at fixed injected power across positions in a coarse channel. |
+| 5: flux values carry no record of the SEFD assumed | medium | **agreed; planned**: a calibration manifest beside the records (SEFD, band, polarizations, formula, nominal or calibrated); the stored values stay. |
+| 6: the fine-channel response from one Voyager 1 file | medium | **agreed; stated** (reduced χ² 3.72, wings above sinc²); a second carrier is **planned**. |
+| 7: frequency dependence of the SEFD | medium | **agreed; planned**: the measured 50 MHz values (9.97 to 13.5 Jy) used where measured. |

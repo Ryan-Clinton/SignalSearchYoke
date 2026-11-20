@@ -50,6 +50,31 @@ def _crossing(rates, level):
     return pts[-1][0], "above"
 
 
+# --- which calibration records apply to a session (docs/audits.md 13) -------------------
+
+def sefd_applies(rec, lo_mhz, hi_mhz):
+    """The SEFD record covers the session's band: its 50 MHz bins span [lo, hi]."""
+    bins = (rec or {}).get("by_50_mhz") or []
+    if not bins or lo_mhz is None:
+        return False
+    a = min(b["from_mhz"] for b in bins)
+    z = max(b["from_mhz"] for b in bins) + 50
+    return a <= lo_mhz and hi_mhz <= z
+
+
+def completeness_applies(rec, target, files):
+    """The completeness record was measured on this session's cadence: its files name the target and
+    one of the session's files' MJD days (guppi_<MJD>)."""
+    paths = [str(x) for x in (rec or {}).get("cadences", [])]
+    days = {int(f["tstart_mjd"]) for f in files if f.get("tstart_mjd")}
+    return any(target in x and any(f"guppi_{d}_" in x for d in days) for x in paths)
+
+
+def response_applies(rec, width_hz, tsamp):
+    """The channel response was measured with this product's channel width and sampling."""
+    return bool(rec) and abs(rec.get("channel_hz", 0) - width_hz) < 1e-6 and abs(rec.get("tsamp_s", 0) - tsamp) < 1e-6
+
+
 def build(target, session):
     import injection
     import instrument
@@ -113,10 +138,15 @@ def build(target, session):
     usable = covered - notch - short_mhz
     t = TARGETS.get(target)
     comp = json.load(open(yoke.DATA / "measurements" / "completeness.json"))
-    cells = comp["tables"]["by_cell"]
+    # Each calibration record only where it applies: completeness measured on this session's cadence,
+    # the SEFD over this band, the response with this product's channels, the dropped data of this session.
+    comp_ok = completeness_applies(comp, target, files)
+    cells = comp["tables"]["by_cell"] if comp_ok else []
     # The flux scale: the SEFD measured on 3C295 in the same S-band setup
     # (measure.py sefd), else the 10 Jy assumed before it was.
     sefd_rec = instrument.load("sefd")
+    if not sefd_applies(sefd_rec, lo, hi):
+        sefd_rec = None
     sefd = sefd_rec["sefd_jy"] if sefd_rec else injection.SEFD_JY
     flux = lambda s: injection.flux_jy_hz(s, n_t, width_hz, tsamp, sefd)  # noqa: E731
     eirp = (lambda jy_hz, d_pc: 4 * math.pi * (d_pc * PC_M) ** 2 * jy_hz * 1e-26)  # noqa: E731
@@ -172,7 +202,9 @@ def build(target, session):
                                   for f in files if f["ra_hours"] is not None],
         "sefd_bracket_jy": [min(SEFD_BRACKET_JY[0], sefd), max(SEFD_BRACKET_JY[1], sefd)],
         "positions": _positions(files, (lo + hi) / 2 if lo else None),
-        "response": instrument.load("response"), "dropped": instrument.load("dropped"),
+        "response": (lambda r: r if response_applies(r, width_hz, tsamp) else None)(instrument.load("response")),
+        "dropped": (lambda d: d if d and d.get("session") == session else None)(instrument.load("dropped")),
+        "completeness_applies": comp_ok,
         "pipelines": (lambda x: x if x and x.get("session") == session else None)(_load("pipelines")),
         "pipelines_followup": (lambda x: x if x and x.get("session") == session else None)(
             _load("pipelines-followup")),
