@@ -132,10 +132,11 @@ def off_null(say=print):
     return record
 
 
-def context(db, session):
+def context(db, session, partial=False):
     """The session's fixed inputs: its hits (sorted frequencies), the band
     searched, the listed bands' share of it, crowding's distribution over
-    it, and the OFF null."""
+    it, and the OFF null. Without the OFF null it refuses, unless
+    `partial`: then the OFF term is left out and the context says so."""
     hits = check.session_hits(db, session)
     freqs = np.sort(np.array([h["frequency_mhz"] for h in hits]))
     blocks = [(min(b["f_lo_mhz"], b["f_hi_mhz"]), max(b["f_lo_mhz"], b["f_hi_mhz"])) for b in db.execute(
@@ -145,6 +146,9 @@ def context(db, session):
     grid = np.concatenate([np.arange(lo, hi, GRID_MHZ) for lo, hi in blocks]) if blocks else np.array([])
     counts = np.sort(np.searchsorted(freqs, grid + CROWD_MHZ, "right") - np.searchsorted(freqs, grid - CROWD_MHZ))
     null_path = _p("off_null.json")
+    if not null_path.exists() and not partial:
+        raise yoke.Refusal("NOT_FOUND", "No OFF null (data/measurements/off_null.json): run ranking.py off-null, "
+                                        "or ask for a partial ranking, which leaves the OFF term out")
     null_rec = json.loads(null_path.read_text(encoding="utf-8")) if null_path.exists() else None
     null = np.array(null_rec["values"]) if null_rec else None
     calibration = {

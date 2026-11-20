@@ -41,8 +41,10 @@ import numpy as np
 import occupancy as occupancy_mod
 import onoff
 
-VERSION = ("4 (11 Nov 2026: checks 7 and 9 take their chances from the session's measured occupancy, by drift "
-           "(occupancy.py), when the store gives it)")
+VERSION = ("5 (20 Nov 2026: check 8 leaves the candidate's own hits out of the strong zero-drift hits, which "
+           "with a - b = 1 made a*f1 - b*f2 = f by themselves; check 6 keeps the same target's other sessions apart, "
+           "as a repeat at the target, not interference; check 1 calls a look of unknown completeness or a missing "
+           "stamp not sound. No recorded verdict of version 4 changes: tools/vetting_checks.py)")
 C = 299792458.0
 GBT_LAT, GBT_LON = 38.4331, -79.8398            # degrees (north, east)
 EARTH_OMEGA, EARTH_R = 7.2921159e-5, 6.371e6    # rad/s, m
@@ -271,7 +273,7 @@ def _check(n, name, result, strength=None, **evidence):
 
 
 def vet(event, looks, target=None, others=(), session_hits=(), report_dir=None, lead=None, background=None,
-        occupancy=None):
+        occupancy=None, own_mhz=()):
     """The checks on one candidate. `event` as onoff.judge gives it (with
     `matches` and `stamps`); `looks` its cadence (LookInfo or onoff.Look);
     `target` {ra_hours, dec_deg, name}; `others` hits at other targets
@@ -283,7 +285,8 @@ def vet(event, looks, target=None, others=(), session_hits=(), report_dir=None, 
     `_recurrence_expected`; check.recurrence_background builds it);
     `occupancy` the session's measured occupancy (occupancy.load), from
     which checks 7 and 9 take their chances; without it they take the
-    uniform ones of checks version 3."""
+    uniform ones of checks version 3. `own_mhz`: the frequencies (MHz) of the
+    candidate's own hits, which check 8 does not count as other signals."""
     f, drift = event["frequency_mhz"], event["drift_hz_s"]
     l0 = looks[event.get("seed_position", 0)]
     step = l0.step
@@ -293,8 +296,11 @@ def vet(event, looks, target=None, others=(), session_hits=(), report_dir=None, 
     stamps = event.get("stamps")
     blank = int(sum((np.abs(st).sum(axis=1) == 0).sum() for st in stamps)) if stamps is not None else None
     finite = bool(np.isfinite(stamps).all()) if stamps is not None else None
-    complete = all(getattr(lk, "complete", True) for lk in looks)
-    sound = complete and finite is not False and not blank
+    # A look whose completeness is not known (None) is not taken as complete; looks that carry no
+    # completeness at all (searches judged directly, whose lists are complete or refused) count as complete.
+    states = [getattr(lk, "complete", True) for lk in looks]
+    complete = None if any(x is None for x in states) else all(states)
+    sound = complete is True and finite is True and blank == 0
     flagged = event.get("flagged_fraction")
     checks.append(_check(1, "data sanity", "sound" if sound else "not sound", None, every_look_complete=complete,
                          stamps_finite=finite, blank_stamp_spectra=blank, flagged_fraction=flagged))
@@ -327,7 +333,11 @@ def vet(event, looks, target=None, others=(), session_hits=(), report_dir=None, 
     else:
         checks.append(_check(5, "drift against the Earth's", "target position unknown", None))
 
-    # 6. recurrence at other targets and times
+    # 6. recurrence at other targets and times. A repeat in another session's look at this same target is
+    # not evidence of interference (a transmitter there would repeat too): kept apart, reported, not counted.
+    me = (target or {}).get("name")
+    same_target = [h for h in others if me and h.get("target") == me]
+    others = [h for h in others if not (me and h.get("target") == me)]
     matches_ = []
     for h in others:
         dt = (h["mjd"] - l0.tstart) * 86400
@@ -367,7 +377,8 @@ def vet(event, looks, target=None, others=(), session_hits=(), report_dir=None, 
                          strength6, matches=matches_[:20], hits_searched=len(others),
                          expected_by_chance=round(expected6, 4), chance=chance6,
                          close_at_cut=len(close_cut), expected_close_at_cut=round(expected_close, 5),
-                         chance_close=chance_close, background=how))
+                         chance_close=chance_close, background=how,
+                         same_target_hits_left_out=len(same_target)))
 
     # 7. look-alikes in the same cadence: the same drift over frequency
     nu = drift / (f * 1e6)
@@ -419,8 +430,10 @@ def vet(event, looks, target=None, others=(), session_hits=(), report_dir=None, 
 
     # 8. harmonics and intermodulation, against the session's hits
     freqs = np.array([h["frequency_mhz"] for h in session_hits]) if session_hits else np.array([])
+    own_f = {round(float(x), 9) for x in own_mhz}
     strong0 = np.array([h["frequency_mhz"] for h in session_hits
-                        if abs(h["drift_hz_s"]) < step and h["snr"] >= 20]) if session_hits else np.array([])
+                        if abs(h["drift_hz_s"]) < step and h["snr"] >= 20
+                        and round(h["frequency_mhz"], 9) not in own_f]) if session_hits else np.array([])
     lo_band = float(freqs.min()) if len(freqs) else f - 1
     hi_band = float(freqs.max()) if len(freqs) else f + 1
     trials = 200

@@ -34,7 +34,7 @@ answered it.
 | 9 | Core narrowband detection algorithm (`searching.py`) | 2 | high | **in progress** (20 Nov 2026): four findings confirmed with the search's own code, the blocks queued; see below |
 | 10 | Curved Doppler search | 2 | high | **in progress** (20 Nov 2026): the two untraced signals found, the matcher's two weaknesses being measured; see below |
 | 11 | ON/OFF cadence matching (`onoff.py`) | 2 | high | **in progress** (20 Nov 2026): three findings confirmed with `onoff.py`'s own functions, measured in the queued blocks run; see below |
-| 12 | Candidate vetting and ranking | 2 | high | to do |
+| 12 | Candidate vetting and ranking | 2 | high | **in progress** (20 Nov 2026): five defects fixed as checks version 5, no recorded verdict changed; the ranking challenge planned; see below |
 | 13 | Instrument calibration and sensitivity | 2 | high | to do |
 | 14 | Data acquisition and integrity | 2 | high | to do |
 | 15 | Astronomical signal coverage | 2 | medium | to do |
@@ -456,3 +456,25 @@ once). `onoff.py` is frozen; changes to the rules belong to a new version.
 | A11-05: an incomplete hit list does not stop a candidate | high | **confirmed; being measured** in audit 5's raised-cap reread (running). |
 | A11-06: interference changing drift between looks escapes the OFF test | high | **agreed; planned**: injected interference that changes drift, with a wider occupancy check as a flag, not a veto. |
 | A11-07: the OFF veto rate is measured at random places, not where candidates arise | medium | **agreed; planned**: null tracks matched to candidates' frequencies, drifts and crowding. |
+
+## 12. Candidate vetting and ranking: 20 November 2026
+
+**Verdict:** five of the defects are real in the code and fixed, as checks
+version 5; none had touched a recorded result. Every stored candidate was
+checked again with version 5 without writing anything, and all 11 verdicts,
+and every check's result and strength, are the same
+(`tools/vetting_checks.py`). The stored records stay as made (version 4);
+they are checked again under version 5 before the next ranking. Tests:
+`tests/test_vetting_v5.py`, each on an event the pipeline judged.
+
+| Finding | Severity | Verdict and what was done |
+|---|---|---|
+| F12-01: a repeat at the same target in another session counts as interference | high | **confirmed in the code; fixed.** Check 6 searched every other session's looks, the same target's ON looks among them. Version 5 keeps hits at the same target apart (`same_target_hits_left_out`) and does not count them: a transmitter at the target would repeat too. The store holds one session a target, so no record had one; the two "shown" recurrences are at the KIC 8462852 OFF pointings, a different target, and stand. |
+| F12-02: check 8 can make a candidate its own intermodulation product | high | **confirmed; fixed.** The strong zero-drift hits include the candidate's own, and every a·f1 − b·f2 with a − b = 1 is met by f1 = f2 = f. Version 5 leaves the candidate's own hits out (tested: "2f1+-1f2" from the candidate alone is gone). Measured on the records: one candidate (2,197.16 MHz) had own hits in the list, and its relations stand without them, from other hits; every chance stays 1.0 and every check 8 "coincidence possible". |
+| F12-03: checks go stale as the store grows | high | **agreed; planned.** Checks 6 to 9 read the store; a fingerprint of the evidence each read, and re-checking when it changes, come with the next survey runs (audit 22). |
+| F12-04: missing evidence can pass the sanity check | medium | **confirmed; fixed.** A look with no completeness record was taken as complete, and a missing stamp as sound. Version 5 calls either not sound (tested). No record was sound without stamps. |
+| F12-05: check 8's chance draws from the band between the session's lowest and highest hits | medium | **agreed; planned**: drawing from the blocks searched, and its effect on the 2016 checks. |
+| F12-06: two events can share a report | medium | **confirmed in the code; guarded.** The lead id is the frequency to 1 Hz; a later event with the same id now gets its event number added instead of replacing the other's record. No two candidate events in the store share one. |
+| F12-07: a real signal in a listed band can never be unexplained | high | **agreed; by design, stated.** The band is an annotation and an indication, never a deletion; the cost is measured (0 of 1,914 planted signals in bands left unexplained at cut 30). A ranking where strong independent evidence can outweigh it is **planned** as a new version. |
+| F12-08: ranking validated against 11 weak candidates | high | **agreed; planned**: a ranking challenge on observations chosen beforehand, with precision in the first 1, 10, 100 and 1,000. |
+| F12-09: ranking scored without its OFF null | medium | **confirmed; fixed.** `ranking.context` now refuses without `off_null.json` unless a partial ranking is asked for, which says the OFF term is left out. The null is recorded for the session ranked. |
