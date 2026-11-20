@@ -249,11 +249,18 @@ def gate_share(geo, blocks=GATE_BLOCKS, seed=GATE_SEED, say=print):
     return got / n, got, n
 
 
+# The Green Bank gate record step 12's choice was made with (data/step12/selection/gate_green_bank.json).
+GATE_BASELINE_SHA256 = "aa9dcfd43c361195c50660a752a6cbe37fa97ea6eec159ba85300b516a0f4c9a"
+
+
 def gate(geo, say=print):
     fits, reach = drift_fits(geo)
     ref_path = OUT / "gate_green_bank.json"
     want = {"geometry": GREEN_BANK_GEOMETRY, "blocks": GATE_BLOCKS, "seed": GATE_SEED, "cut": GATE_CUT}
     ref = json.loads(ref_path.read_text(encoding="utf-8")) if ref_path.exists() else None
+    if ref is not None and __import__("hashlib").sha256(ref_path.read_bytes()).hexdigest() != GATE_BASELINE_SHA256:
+        say("the cached Green Bank gate is not the one step 12's choice used: made again", flush=True)
+        ref = None
     if ref is not None and any(json.loads(json.dumps(ref.get(k))) != json.loads(json.dumps(v)) for k, v in want.items()):
         say("the cached Green Bank gate was made with another geometry, blocks, seed or cut: made again", flush=True)
         ref = None

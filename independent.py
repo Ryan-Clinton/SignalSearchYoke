@@ -301,11 +301,51 @@ def _choice():
     return json.loads(p.read_text(encoding="utf-8"))
 
 
-def made_with():
-    """What a block record is made with, written into it: the config, the code's fingerprints (one hash of
-    them all) and the DC rule the looks were read with."""
-    return {"config_sha256": load()[1], "code_sha256": _sha(json.dumps(fingerprint(), sort_keys=True).encode()),
-            "dc_bins": seti.dc_rule()}
+def code_sha():
+    """One hash of all the code's fingerprints."""
+    return _sha(json.dumps(fingerprint(), sort_keys=True).encode())
+
+
+def made_with(cfg):
+    """What a block record is made with, written into it: the config, the code (one hash of its
+    fingerprints), the DC rule the looks were read with, and the six source files' versions (the store's
+    ETag and size of each, which store.upsert_file keeps from changing under them)."""
+    db = store.connect_readonly()
+    try:
+        sources = [dict(r) for r in db.execute("SELECT url, etag, size FROM files WHERE url IN (%s) ORDER BY url"
+                                               % ",".join("?" * len(cfg["files"])), tuple(cfg["files"]))]
+    finally:
+        db.close()
+    return {"config_sha256": load()[1], "code_sha256": code_sha(), "dc_bins": seti.dc_rule(), "sources": sources}
+
+
+def manifest_hashes():
+    """{path under data/: sha256} from the newest evidence package's manifest (data/evidence)."""
+    found = sorted((yoke.DATA / "evidence").glob("ssy-evidence-*.manifest.json"), key=lambda p: p.stat().st_mtime)
+    if not found:
+        return {}
+    return {f["path"]: f["sha256"] for f in json.loads(found[-1].read_text(encoding="utf-8"))["files"]}
+
+
+def provenance_problems(folder, chosen, made, hashes=None):
+    """Block records whose provenance does not hold: one with made_with must have this run's; one without
+    (made before it was written) must be byte for byte the record an evidence package listed."""
+    hashes = manifest_hashes() if hashes is None else hashes
+    rel = folder.relative_to(yoke.DATA).as_posix()
+    bad = []
+    for b in sorted(chosen):
+        path = folder / f"block_{int(b):03d}.json"
+        if not path.exists():
+            continue
+        raw = path.read_bytes()
+        rec = json.loads(raw)
+        if "made_with" in rec:
+            if rec["made_with"] != made:
+                bad.append(f"{rel}/block_{int(b):03d}.json made with another config, code, DC rule or source")
+        elif hashes.get(f"{rel}/block_{int(b):03d}.json") != _sha(raw):
+            bad.append(f"{rel}/block_{int(b):03d}.json has no provenance and is not the record an evidence "
+                       "package listed")
+    return bad
 
 
 def measure_blocks(cfg, shard=(0, 1), count=None, deviation=None, say=print):
@@ -314,12 +354,12 @@ def measure_blocks(cfg, shard=(0, 1), count=None, deviation=None, say=print):
     if choice["config_sha256"] != load()[1] and not deviation:
         raise yoke.Refusal("INVALID_REQUEST", "The blocks were chosen under another config.")
     return matched.run(cfg["target"], count, say=say, choice={k: choice[k] for k in ("chosen", "of", "crowded_hits")},
-                       shard=shard, made_with=made_with())
+                       shard=shard, made_with=made_with(cfg))
 
 
 def curved(cfg, shard=(0, 1), count=None, deviation=None, say=print):
     frozen(cfg, deviation, "curved")
-    return curved_pass.run(cfg["target"], count=count, say=say, shard=shard)
+    return curved_pass.run(cfg["target"], count=count, say=say, shard=shard, made_with=made_with(cfg))
 
 
 # --- the verdict -----------------------------------------------------------------
@@ -434,14 +474,17 @@ def _paired(by_block, seed=2, boot=4000):
 
 
 def regression_problem():
-    """Step 12's verdict needs tools/regress_step10.py to have passed (comparable.md step 12): what is
-    wrong with its record, or None."""
+    """Step 12's verdict needs tools/regress_step10.py to have passed with the code as it is now
+    (comparable.md step 12): what is wrong with its record, or None."""
     p = yoke.DATA / "analysis" / "regress_step10.json"
     if not p.exists():
         return "the regression against step 10 (tools/regress_step10.py) has not been run"
     r = json.loads(p.read_text(encoding="utf-8"))
-    ok = r.get("passed", r.get("all_match", r.get("ok")))
-    return None if ok is True else "the regression against step 10 did not pass (data/analysis/regress_step10.json)"
+    if r.get("passed") is not True:
+        return "the regression against step 10 did not pass (data/analysis/regress_step10.json)"
+    if r.get("code_sha256") != code_sha():
+        return "the regression against step 10 passed with other code than this: run it again"
+    return None
 
 
 def verdict(cfg, deviation=None, progress=False, say=print):
@@ -450,10 +493,8 @@ def verdict(cfg, deviation=None, progress=False, say=print):
     info = frozen(cfg, deviation, "verdict")
     if STEP == 12 and not progress:
         why = regression_problem()
-        if why and not deviation:
+        if why:                         # a deviation does not excuse it: the verdict rests on it
             raise yoke.Refusal("INVALID_REQUEST", f"Step 12: {why}.")
-        if why:
-            info["problems"].append(why)
     crit = cfg["criteria"]
     cut, limit = crit["cut"], crit["rate"]
     target = cfg["target"]
@@ -474,6 +515,9 @@ def verdict(cfg, deviation=None, progress=False, say=print):
     got = _records(matched.folder(target, session))
     cgot = _records(curved_pass.folder(target, session))
     problems = completeness(cfg, choice, got, cgot, tstarts)
+    made = made_with(cfg)
+    problems += provenance_problems(matched.folder(target, session), choice["chosen"], made)
+    problems += provenance_problems(curved_pass.folder(target, session), choice["chosen"], made)
     if progress or problems:
         state = {"utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "verdict": None,
                  "chosen": len(choice["chosen"]), "problems": problems,

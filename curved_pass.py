@@ -333,7 +333,7 @@ def folder(target, session):
     return ROOT / f"{target}-{session}"
 
 
-def run(target, count=None, say=print, shard=(0, 1)):
+def run(target, count=None, say=print, shard=(0, 1), made_with=None):
     """shard (i, n): only every n-th chosen block from the i-th, so n
     processes can share the run (each block has its own seed, so the
     records do not depend on the order or the split)."""
@@ -349,6 +349,13 @@ def run(target, count=None, say=print, shard=(0, 1)):
     (base / "blocks.json").write_text(json.dumps({"chosen": chosen, "of": totals, "a_max": A_MAX, "accels": ACCELS,
                                                   "strengths": STRENGTHS, "cuts": CUTS, "seed": SEED},
                                                  indent=1), encoding="utf-8")
+    if made_with is not None:
+        other = [b for b in chosen if (base / f"block_{b:03d}.json").exists()
+                 and json.loads((base / f"block_{b:03d}.json").read_text(encoding="utf-8")).get("made_with", made_with)
+                 != made_with]
+        if other:
+            raise yoke.Refusal("INVALID_REQUEST", f"{len(other)} block record(s) made with another config, code, DC "
+                                                  f"rule or source (blocks {other[:10]}): measure them apart")
     todo_all = [b for i, b in enumerate(chosen) if i % shard[1] == shard[0]
                 and not (base / f"block_{b:03d}.json").exists()]
     todo = todo_all if count is None else todo_all[:count]
@@ -369,6 +376,8 @@ def run(target, count=None, say=print, shard=(0, 1)):
             rec = block(k, chosen[k], slices, urls, np.random.default_rng([SEED, k]))
             del slices
             rec["times"]["block_s"] = round(time.monotonic() - started, 1)
+            if made_with is not None:
+                rec["made_with"] = made_with
             (base / f"block_{k:03d}.json").write_text(json.dumps(rec), encoding="utf-8")
             f10 = rec["false"]["10"]
             say(f"  block {k} ({chosen[k]}): false at cut 10 " + ", ".join(

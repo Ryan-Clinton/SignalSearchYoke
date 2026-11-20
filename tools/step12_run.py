@@ -49,6 +49,8 @@ def deviation_covers_all():
     cfg, _ = independent.load()
     now = independent.fingerprint()
     changed = {k for k in set(now) | set(cfg["code"]) if now.get(k) != cfg["code"].get(k)}
+    if independent.load()[1] != independent.FROZEN_CONFIGS[12][1]:
+        changed.add("config/step12.json")          # a changed config is never the change DEVIATION explains
     return all(k in DEVIATION_COVERS and now.get(k) == DEVIATION_COVERS[k] for k in changed), sorted(changed)
 
 

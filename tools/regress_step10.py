@@ -85,8 +85,9 @@ def main():
         print(f"block {k} ({chosen[k]}): {'identical' if not diffs else f'{len(diffs)} difference(s)'}", flush=True)
         for d in diffs:
             print("  " + d, flush=True)
+    import independent
     out = {"target": TARGET, "session": session, "blocks": results,
-           "passed": all(r["identical"] for r in results), "kind": "measured"}
+           "passed": all(r["identical"] for r in results), "code_sha256": independent.code_sha(), "kind": "measured"}
     yoke.write(OUT, out, indent=1, stamp=True)
     print(f"regression against step 10: {'passed' if out['passed'] else 'FAILED'}", flush=True)
     return 0           # the verdict is in the record; a failure is a result, not a crash to retry

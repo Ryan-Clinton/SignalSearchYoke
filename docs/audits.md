@@ -655,6 +655,16 @@ commits), and each step's two recorded deviations stand as published.
 | F17-06: the regression was required only by the runner | medium | **confirmed; fixed.** Step 12's verdict itself refuses unless `data/analysis/regress_step10.json` passed (tested). Widening the regression beyond two blocks is **planned**. |
 | F17-07: the selection gate trusted its cached baseline | medium | **confirmed; fixed.** A cached Green Bank gate made with another geometry, blocks, seed or cut is made again, and each gate result records the baseline record's SHA-256. |
 
+### 17, re-audited at 1829094, 20 November 2026
+
+| Finding | Severity | Verdict and what was done |
+|---|---|---|
+| Records made before `made_with` were taken on trust, and the curved pass had none | high | **confirmed; fixed.** The verdict now checks every chosen block's record in both folders: one with `made_with` must have this run's, one without must be byte for byte the record the newest evidence package listed (`independent.provenance_problems`, tested both ways). All 370 records of steps 10 and 12 (121 and 64 blocks, measured and curved) match their package. `curved_pass.run` now writes and checks `made_with` as `matched.run` does. |
+| The runner's standing deviation could cover a changed config | high | **confirmed; fixed.** A config that differs from the frozen one is never the change it explains. |
+| The source files' versions were not in the block provenance | high | **confirmed; fixed.** `made_with` holds the six files' ETags and sizes as the store keeps them (a changed file is refused there, audit 14). |
+| A regression that passed with other code counted | medium | **confirmed; fixed.** The regression records the code's hash and the step 12 verdict refuses one made with other code, or none, with or without a deviation (tested). |
+| The gate's baseline checked by its parameters, not its contents | medium | **confirmed; fixed.** The baseline record's SHA-256 is pinned in code; any other content is made again. |
+
 ## 18. The report and its claims: 20 November 2026
 
 **Verdict:** the report's numbers match the results pages and Figure 1's 165

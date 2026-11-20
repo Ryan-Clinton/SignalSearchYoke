@@ -46,9 +46,28 @@ class Freeze(unittest.TestCase):
         self.assertIn("not been run", independent.regression_problem())
         p.write_text(json.dumps({"passed": False}), encoding="utf-8")
         self.assertIn("did not pass", independent.regression_problem())
-        p.write_text(json.dumps({"passed": True}), encoding="utf-8")
+        p.write_text(json.dumps({"passed": True, "code_sha256": "stale"}), encoding="utf-8")
+        self.assertIn("other code", independent.regression_problem())          # passed, but with other code
+        p.write_text(json.dumps({"passed": True, "code_sha256": independent.code_sha()}), encoding="utf-8")
         self.assertIsNone(independent.regression_problem())
         p.unlink()
+
+    def test_block_provenance(self):
+        import hashlib
+        folder = yoke.DATA / "matched" / "T-S"
+        folder.mkdir(parents=True, exist_ok=True)
+        made = {"config_sha256": "c", "code_sha256": "k", "dc_bins": "coarse channel", "sources": []}
+        legacy = json.dumps({"block": 1}).encode()
+        (folder / "block_001.json").write_bytes(legacy)
+        (folder / "block_002.json").write_text(json.dumps({"block": 2, "made_with": made}), encoding="utf-8")
+        (folder / "block_003.json").write_text(json.dumps({"block": 3, "made_with": dict(made, dc_bins="storage chunk")}),
+                                               encoding="utf-8")
+        listed = {"matched/T-S/block_001.json": hashlib.sha256(legacy).hexdigest()}
+        bad = independent.provenance_problems(folder, [1, 2, 3], made, listed)
+        self.assertEqual(len(bad), 1)
+        self.assertIn("block_003", bad[0])                                     # made with another DC rule
+        (folder / "block_001.json").write_bytes(json.dumps({"block": 1, "x": 0}).encode())   # changed since packaged
+        self.assertEqual(len(independent.provenance_problems(folder, [1, 2], made, listed)), 1)
 
 
 if __name__ == "__main__":
