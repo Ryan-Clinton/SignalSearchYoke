@@ -593,3 +593,31 @@ not planted are untested, not missed.
 | A15-05: the curved pass needs two straight hits | high | **agreed**; audit 10 measures it (CD-03). |
 | A15-06: eccentric orbits, hopping, wandering | medium | **measured in part** (hopping and wandering, above); eccentric orbits **planned**. |
 | A15-07: one table of what is covered | medium | **built** here; it goes into the report's next revision. |
+
+### 15, re-audited at 2c065ef, 20 November 2026
+
+| Finding | Severity | Verdict and what was done |
+|---|---|---|
+| R15-01: hops and wide signals were looked for on the straight track | high | **confirmed; fixed.** Each signal is now measured where it was planted in each ON look (`coverage_checks.true_x`: the hop, the wide signal's centre), tested. |
+| R15-02: a candidate within 200 Hz counted as finding the signal | high | **confirmed; fixed.** A signal is found only when one kept candidate holds a hit at its true place in all three ON looks (tested: a candidate 60 channels off, or in two ON looks, does not count). The straight-track recovery is kept apart as the published standard. |
+| R15-03: too small, and Wilson's interval assumes independent signals | medium | **agreed; enlarged and labelled.** Five cadences, random places, drifts ±0.3 and ±2 Hz/s (60 signals a cell, 30 a drift); each cell's count by cadence is recorded; still synthetic noise, so exploratory. |
+| R15-04: the walk and wide models are narrow | medium | **agreed.** A wide walk (a channel a spectrum) is added; the wide signal is described as 16 adjacent tones. |
+| R15-05: no tests | medium | **built**: `tests/test_coverage_checks.py`. |
+
+The corrected measurement, signals found on their true places in all three
+ON looks, of 30 at each drift (±0.3 Hz/s / ±2 Hz/s):
+
+| kind | S_in 30 | S_in 60 | S_in 120 |
+|---|---|---|---|
+| continuous | 29 / 0 | 30 / 29 | 30 / 29 |
+| on for half of each ON look | 0 / 0 | 22 / 0 | 26 / 20 |
+| wandering 0.5 Hz a spectrum | 27 / 0 | 28 / 28 | 27 / 29 |
+| wandering a channel a spectrum | 0 / 0 | 1 / 11 | 2 / 11 |
+| 16 channels wide | 0 / 0 | 0 / 19 | 3 / 29 |
+
+On for a quarter of each look: 1 of 60 at S_in 60 and 15 at 120. Missing
+from one ON look: none. Hopping 100 Hz between looks: hit in every ON look
+for 60 of 60 at S_in 120, but never joined into a candidate (the cadence
+test matches within its tolerance by design). A wide signal is never
+recovered on a narrowband track; found on its true places it is, at 2 Hz/s,
+where its power crosses channels anyway.
