@@ -1,12 +1,12 @@
 # Comparing radio-signal searches on Breakthrough Listen data
 
-Ryan Clinton. Version 1.5, 2026-11-19.
+Ryan Clinton. Version 1.6, 2026-11-20.
 
 ## Summary
 
-I compared a narrowband radio-signal search of my own (SignalSearchYoke) with two published pipelines, turboSETI and BLISS, on recorded Breakthrough Listen observations from the Green Bank Telescope, by planting 13,310 synthetic signals in the data and counting how many each pipeline found, and how many false candidates each raised, on the same blocks.
+I compared a narrowband radio-signal search of my own (SignalSearchYoke) with two published pipelines, turboSETI and BLISS, on recorded Breakthrough Listen observations from the Green Bank Telescope, by planting synthetic signals in the data (13,310 in the 2017 session, 13,310 in the 2016 one, 7,040 in the 2019 one) and counting how many each pipeline found, and how many false candidates each raised, on the same blocks.
 
-On a 2017 session (KIC8462852), at the cut where each pipeline's measured false-candidate rate is at most 0.1 a block (a point estimate; each 95% interval reaches above it, and the cuts were chosen on the blocks they were judged on), this search found 4,520 of the 13,310 signals in all three ON looks, turboSETI 442. BLISS as published never reached that false-candidate rate at any cut tested. BLISS's own hits put through this search's ON/OFF test did reach it, and found 4,048.
+On a 2017 session (KIC8462852), at the cut where each pipeline's measured false-candidate rate is at most 0.1 a block (a point estimate; each 95% interval reaches above it, and the cuts were chosen on the blocks they were judged on), this search found 4,520 of the 13,310 signals in all three ON looks, turboSETI 442. BLISS run as its own pipeline (its GPU hits and its event stage) never reached that false-candidate rate at any cut tested. BLISS's own hits put through this search's ON/OFF test did reach it, and found 4,048.
 
 On a second session, fixed in advance (HIP17147, 2016), this search again found far more than turboSETI (4,337 against 417), but both pipelines **failed** the false-candidate limit set beforehand: 39.1 and 1.27 a block against 0.1, almost all of this search's in known satellite bands. That failure is part of the result.
 
@@ -22,7 +22,7 @@ Searches for narrowband technosignatures look for a tone drifting steadily in fr
 
 - **Data.** Breakthrough Listen's high-resolution spectra (about 2.8 Hz channels) of a whole ON-OFF cadence: three ON looks at the target, each followed by an OFF look elsewhere. In 2017 and 2016, 121 blocks of frequency of each session, 61 crowded with interference and 60 clean, chosen at random within each class; in 2019 all of the session's 64. The false-candidate rates weight each class by its share of the session's blocks; the recovery counts are of the blocks measured, and are also given weighted to the session below.
 - **Planted signals.** 110 a block, in the ON looks only, across 11 strengths (S_in 10 to 400, the signal-to-noise a search would give collecting all its power in ideal noise) and five drift bins up to 4 Hz/s. Each look's signal is scaled to that look's own measured noise, so a signal has the same S_in in every ON look: this measures recovery at a controlled signal-to-noise, not of a transmitter of fixed flux whose signal-to-noise would vary from look to look.
-- **The planting, checked** (separately, both pipelines, recovery at SNR 10 and 30): a tone added to synthetic voltages before they are squared, as a receiver sees it, against power added to the spectra (at most 2 of 880 signals apart); finer sampling of the drift within a spectrum (the same recoveries); signals crossing the DC bin planted before its blanking, as the sky's would be, against after (at most 2 of 96; only 8 planted signals in all three sessions cross a DC bin); and one flux in all three ON looks against one S_in, on real blocks (at most 2 of 880). None changes either pipeline's recovery, or one against the other. Flux in Jy Hz on the results pages is nominal, from an assumed SEFD of 10 Jy measured at L and S band only.
+- **The planting, checked** (separately, both pipelines, recovery at SNR 10 and 30): a tone added to synthetic voltages before they are squared, as a receiver sees it, against power added to the spectra (at most 2 of 880 signals apart); finer sampling of the drift within a spectrum (the same recoveries); signals crossing the DC bin planted before its blanking, as the sky's would be, against after (at most 2 of 96; only 8 planted signals in all three sessions cross a DC bin); and one flux in all three ON looks against one S_in, on real blocks (at most 2 of 880). The differences are a few signals at most and do not change one pipeline against the other. Flux in Jy Hz on the results pages is nominal, from an assumed SEFD of 10 Jy measured at L and S band only.
 - **Found** means detected in all three ON looks within ±6 Hz and ±0.05 Hz/s of the planted signal (the tolerances of Margot et al. 2023).
 - **False candidates** are counted by running each pipeline with the wrong looks called ON: the 19 other ways of choosing three of the six looks. Anything a pipeline keeps under a wrong choice is interference or noise. Candidates sharing a hit count once. This is a wrong-cadence control rate, not a calibrated false-alarm probability: the telescope's pointings were not assigned at random, the looks share their interference, and a wrong choice's looks are put in ON, OFF order, not in time order. How well it predicts false candidates in real cadences has not been measured.
 - **Matched comparison.** Each pipeline's cut (its signal-to-noise threshold) is set where it gives at most 0.1 false candidates a block, and recovery is compared there.
@@ -36,7 +36,7 @@ Searches for narrowband technosignatures look for a tone drifting steadily in fr
 | this search | 30 | 0.068 (0.023 to 0.13) | 4,520 |
 | turboSETI | 30 | 0.049 (0 to 0.13) | 442 |
 | BLISS's hits, this search's ON/OFF test | 30 | 0.052 (0.0065 to 0.12) | 4,048 |
-| BLISS as published | none reaches 0.1 | lowest 4.54 (at 100) | — |
+| BLISS, its own pipeline | none reaches 0.1 | lowest 4.54 (at 100) | — |
 
 At its tested cut, each matched pipeline's measured false rate is at or below 0.1 a block. These are point estimates, and they differ; each 95% interval reaches above 0.1, and the cuts were chosen on the same blocks they are judged on. The pipelines are matched on the measured rate against the target, not shown to lie below it. On the same 13,310 signals, this search and BLISS's hits through its test both found 3,829; this search alone 691, BLISS's hits alone 219. The difference, +0.035 of the signals (0.0261 to 0.0456, block bootstrap, 4000 draws, seed 2), holds for this session, these cuts and this signal grid.
 
@@ -44,7 +44,7 @@ At its tested cut, each matched pipeline's measured false rate is at or below 0.
 
 *Figure 1. Share of the planted signals found in all three ON looks at each pipeline's matched cut, against signal strength (the eleven steps of the grid, evenly spaced), one panel per drift range (242 signals at each point). At each pipeline's cut its measured false rate is at or below 0.1 a block; the rates differ, and their 95% intervals reach above 0.1 (the table above).*
 
-**Why BLISS as published has no matched cut.** On the two blocks that carry most of its false candidates, one list of BLISS's hits at S/N 30 was given to each ON/OFF logic in the same run:
+**Why BLISS's own pipeline has no matched cut.** On the two blocks that carry most of its false candidates, one list of BLISS's hits at S/N 30 was given to each ON/OFF logic in the same run:
 
 False candidates at S/N 30 (distinct, over the 19 wrong choices):
 
@@ -116,9 +116,19 @@ At the lower cuts the ratio falls (about ten times as many found at 30 each, abo
 - The 2017 session's cuts were chosen on the same blocks they were judged on. The 2016 and 2019 sessions were fixed in advance: in 2016 both false rates failed, in a band crowded with satellite signals; in 2019 every criterion held, in a quiet band where the rate's interval still reaches above the limit.
 - BLISS's hits through this search's test, and the same-hit control, are combinations of two pipelines, designed after the main result was seen.
 - Of the planted signals BLISS finds at S/N 10 and this search raises no candidate for, 28 were traced stage by stage. 17 are found strongly in all three ON looks and then called interference because one OFF look reaches S/N 6 to 8 along the track with no OFF transmission identified: low-level OFF evidence consistent with noise (0.66% of 10,000 random unplanted tracks reach 6; that is the test's rate on noise, not a loss rate for these signals, which were chosen because BLISS found them). 2 meet something real in an OFF look, 7 are missed by the detector (mostly in crowded blocks) and 2 are too faint. The threshold was set beforehand and is not moved for this.
-- The 8 signals the detector gave no matching hit for were measured through its stages, the detector unchanged; the first cause in each: 6 the hit cap, 2 found, but measured outside the tolerances. The hit cap is the 2,000 hits kept a look: in crowded looks the signal, at S/N 12.3 to 40.6, lies below that many stronger hits, and a cap of 5,000 to 20,000 finds it. Those measured outside the tolerances drift fast (2.0 and 1.6 Hz/s); their measured drift was 0.05 Hz/s off, just outside the tolerance. Neither is changed here: the detector stays as step 10 ran it.
+- The 8 signals the detector gave no matching hit for were measured through its stages, the detector unchanged; the first failure seen in each: 6 the hit cap, 2 found, but measured outside the tolerances. The hit cap is the 2,000 hits kept a look: in crowded looks the signal, at S/N 12.3 to 40.6, lies below that many stronger hits, and a cap of 5,000 to 20,000 finds it. Those measured outside the tolerances drift fast (2.0 and 1.6 Hz/s); their measured drift was 0.05 Hz/s off, just outside the tolerance. Neither is changed here: the detector stays as step 10 ran it.
 - The frozen recovery criterion compares two Wilson intervals, which treat the planted signals as independent; signals share their block and their session. The paired difference with a bootstrap over blocks (above) is the better measure, and it is supplementary. All the blocks of a session come from one observation, so none of these intervals speaks for other sessions.
 - BLISS's hits through this search's test, supplementary in the third session, could not be run there: the step that hands BLISS each block expects a slice width these blocks do not have, and the frozen rule records that rather than adapting it.
+
+## What the code audits found that bears on these results
+
+A line-by-line audit of the code (docs/audits.md in the repository) found the following. None changes a frozen verdict; each is stated here so the numbers above are read as what they are.
+
+- **The 2016 reads' DC bins.** The 2016 session's coarse channels are 1,033,216 channels wide and its files' storage chunks 2^20; the reads blanked the receiver's DC spike at each chunk's middle, so its real DC spikes (tens of thousands of times the noise) stayed in and one ordinary channel a chunk was smoothed. None of the 4,016 false events at S/N 30 over the 19 wrong choices lies within 50 Hz of a DC channel (a spike in every look is vetoed by its OFF looks); step 10's records and verdict stand as made, and the same blocks read with the corrected rule are being compared. 2017 and 2019 are not affected.
+- **False candidates a block** count the distinct candidates over all 19 wrong choices of ON looks together, not what one cadence would give; the union can be up to about 19 times one choice's rate. It is a control for comparing pipelines on the same blocks, not a calibrated false-alarm rate.
+- **The 95% intervals** are nominal block-bootstrap intervals. Where interference correlates between blocks they hold the true rate far less often than 95% (about 41% in a simulation like 2016); recovery intervals with whole windows of neighbouring blocks resampled are the ones to quote there.
+- **turboSETI** as run (FindDoppler's defaults) never searches zero drift, and at fast drifts its reported frequency and drift can fall outside the ±6 Hz, ±0.05 Hz/s tolerances: of 60 strong signals at 2 to 4 Hz/s it detected all, and the tolerances credit 5. The comparison is of whole pipelines, so detection, event association, the reported frequency and drift, and the matching rule all enter the difference.
+- **BLISS** was run from its source at commit 2b98afe on its GPU, with its event stage ported line for line (and checked against the original on the hits it was given, not under the whole production chain). Its event stage keeps events with hits in two of the three ON looks; counting only three-ON events, its rate is still far above 0.1 a block at every cut (1.6 at S/N 100).
 
 ## Data and code availability
 
@@ -128,6 +138,10 @@ The observations are from the Breakthrough Listen Open Data Archive (Lebofsky et
 
 - Lebofsky, M. et al. 2019, PASP 131, 124505: The Breakthrough Listen search for intelligent life: public data, formats, reduction and archiving.
 - Margot, J.-L. et al. 2023, AJ 166, 206: A search for technosignatures around 11,680 stars with the Green Bank Telescope at 1.15-1.73 GHz. doi:10.3847/1538-3881/acfda4 (the ±6 Hz, ±0.05 Hz/s tolerances).
+- Enriquez, J. E. et al. 2017, ApJ 849, 104: The Breakthrough Listen search for intelligent life: 1.1-1.9 GHz observations of 692 nearby stars (turboSETI's method).
+- Isaacson, H. et al. 2017, PASP 129, 054501: The Breakthrough Listen search for intelligent life: target selection of nearby stars and galaxies (the list step 12 chose from).
+- turboSETI, version 2.3.2: https://github.com/UCBerkeleySETI/turbo_seti
+- BLISS, commit 2b98afe: https://github.com/UCBerkeleySETI/bliss
 
 ## Revisions
 
@@ -138,18 +152,19 @@ The observations are from the Breakthrough Listen Open Data Archive (Lebofsky et
 - 1.3 (2026-11-19): recovery at every tested cut for all three sessions, with the paired difference and blocks resampled in runs; step 12 described as meeting its criteria at the point estimate; what the injections, the false-candidate control and the comparison of whole pipelines do and do not measure.
 - 1.4 (2026-11-19): recovery weighted to each session's share of crowded and clean blocks beside the sample's; the neighbouring-block check made over consecutive blocks of the session; the matched cut by one rule throughout; the blocks of each session stated.
 - 1.5 (2026-11-19): checks of the planted signals: a tone in the voltages, finer sampling, the DC bin and a fixed flux, none of which moves recovery.
+- 1.6 (2026-11-20): what the code audits found, stated where it bears on the results: the 2016 reads' DC bins, the false-candidate count and its intervals, turboSETI's zero drift and fast-drift reporting, how BLISS was run; the planted signals counted per session; the injection checks' small differences stated as such; references completed.
 
 ## Records this version was written from
 
-- data/measurements/matched-bliss.json: written 2026-11-18T13:42:14Z, commit 5fbaa17
+- data/measurements/matched-bliss.json: written 2026-11-20T05:07:08Z, commit c6388b4
 - data/measurements/step10.json: written 2026-11-14T09:41:25Z, commit de48e39
 - data/measurements/step12.json: written 2026-11-19T09:20:07Z, commit f161e25
 - bliss_control/block_035.json: finished 2026-11-18T15:20:01Z
 - bliss_control/block_129.json: finished 2026-11-18T15:37:02Z
 - data/analysis/operating_points.json: written 2026-11-19T11:43:06Z, commit 21a919e
 - data/analysis/injection_voltage.json: written 2026-11-19T13:26:48Z, commit 4968719
-- data/analysis/injection_substeps.json: written 2026-11-19T12:14:38Z, commit 01a1d9e
-- data/analysis/injection_dc.json: written 2026-11-19T13:57:09Z, commit 4968719
+- data/analysis/injection_substeps.json: written 2026-11-20T01:58:16Z, commit 782bf3c
+- data/analysis/injection_dc.json: written 2026-11-20T02:28:09Z, commit 03f5836
 - data/analysis/injection_flux.json: written 2026-11-19T14:48:25Z, commit 4968719
 - data/analysis/bliss_only/trace_summary.json: written 2026-11-19T00:54:45Z, commit 2b1b22b
 - data/analysis/bliss_only/detector_misses.json: written 2026-11-19T02:28:46Z, commit 3fd7837

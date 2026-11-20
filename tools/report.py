@@ -21,23 +21,27 @@ ROOT = Path(__file__).resolve().parents[1]
 DATA = Path(os.environ.get("SSY_DATA") or ROOT / "data")
 OUT = ROOT / "docs" / "report" / "report.md"
 
-VERSION = "1.5"
-DATE = "2026-11-19"
+VERSION = "1.6"
+DATE = "2026-11-20"
 REVISIONS = (("0.1", "2026-11-18", "first draft."),
-             ("1.0", DATE, "first release: the signals BLISS finds and this search misses traced stage by "
+             ("1.0", "2026-11-19", "first release: the signals BLISS finds and this search misses traced stage by "
                          "stage, and the detector's misses measured."),
-             ("1.1", DATE, "the code's repository, now public, linked."),
-             ("1.2", DATE, "the third session, chosen and fixed in advance (NGC 6946 at C band): every "
+             ("1.1", "2026-11-19", "the code's repository, now public, linked."),
+             ("1.2", "2026-11-19", "the third session, chosen and fixed in advance (NGC 6946 at C band): every "
                            "criterion held."),
-             ("1.3", DATE, "recovery at every tested cut for all three sessions, with the paired difference "
+             ("1.3", "2026-11-19", "recovery at every tested cut for all three sessions, with the paired difference "
                            "and blocks resampled in runs; step 12 described as meeting its criteria at the point "
                            "estimate; what the injections, the false-candidate control and the comparison of "
                            "whole pipelines do and do not measure."),
-             ("1.4", DATE, "recovery weighted to each session's share of crowded and clean blocks beside the "
+             ("1.4", "2026-11-19", "recovery weighted to each session's share of crowded and clean blocks beside the "
                            "sample's; the neighbouring-block check made over consecutive blocks of the session; "
                            "the matched cut by one rule throughout; the blocks of each session stated."),
-             ("1.5", DATE, "checks of the planted signals: a tone in the voltages, finer sampling, the DC bin and "
-                           "a fixed flux, none of which moves recovery."))
+             ("1.5", "2026-11-19", "checks of the planted signals: a tone in the voltages, finer sampling, the DC "
+                                   "bin and a fixed flux, none of which moves recovery."),
+             ("1.6", DATE, "what the code audits found, stated where it bears on the results: the 2016 reads' DC "
+                           "bins, the false-candidate count and its intervals, turboSETI's zero drift and fast-"
+                           "drift reporting, how BLISS was run; the planted signals counted per session; the "
+                           "injection checks' small differences stated as such; references completed."))
 
 
 def load(path):
@@ -263,15 +267,18 @@ def main():
     w("")
     w(f"I compared a narrowband radio-signal search of my own (SignalSearchYoke) with two published "
       f"pipelines, turboSETI and BLISS, on recorded Breakthrough Listen observations from the Green Bank "
-      f"Telescope, by planting {n(planted)} synthetic signals in the data and counting how many each "
-      f"pipeline found, and how many false candidates each raised, on the same blocks.")
+      f"Telescope, by planting synthetic signals in the data ({n(planted)} in the 2017 session, "
+      f"{n(s10['recovery_three_looks']['ours']['of'])} in the 2016 one"
+      + (f", {n(s12['recovery_three_looks']['ours']['of'])} in the 2019 one" if s12 else "")
+      + ") and counting how many each pipeline found, and how many false candidates each raised, on the same "
+      "blocks.")
     w("")
     w(f"On a 2017 session ({b['target']}), at the cut where each pipeline's measured false-candidate rate is "
       f"at most {rate} a block (a point estimate; {'each' if over == 3 else f'{over} of the three'} 95% "
       f"interval{'s' if over not in (1, 3) else ''} reach{'es' if over in (1, 3) else ''} above it, and the cuts were chosen "
       f"on the blocks they were judged on), this search found {n(tot['ours'])} of the {n(planted)} signals in all three ON looks, turboSETI "
-      f"{n(tot['turboseti'])}. BLISS as published never reached that false-candidate rate at any cut "
-      f"tested. BLISS's own hits put through this search's ON/OFF test did reach it, and found "
+      f"{n(tot['turboseti'])}. BLISS run as its own pipeline (its GPU hits and its event stage) never "
+      f"reached that false-candidate rate at any cut tested. BLISS's own hits put through this search's ON/OFF test did reach it, and found "
       f"{n(tot['bliss_ours'])}.")
     w("")
     w(f"On a second session, fixed in advance ({s10['target']}, 2016), this search again found far more "
@@ -338,8 +345,8 @@ def main():
           f"blanking, as the sky's would be, against after (at most {mv['dc'][0]} of {n(mv['dc'][1])}; only "
           f"{sum(c['crossing_dc_in_an_on_look'] for c in inj['dc']['census'].values())} planted signals in all "
           "three sessions cross a DC bin); and one flux in all three ON looks against one S_in, on real blocks "
-          f"(at most {mv['flux'][0]} of {n(mv['flux'][1])}). None changes either pipeline's recovery, or one "
-          "against the other. Flux in Jy Hz on the results pages is nominal, from an assumed SEFD of 10 Jy "
+          f"(at most {mv['flux'][0]} of {n(mv['flux'][1])}). The differences are a "
+          "few signals at most and do not change one pipeline against the other. Flux in Jy Hz on the results pages is nominal, from an assumed SEFD of 10 Jy "
           "measured at L and S band only.")
     w(f"- **Found** means detected in all three ON looks within ±{m['tol_hz']:g} Hz and ±{m['tol_drift']:g} Hz/s "
       "of the planted signal (the tolerances of Margot et al. 2023).")
@@ -372,7 +379,7 @@ def main():
       f"{n(tot['turboseti'])} |")
     w(f"| BLISS's hits, this search's ON/OFF test | {at['bliss_ours']} | {hyb_r['per_block']:.2g} "
       f"({iv(hyb_r['interval'], 2)}) | {n(tot['bliss_ours'])} |")
-    w(f"| BLISS as published | none reaches {rate} | lowest {bl_min['per_block']:.3g} (at {bl_min_cut}) | — |")
+    w(f"| BLISS, its own pipeline | none reaches {rate} | lowest {bl_min['per_block']:.3g} (at {bl_min_cut}) | — |")
     w("")
     w(f"At its tested cut, each matched pipeline's measured false rate is at or below {rate} a block. These "
       f"are point estimates, and they differ; {'each 95% interval reaches' if over == 3 else f'{over} of the three 95% intervals reach'} "
@@ -394,7 +401,7 @@ def main():
       f"{rate} (the table above).*")
     w("")
     if control:
-        w("**Why BLISS as published has no matched cut.** On the two blocks that carry most of its false "
+        w("**Why BLISS's own pipeline has no matched cut.** On the two blocks that carry most of its false "
           "candidates, one list of BLISS's hits at S/N 30 was given to each ON/OFF logic in the same run:")
         w("")
         cols = (("BLISS's event stage", "BLISS's event stage, same hits"),
@@ -557,6 +564,32 @@ def main():
           "there: the step that hands BLISS each block expects a slice width these blocks do not have, and the "
           "frozen rule records that rather than adapting it.")
     w("")
+    w("## What the code audits found that bears on these results")
+    w("")
+    w("A line-by-line audit of the code (docs/audits.md in the repository) found the following. None changes "
+      "a frozen verdict; each is stated here so the numbers above are read as what they are.")
+    w("")
+    w("- **The 2016 reads' DC bins.** The 2016 session's coarse channels are 1,033,216 channels wide and its "
+      "files' storage chunks 2^20; the reads blanked the receiver's DC spike at each chunk's middle, so its real "
+      "DC spikes (tens of thousands of times the noise) stayed in and one ordinary channel a chunk was smoothed. "
+      "None of the 4,016 false events at S/N 30 over the 19 wrong choices lies within 50 Hz of a DC channel (a "
+      "spike in every look is vetoed by its OFF looks); step 10's records and verdict stand as made, and the "
+      "same blocks read with the corrected rule are being compared. 2017 and 2019 are not affected.")
+    w("- **False candidates a block** count the distinct candidates over all 19 wrong choices of ON looks "
+      "together, not what one cadence would give; the union can be up to about 19 times one choice's rate. It is "
+      "a control for comparing pipelines on the same blocks, not a calibrated false-alarm rate.")
+    w("- **The 95% intervals** are nominal block-bootstrap intervals. Where interference correlates between "
+      "blocks they hold the true rate far less often than 95% (about 41% in a simulation like 2016); "
+      "recovery intervals with whole windows of neighbouring blocks resampled are the ones to quote there.")
+    w("- **turboSETI** as run (FindDoppler's defaults) never searches zero drift, and at fast drifts its reported "
+      "frequency and drift can fall outside the ±6 Hz, ±0.05 Hz/s tolerances: of 60 strong signals at 2 to "
+      "4 Hz/s it detected all, and the tolerances credit 5. The comparison is of whole pipelines, so detection, "
+      "event association, the reported frequency and drift, and the matching rule all enter the difference.")
+    w("- **BLISS** was run from its source at commit 2b98afe on its GPU, with its event stage ported line for line "
+      "(and checked against the original on the hits it was given, not under the whole production chain). Its "
+      "event stage keeps events with hits in two of the three ON looks; counting only three-ON events, its rate "
+      "is still far above 0.1 a block at every cut (1.6 at S/N 100).")
+    w("")
     w("## Data and code availability")
     w("")
     w("The observations are from the Breakthrough Listen Open Data Archive (Lebofsky et al. 2019, PASP 131, "
@@ -572,6 +605,12 @@ def main():
     w("- Margot, J.-L. et al. 2023, AJ 166, 206: A search for technosignatures around 11,680 stars with "
       "the Green Bank Telescope at 1.15-1.73 GHz. doi:10.3847/1538-3881/acfda4 (the ±6 Hz, ±0.05 Hz/s "
       "tolerances).")
+    w("- Enriquez, J. E. et al. 2017, ApJ 849, 104: The Breakthrough Listen search for intelligent life: "
+      "1.1-1.9 GHz observations of 692 nearby stars (turboSETI's method).")
+    w("- Isaacson, H. et al. 2017, PASP 129, 054501: The Breakthrough Listen search for intelligent life: "
+      "target selection of nearby stars and galaxies (the list step 12 chose from).")
+    w("- turboSETI, version 2.3.2: https://github.com/UCBerkeleySETI/turbo_seti")
+    w("- BLISS, commit 2b98afe: https://github.com/UCBerkeleySETI/bliss")
     w("")
     w("## Revisions")
     w("")

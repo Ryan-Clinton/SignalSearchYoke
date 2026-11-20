@@ -387,7 +387,7 @@ def reproduce(path, keep=None, say=print):
     with zipfile.ZipFile(path) as z:
         z.extractall(tree, [n for n in z.namelist() if n.startswith("data/")])
     data = tree / "data"
-    watched = (tree / "docs" / "results", tree / "docs" / "report", data / "measurements")
+    watched = (tree / "docs" / "results", tree / "docs" / "report", data / "measurements", data / "analysis")
     before = _snapshot(*watched)
     for p in before:                       # every output old, so what the tables write shows
         os.utime(p, (OLD, OLD))

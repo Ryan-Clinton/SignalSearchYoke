@@ -40,7 +40,7 @@ answered it.
 | 15 | Astronomical signal coverage | 2 | medium | **in progress** (20 Nov 2026): seven kinds of signal measured through the unchanged search; pulses, faster drifts and eccentric orbits planned; see below |
 | 16 | End-to-end reproducibility | 3 | critical | **in progress** (20 Nov 2026): reproduction now proves each output made again, comparisons narrowed; a fresh-machine run planned; see below |
 | 17 | Experiment freezing and scientific provenance | 3 | high | **in progress** (20 Nov 2026): frozen configs pinned, deviation history kept, block provenance and the step 12 checks enforced; see below |
-| 18 | The report and its claims | 3 | high | to do |
+| 18 | The report and its claims | 3 | high | **in progress** (20 Nov 2026): version 1.6 written with what the audits found; record checks planned; see below |
 | 19 | Public repository and release readiness | 3 | high | to do |
 | 20 | Parallel processing and performance | 4 | high | to do |
 | 21 | Database and evidence storage | 4 | medium | to do |
@@ -654,3 +654,22 @@ commits), and each step's two recorded deviations stand as published.
 | F17-05: the step 12 runner gave its deviation to any change | high | **confirmed; fixed.** It now runs only when every changed fingerprint is the one its deviation explains (`tools/turbo_curves.py` as committed in f161e25); otherwise it refuses and a deviation must be given by hand. With today's changes it refuses, as it should: step 12 is finished. |
 | F17-06: the regression was required only by the runner | medium | **confirmed; fixed.** Step 12's verdict itself refuses unless `data/analysis/regress_step10.json` passed (tested). Widening the regression beyond two blocks is **planned**. |
 | F17-07: the selection gate trusted its cached baseline | medium | **confirmed; fixed.** A cached Green Bank gate made with another geometry, blocks, seed or cut is made again, and each gate result records the baseline record's SHA-256. |
+
+## 18. The report and its claims: 20 November 2026
+
+**Verdict:** the report's numbers match the results pages and Figure 1's 165
+values check out; what had fallen behind was its reading of them. Version
+1.6 states, in a new section "What the code audits found that bears on these
+results", each finding that does, and fixes the wording points.
+
+| Finding | Severity | Verdict and what was done |
+|---|---|---|
+| F18-01: the 2016 DC bins | high | **done**: stated, with the false candidates' distance from the DC channels and the comparison running; step 10's verdict stands. |
+| F18-02: "95%" without its limit | high | **done**: called nominal block-bootstrap intervals, with the simulated 2016-like coverage (about 41%). |
+| F18-03: what the false-candidate count counts | high | **done**: the union of the 19 wrong choices, up to about 19 times one choice's rate, a control, not a false-alarm rate. |
+| F18-04: turboSETI's caveats | high | **done**: zero drift never searched, fast-drift frequency and drift outside the tolerances (60 detected, 5 credited), whole pipelines compared. |
+| F18-05: "BLISS as published" | high | **done**: "BLISS run as its own pipeline", with how it was run, the port's checking and the two-ON events. |
+| F18-06: 13,310 called the whole | medium | **done**: counted per session (13,310, 13,310 and 7,040). |
+| F18-07: "none changes" against differences of up to two | medium | **done**: "a few signals at most, not changing one pipeline against the other". |
+| F18-08: the report's records not checked against each other | medium | **agreed; planned**: a check of each record's session, provenance and counts before writing, with tests that mix records. |
+| F18-09: references and Figure 1's axis | low | **done in part**: Enriquez et al. 2017, Isaacson et al. 2017, turboSETI 2.3.2 and BLISS at 2b98afe added; the axis is described in the caption. |
