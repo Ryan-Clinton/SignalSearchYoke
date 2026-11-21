@@ -72,6 +72,18 @@ class Ledger(unittest.TestCase):
         kept.write_text("diff", encoding="utf-8")
         self.assertEqual(ledger.problems(row, self.data, ancestor=lambda c: True), [])
 
+    def test_a_checkout_changed_while_running_must_be_said(self):
+        row = dict(self.rows[0], note="")
+        p = self.data / "analysis" / "a.json"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps({"provenance": {"git_commit": "abc1234" + "0" * 33, "uncommitted_changes": False,
+                                                "code_changed_while_running": {"git_commit": "fff" + "0" * 37}}}),
+                     encoding="utf-8")
+        self.assertTrue(any("changed while it ran" in b for b in
+                            ledger.problems(row, self.data, ancestor=lambda c: True)))
+        said = dict(row, note=" (changed while running: later commits loaded nothing it used)")
+        self.assertEqual(ledger.problems(said, self.data, ancestor=lambda c: True), [])
+
 
 if __name__ == "__main__":
     unittest.main()

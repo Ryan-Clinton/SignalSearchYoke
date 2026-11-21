@@ -82,29 +82,55 @@ def main(command, work, as_json=False):
 
 # --- records -------------------------------------------------------------------
 
-def provenance(record_version=1):
-    """What made a record: the code's commit, whether any tracked file
-    (code, config, patch, environment list) differed from it and a hash of
-    how (the diff itself kept under data/provenance/diffs/, so a record made
-    with local changes can be made again exactly), the command and a hash of
-    the script it ran (which may not be committed yet), the libraries, the
-    time."""
-    diff_sha = None
+def _code_state(root):
+    """The checkout's commit, whether any tracked file differs from it, and the diff (bytes, or None)."""
     try:
-        sha = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"], capture_output=True, text=True,
+        sha = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"], capture_output=True, text=True,
                              timeout=10).stdout.strip() or None
-        changed = bool(subprocess.run(["git", "-C", str(ROOT), "status", "--porcelain", "--untracked-files=no"],
+        changed = bool(subprocess.run(["git", "-C", str(root), "status", "--porcelain", "--untracked-files=no"],
                                       capture_output=True, text=True, timeout=10).stdout.strip())
-        if changed:
-            diff = subprocess.run(["git", "-C", str(ROOT), "diff", "HEAD", "--binary"], capture_output=True,
-                                  timeout=30).stdout
-            diff_sha = hashlib.sha256(diff).hexdigest()
-            kept = DATA / "provenance" / "diffs" / f"{diff_sha}.patch"
-            if not kept.exists():
-                kept.parent.mkdir(parents=True, exist_ok=True)
-                kept.write_bytes(diff)
+        diff = (subprocess.run(["git", "-C", str(root), "diff", "HEAD", "--binary"], capture_output=True,
+                               timeout=30).stdout if changed else None)
     except (OSError, subprocess.SubprocessError):
-        sha, changed = None, None
+        return None, None, None
+    return sha, changed, diff
+
+
+def _keep_diff(diff):
+    """The diff kept under data/provenance/diffs/ by its SHA-256, which is returned."""
+    if diff is None:
+        return None
+    diff_sha = hashlib.sha256(diff).hexdigest()
+    kept = DATA / "provenance" / "diffs" / f"{diff_sha}.patch"
+    try:
+        if not kept.exists():
+            kept.parent.mkdir(parents=True, exist_ok=True)
+            kept.write_bytes(diff)
+    except OSError:
+        pass
+    return diff_sha
+
+
+# The code as this process loaded it: a long run's modules are the ones there when it started, so its records
+# name that commit and those changes, not whatever the checkout holds when each record is written.
+_STARTED = {ROOT: _code_state(ROOT)}
+
+
+def provenance(record_version=1):
+    """What made a record: the code's commit as the process started, whether any
+    tracked file (code, config, patch, environment list) differed from it and a
+    hash of how (the diff itself kept under data/provenance/diffs/, so a record
+    made with local changes can be made again exactly), the command and a hash
+    of the script it ran (which may not be committed yet), the libraries, the
+    time. If the checkout changed while the process ran, what it holds now is
+    recorded beside it (`code_changed_while_running`), since a module imported
+    late would come from there."""
+    now = _code_state(ROOT)
+    sha, changed, diff = _STARTED.get(ROOT) or now
+    diff_sha = _keep_diff(diff)
+    moved = None
+    if ROOT in _STARTED and (now[0], now[2]) != (sha, diff):
+        moved = {"git_commit": now[0], "uncommitted_changes": now[1], "uncommitted_diff_sha256": _keep_diff(now[2])}
     script = Path(sys.argv[0]) if sys.argv and sys.argv[0] else None
     try:
         where = str(script.resolve().relative_to(ROOT)).replace("\\", "/") if script else None
@@ -129,7 +155,8 @@ def provenance(record_version=1):
             "command": ([where] + [str(a) for a in sys.argv[1:]]) if where else None, "script_sha256": script_sha,
             "schema_version": SCHEMA_VERSION,
             "record_version": record_version, "python": platform.python_version(), "libraries": libraries,
-            "created_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
+            "created_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            **({"code_changed_while_running": moved} if moved else {})}
 
 
 def remove_tree(path):

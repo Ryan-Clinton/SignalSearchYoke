@@ -25,21 +25,21 @@ answered it.
 |---|---|---|---|---|
 | 1 | Scientific methodology | 1 | critical | **done** (19 Nov 2026), re-audited the same day; see below |
 | 2 | Signal injection accuracy | 1 | critical | **re-audited** (20 Nov 2026): the paired reruns finished, no change to either pipeline's recovery beyond 2 signals in 880; see below |
-| 3 | turboSETI comparison fairness | 1 | critical | **re-audited** (20 Nov 2026): the experiment corrected, 16 blocks queued; see below |
-| 4 | False-positive methodology | 1 | critical | **in progress** (20 Nov 2026): record-based checks done, the time-order test queued; control B (four real cadences of other targets in their own order) chosen by a rule fixed first and queued; see below |
-| 5 | The 2016 interference failure | 1 | critical | **in progress** (20 Nov 2026): records analysed, blocks read again queued; see below |
-| 6 | Detector completeness and missed signals | 1 | high | **in progress** (20 Nov 2026): the cap, crowding, close pairs and offsets measured from the records and synthetic data; the 2016 false candidates shown not to be the cap's in the first two blocks read again; the strong misses and shadow refresh read again, queued; see below |
-| 7 | BLISS comparison | 1 | high | **in progress** (20 Nov 2026): provenance enforced, two-ON split measured, wider same-hit control queued; see below |
+| 3 | turboSETI comparison fairness | 1 | critical | **measured** (21 Nov 2026): the 16 blocks run; turboSETI loses most signals before its event stage, with no hit at SNR 5; the zero-drift trial changes nothing; matched operating points cannot be resolved on 8 blocks a session; see below |
+| 4 | False-positive methodology | 1 | critical | **in progress** (21 Nov 2026): record-based checks done; time order changes no wrong choice's candidates; control B (four real cadences of other targets in their own order) chosen by a rule fixed first, running; see below |
+| 5 | The 2016 interference failure | 1 | critical | **measured** (21 Nov 2026): all 23 blocks read again; the cap is not the cause (raising it removes 137 of 3,654); the OFF looks hold weak related hits under the veto; two ON hits would cut the false candidates by 86%; see below |
+| 6 | Detector completeness and missed signals | 1 | high | **in progress** (21 Nov 2026): the cap, crowding, close pairs and offsets measured; the strong 2017 misses are detected and measured outside the tolerances, which compare frequencies at the look's start; shadow refresh changes nothing that counts; see below |
+| 7 | BLISS comparison | 1 | high | **in progress** (21 Nov 2026): provenance enforced, two-ON split measured; on eight blocks chosen beforehand the same-hit control finds no large event-stage effect; see below |
 | 8 | Statistical analysis and uncertainty | 1 | high | **done** (20 Nov 2026): `tools/statistical_checks.py` on all three sessions; see below |
-| 9 | Core narrowband detection algorithm (`searching.py`) | 2 | high | **in progress** (20 Nov 2026): four findings confirmed with the search's own code, the blocks queued; see below |
-| 10 | Curved Doppler search | 2 | high | **in progress** (20 Nov 2026): the two untraced signals found, the matcher's two weaknesses being measured; see below |
-| 11 | ON/OFF cadence matching (`onoff.py`) | 2 | high | **in progress** (20 Nov 2026): three findings confirmed with `onoff.py`'s own functions, measured in the queued blocks run; see below |
+| 9 | Core narrowband detection algorithm (`searching.py`) | 2 | high | **measured** (21 Nov 2026): on 12 real blocks none of the confirmed faults changes a false candidate or a planted signal found at 30; the noise direction differs strongly in crowded 2016 looks; see below |
+| 10 | Curved Doppler search | 2 | high | **measured** (21 Nov 2026): on ten 2017 blocks first-wins and unmeasured OFF looks change nothing; the two untraced signals are recovered by the matcher, so their loss lies elsewhere; see below |
+| 11 | ON/OFF cadence matching (`onoff.py`) | 2 | high | **measured** (21 Nov 2026): no candidate with an unmeasured OFF look on 12 blocks; one-way matches are 14% of close hit pairs; see below |
 | 12 | Candidate vetting and ranking | 2 | high | **in progress** (20 Nov 2026): five defects fixed as checks version 5, no recorded verdict changed; the ranking challenge planned; see below |
 | 13 | Instrument calibration and sensitivity | 2 | high | **in progress** (20 Nov 2026): calibration records used only where they apply; the coarse-channel response and band-wide sensitivity planned; see below |
-| 14 | Data acquisition and integrity | 2 | high | **in progress** (20 Nov 2026): the 2016 DC bins found misplaced and fixed (no false candidate rested on them); refusals added; source versions planned; see below |
+| 14 | Data acquisition and integrity | 2 | high | **in progress** (21 Nov 2026): the 2016 DC bins fixed, and the two rules give identical false and found counts on eight 2016 blocks; refusals added; source versions planned; see below |
 | 15 | Astronomical signal coverage | 2 | medium | **in progress** (20 Nov 2026): seven kinds of signal measured through the unchanged search; pulses, faster drifts and eccentric orbits planned; see below |
 | 16 | End-to-end reproducibility | 3 | critical | **in progress** (20 Nov 2026): reproduction proves each output made again; step 10 replayed from a fresh clone, fresh environments and the evidence package alone, identical (it found the turboSETI pins could not be installed as written, now fixed); another machine planned; see below |
-| 17 | Experiment freezing and scientific provenance | 3 | high | **in progress** (20 Nov 2026): frozen configs pinned, deviation history kept, block provenance and the step 12 checks enforced; see below |
+| 17 | Experiment freezing and scientific provenance | 3 | high | **in progress** (21 Nov 2026): frozen configs pinned, deviation history kept, block provenance enforced; a record now names the code its process started with (two results had named a later commit); see below |
 | 18 | The report and its claims | 3 | high | **in progress** (20 Nov 2026): version 1.6 written with what the audits found; record checks planned; see below |
 | 19 | Public repository and release readiness | 3 | high | **in progress** (20 Nov 2026): documents brought into line with the code, a consistency test; the release, tag and Zenodo deposit left for Ryan's go; see below |
 | 20 | Parallel processing and performance | 4 | high | **in progress** (20 Nov 2026): every record written whole, broken records set aside; the shared scheduler planned; see below |
@@ -310,6 +310,36 @@ the 16-block results follow.
 | Block results reused whatever code made them | medium | **built**: each block's record holds a fingerprint of the code (the tools and the modules they use) and is made again when it differs. |
 | Offline tests | medium | **built**: `tests/test_turbo_checks.py` (numbering order, verified, disagreeing and unknown members, each loss stage, the scaled tolerances put back). |
 
+### 3, the 16 blocks, 21 November 2026
+
+`tools/turbo_checks.py blocks` on 16 blocks (four crowded and four clean of
+each of the 2017 and 2016 sessions, seed 12), 1,760 planted signals,
+paired signal by signal (`data/analysis/turbo_checks.json`).
+
+| Pipeline | Found at SNR 10 | Found at 30 |
+|---|---|---|
+| This search as published | 1,166 | 588 |
+| turboSETI as published | 220 | 55 |
+| turboSETI's hits through this search's cadence test | 259 | 71 |
+| This search's hits through turboSETI's event stage | 1,006 | 501 |
+| turboSETI with the zero-drift trial searched | 218 | 55 |
+
+| Finding | Severity | Verdict |
+|---|---|---|
+| Where the gap is | high | **measured: in the detector.** Swapping cadence tests moves each pipeline little (turboSETI 220 to 259; this search 1,166 to 1,006); swapping hits moves it fivefold. Of turboSETI's 1,540 losses at 10, **1,236 have no hit at SNR 5** within tolerances, 187 a matching hit only at or under the cut, 54 a hit measured outside the tolerances (all at 0.5 Hz/s or more, 41 of them at S_in 400), 49 another hit in the top-hit window (crowded blocks only; suppression suspected, not shown), 9 hits over the cut in each ON look but no event, 5 an OFF hit in the window. |
+| F3-01: the zero-drift trial | high | **measured: no effect.** With `min_drift` at −1 turboSETI finds 218 against 220 at 10 (2 found only without it, both under 0.15 Hz/s) and 55 against 55 at 30. |
+| F3-03: event members | medium | **measured: no disagreement.** Of the ON looks of every credited signal, 331 verified and 329 unknown at 10, 106 and 59 at 30; none disagrees. |
+| Searching once at the lowest cut | — | **hits the same; event rows not.** turboSETI's hits over 30 are identical whether searched at 5 and cut or searched at 30 (0 differ in any look of any block). Its event rows are not: 120 from the cut tables against 85 searched at 30, differing in 13 of 16 blocks (43 rows). The published comparison used the cut tables; which signals that moves is **not yet measured**. |
+| Tolerances scaled with drift | — | **measured.** turboSETI gains 4 signals at 10 (220 to 224), this search 123 (82 of them at 2 to 4 Hz/s) and 42 at 30. The published tolerances cost this search more than turboSETI, since turboSETI finds almost nothing at fast drift either way. |
+| find_events' deduplication | — | **measured.** This search's hits through turboSETI's event stage find 253 more signals at 10 when numbered in channel order, as turboSETI numbers its own, than strongest first (1,006 against 753). The published crossed result uses channel order. |
+| Matched operating points | high | **not resolvable on these blocks.** Step 4's rule needs a cut with at most 0.1 false candidates a block at every higher cut; with 8 blocks a session one candidate is 0.125. Neither published pipeline reaches it on either session (this search at 100: 2.6 a block in 2016; turboSETI at 100: 0.125). Only the crossed pairs reach it, in 2016. A matched comparison needs the full sessions: **planned**, with the record-based curves step 4 already has. |
+
+False candidates a block at 10 and 30, over the 19 wrong choices: 2016, this
+search 239 and 98, turboSETI 2.1 and 0.4, crossed 15.8 and 1.0 (turboSETI's
+hits) and 17.1 and 2.6 (this search's); 2017, 7.9 and 0.9, 0.4 and 0.4,
+0.8 and 0.4, 0.4 and 0.5. turboSETI's low rates go with its low recovery:
+it finds few hits, real or not.
+
 ## 4. False-positive methodology: 20 November 2026
 
 **Verdict:** the false-candidate count is a reproducible stress test of
@@ -385,6 +415,16 @@ control also tells whether that failure belongs to L-band cadences in
 their real order or to the wrong-choice stand-in. Nothing in steps 4, 10
 or 12 changes with the result.
 
+### 4, the time-order test, 21 November 2026
+
+F4-02's measurement (`tools/false_checks.py chronological`, 16 blocks):
+every wrong choice judged with its looks in time order beside the published
+ON, OFF pairs. **No choice's count or candidates differ**, at 10 or at 30
+(1,977 and 787 distinct candidates over all choices both ways; 45 and 13
+choices with any). So for this search the order of the looks does not
+change the false-candidate count. Exchangeability with the real choice
+remains control B's (running).
+
 ## 5. The 2016 interference failure: 20 November 2026
 
 **Verdict:** the failure is real and stays a failure. Its shape is now
@@ -414,6 +454,19 @@ and the records (`tools/rfi2016.py records`; the blocks read again are queued).
 | The record took its session from the block choice, which does not hold it | low | **built**: from `matched_tables.load`. |
 | Tests for the analysis | — | **built**: `tests/test_rfi2016.py`. |
 
+### 5, the blocks read again, 21 November 2026
+
+`tools/rfi2016.py reread` on all 23 blocks: the seven holding 3,654 of
+2016's false candidates at 30, eight other 2016 blocks and eight of 2017.
+Every block at OFF_MAX 6 gives its record's own false and found counts.
+
+| Finding | Severity | Verdict |
+|---|---|---|
+| A5-06: the hit cap | high | **not the cause.** With the cap at 20,000 the seven blocks keep 3,161 of 3,654 false candidates unchanged and 356 with other member hits, lose 137 (3.7%), and gain 1,180 new (1,144 in block 171, whose three raised looks were still capped): 4,697 in all. More hits make more candidates here, not fewer. |
+| Related OFF hits | high | **measured.** Of 3,709 candidates in the seven blocks, **2,464 have a hit in an OFF look within 3 kHz**, 1,514 one drifting alike; the strongest OFF evidence along their tracks has a median S/N of about 3 to 4.4 by block, under the veto (6). The OFF looks see the interference, too weakly to veto it. |
+| The OFF threshold | medium | **measured.** 2016, 15 blocks, at 30: OFF_MAX 5, 6 (published), 7, 8, 10 give 3,006, 3,701, 4,188, 4,643, 5,382 false candidates and 435, 455, 461, 465, 466 of 1,650 planted signals found. A stricter veto removes a fifth of the false candidates for 4% of the signals; no setting comes near passing. 2017 (8 blocks): 7 to 10 false, 293 to 303 found. |
+| A5-02: more ON hits, counted exactly | high | **measured** by the event that recovers each signal. 2016 at 30: one ON hit or more, 3,701 false, 455 found; two, **521 and 405**; three, 88 and 354. At 10: 8,289 / 840, 1,878 / 805, 122 / 691. 2017 at 30: 7 / 302, 4 / 284, 0 / 272. Two ON hits would cut 2016's false candidates by 86% for 11% of the signals found at 30: the measurement for a new detector version, tested on sessions chosen beforehand. |
+
 ## 6. Detector completeness and missed signals: 20 November 2026
 
 **Verdict:** the hit cap costs recovery in crowded looks and hides signals
@@ -434,6 +487,30 @@ The search is frozen: what these suggest is a new detector version.
 | A6-05: frequency and drift accuracy | medium | **measured.** Recovered signals' nearest event member is well inside the tolerances (6 Hz, 0.05 Hz/s) at every drift: 99th percentile 1.6 to 3.6 Hz and 0.011 to 0.028 Hz/s, largest 5.6 Hz and 0.038 Hz/s (2016, 2 to 4 Hz/s). Missed signals have no near miss: their nearest event is a median 25 to 33 kHz away. Two of BLISS's 8 are the exception: found at S/N 52 and 90 but 2 to 4 channels and 0.05 Hz/s off at about 2 Hz/s, just outside. At fast drift a 6 Hz tolerance is about two channels, so tolerances that grow with drift are **planned** for the comparison, not for the frozen results. |
 | A6-06: blanking | medium | **measured in part.** No other hit's blanking touched the six capped misses. The re-sum's reach after a pick (F9-01) is the related fault, measured in audit 9. |
 | A6-07: failure modes not yet seen | medium | **in part.** A non-finite sample is now refused when a look is read, not left to end its search silently (F9-04). The whole-pipeline test (audit 23) is the guard for faults between the stages. The strong 2017 misses at 2 to 4 Hz/s, traced stage by stage, are queued (`completeness_checks.py strong`), and shadow refresh on four crowded 2016 blocks after them (`shadow`). |
+
+### 6, the strong misses and shadow refresh, 21 November 2026
+
+**The strong 2017 misses** (`completeness_checks.py strong`): the 67
+signals planted at S_in 400 drifting at 2 Hz/s or more and not recovered in
+all three ON looks at 30. **59 are detected in every ON look**, but in one
+(50) or two (9) looks the hit is measured outside the tolerances: 6 to 24
+Hz off in frequency (median 9.5) and 0.03 to 0.10 Hz/s in drift (median
+0.056). The rest: 3 called interference by the cadence test, 2 with an ON
+look capped, 2 scored against an event holding a matching hit, 1 with no
+matching hit.
+
+The frequency error is the drift error times about 175 s (10th to 90th
+percentile 139 to 227 s): the measured track pivots on the true one near
+the middle of the 292 s look, and the tolerance compares frequencies at its
+start. Compared at the middle, **66 of the 68 looks are within 6 Hz** and 57
+of the 59 signals match in every look by frequency; the drift is still over
+0.05 Hz/s in 44 looks. At 2 to 4 Hz/s a signal crosses 18 to 36 channels
+within each spectrum, so its drift is measured coarsely.
+
+| Finding | Severity | Verdict |
+|---|---|---|
+| A6-08: fast strong signals counted lost were detected | high | **measured.** The recovery tables count these 59 as missed; they are detected and measured imprecisely. Recovery at 2 to 4 Hz/s is a lower bound for detection. A scoring that compares at the middle of the look, with tolerances that grow with drift (A6-05), is **planned** as a new version beside the published tables, with a planted-fault test. No frozen verdict uses this scoring. |
+| A6-07: shadow refresh | medium | **measured: no effect that counts.** On four crowded 2016 blocks (59, 150, 210, 221), refreshing the scores after shadow picks changes up to 1,142 hits in a block but the false candidates at 30 by one (733 to 732 in block 59) and the planted signals found by none. |
 
 ## 7. BLISS comparison: 20 November 2026
 
@@ -465,6 +542,19 @@ adapter.
 | The general adapter wrote into the 2017 folder; a done status blocked a retry; failures classed by a text match | medium | **built**: its records go to `bliss_general/` and its status to its own file. Each failure is recorded with a kind (`matched.failure_kind`: incompatible input from the adapter's own refusals, a timeout, or a failure to run; tested); only an incompatible input is permanent, and step 12's runner calls BLISS not possible only when every block's record says so. |
 | BL-01: the two-ON and three-ON rates do not add to the whole | low | **stated**: each is counted distinct by shared hits within its own events, so they are not a decomposition. |
 | BL-02, BL-05, the 2019 BLISS run | — | **planned**, as above; BL-06's control is queued. |
+
+### 7, the same-hit control on eight blocks, 21 November 2026
+
+BL-06's control on the eight 2017 blocks chosen beforehand (49, 79, 131,
+139, 166, 185, 221, 231): distinct false candidates at 30 over the 19 wrong
+choices, BLISS's hits at 30 through each logic. BLISS's event stage **13**;
+this search's cadence test on the same hits **18**, 18 with shadow hits from
+5; this search's test on BLISS's hits grouped at 5, **10**. The earlier runs'
+counts are repeated exactly (13 and 10). On blocks 35 and 129, chosen for
+their false candidates, the event stage gave 1,610 and 2,627 against 85 and
+205: the large difference is confined to the most crowded blocks, and on
+these eight neither logic gives many. Step 11's conclusion that the event
+stage counts far more holds for those two blocks only, as it said.
 
 ## 8. Statistical analysis and uncertainty: 20 November 2026
 
@@ -524,6 +614,19 @@ tested); `tests/test_detector_checks.py` pins each behaviour down.
 | The cache fingerprint left out code the checks use | medium | **confirmed; fixed**, in both: it now covers every module they call and what was read (the files and the block's channels). |
 | F9-03 needs the search run at each cut, not the shadow-refresh stand-in | high | **agreed; built.** Each block is also searched at cut 8 (the lowest tested) and 30 and judged at that cut, beside the one search at 10 relabelled as the comparison does: hits differing, false candidates and planted signals found. At 10 the two are the same by construction. |
 
+### 9, the blocks run, 21 November 2026
+
+`tools/detector_checks.py blocks` on 12 blocks (eight of 2017, four crowded
+of 2016), with the search's own code:
+
+| Finding | Verdict |
+|---|---|
+| F9-01: the refresh reach | **no effect on candidates.** A full-reach re-sum changes 437 of 45,456 hits (1%) and no false candidate or planted signal found at 30 (785 and 433 both ways). |
+| F9-02: noise by drift direction | **larger on real data than on noise, in crowded looks.** Over each look's noise blocks the median difference is 8% (noise alone: 3 to 13%), but in crowded 2016 looks single noise blocks differ by up to **10 times** (blocks 59 and 221). Where that happens negative drifts are scaled by the positive drift's noise. Its effect on candidates is not separated here: a new version measuring both signs is the test. |
+| F9-03: one search for every cut | **holds closely.** Searched at each cut against one search at 10 relabelled: at 30, 786 against 785 false and 433 found both ways; at 8, 2,537 against 2,553 false and 916 found both ways. |
+| F9-04: non-finite samples | **none** in the 72 looks. |
+| F9-06: rounding at the cut | **small.** Hits whose rounded SNR reaches a cut their exact value misses: 71 at 10, 7 at 30, in 12 blocks. |
+
 ## 10. Curved Doppler search: 20 November 2026
 
 **Verdict:** the two weaknesses in the matcher are real in the code, and
@@ -553,6 +656,19 @@ every hypothesis (`tools/curved_checks.py`; deduplicated first-wins it gives
 | No end-to-end case of two fits from the same hits | medium | **built in part.** On a synthetic cadence with eight curved signals, the same three ON hits reached from two pairs of ON looks give two fitted accelerations (for example −7.58 and −7.81 ×10⁻⁴ Hz/s²) and different OFF measurements, and the published matcher keeps the first (tested). A case where the veto itself flips was not found on synthetic data; the blocks run counts such sets on real data. |
 | The two signals are located, not explained | medium | **open**: the run records every hypothesis near each, in both blocks. |
 
+### 10, the blocks run, 21 November 2026
+
+`tools/curved_checks.py blocks` on ten 2017 blocks (36, 128 and eight by
+seed 12), at 30. False candidates 9 and planted signals found 548 under
+every rule: as published, any hypothesis a candidate, and one, two or all
+three OFF looks required to be measured.
+
+| Finding | Verdict |
+|---|---|
+| CD-01: first hypothesis wins | **no effect here.** Of 265 sets of planted hits, 81 were reached by more than one fit; none disagreed, and no set had an interference first hypothesis and a candidate later. The wrong choices made no curved hypotheses on these blocks. |
+| CD-02: unmeasured OFF looks | **none.** No curved candidate had an OFF look unmeasured. |
+| CD-04: the two signals | **recovered by the matcher.** Block 36's signal 61 and block 128's signal 62 are recovered under every rule, by two hits and a track, each from one hypothesis (ON looks 0 and 4, acceleration ±3.6 ×10⁻⁴ Hz/s²). So the vetting run's miss does not come from the matcher's choice among hypotheses; where it does come from is **open**. |
+
 ## 11. ON/OFF cadence matching: 20 November 2026
 
 **Verdict:** three mechanisms are confirmed with `onoff.py`'s own functions;
@@ -578,6 +694,16 @@ once). `onoff.py` is frozen; changes to the rules belong to a new version.
 | The asymmetry count could never see a backward-only pair: `onoff._close` screens on the forward distance | high | **confirmed; fixed.** Candidate pairs are now screened from both sides and both distances taken (tested with a pair within 1 only backward). |
 | The unmeasured-OFF count left out the unplanted cadence at its true choice, and was tested only on made-up events | medium | **confirmed; fixed.** The true choice's own candidates are counted too; an end-to-end test runs a cadence with one OFF look that has nothing to measure through `onoff.judge`: the tone is called a candidate and the blind OFF look is named. |
 | The weak-ON measurement is not calibrated | medium | **agreed; labelled.** It is marked exploratory (random places, not detected hits) and each rate carries its Wilson interval; 60 places on noise say only that the rate there is under about 6%. |
+
+### 11, the blocks run, 21 November 2026
+
+Measured in the same 12 blocks as audit 9:
+
+| Finding | Verdict |
+|---|---|
+| A11-01: unmeasured OFF looks | **none.** Of 808 candidates of the wrong choices, 524 planted and 52 of the true choice unplanted, none had an OFF look unmeasured. On these blocks the gap is not reached. |
+| A11-02: a weak ON look passing on the best of the tolerances | **rare and never both.** At 2,400 random places with nothing planted, one other ON look reached ON_MIN at about 1% of places; both never did, so no one-hit candidate was made this way. |
+| A11-03: one-way matches | **measured.** Of 2,374 hit pairs matching one way or both, 2,041 match both ways, 191 forward only and 142 backward only: 14% depend on the direction. |
 
 ## 12. Candidate vetting and ranking: 20 November 2026
 
@@ -670,6 +796,14 @@ rest on it. Step 10's records stand as made; its verdict is frozen.
 | The DC switch was not recorded, and the 2016 reread did not choose it | high | **confirmed; fixed.** Every run's parameters now record `dc_bins` (coarse channel, or storage chunk under the switch); where the two rules differ for a session's files (its chunks are not its coarse channels, as in 2016), a sweep resumes only blocks read under the rule in force. The search version is unchanged: for 2017 and 2019 the rules agree, and bumping it would have thrown away their current blocks. `tools/rfi2016.py` and `tools/regress_step10.py` now choose the old rule explicitly, since they check step 10's records (tested). |
 | The 2016 effect needs a comparison, not only the false candidates' frequencies | medium | **agreed; queued**: `tools/dc_checks.py` reads eight 2016 blocks (four crowded, four clean, seed 12) both ways and compares false candidates, planted signals found and hits. |
 | End-to-end reader tests | medium | **planned**: local against web on a fixture, and a source changed between runs. |
+
+### 14, the DC comparison, 21 November 2026
+
+`tools/dc_checks.py` on eight 2016 blocks (four crowded, four clean, seed
+12), DC bins blanked by storage chunk (as step 10 ran) and by coarse channel
+(now): **false candidates and planted signals found at 30 identical in every
+block** (780 and 286 in all); 80 of about 33,000 hits differ. The published
+2016 results do not rest on where the DC bins were blanked.
 
 ## 15. Astronomical signal coverage: 20 November 2026
 
@@ -805,6 +939,12 @@ commits), and each step's two recorded deviations stand as published.
 | The source files' versions were not in the block provenance | high | **confirmed; fixed.** `made_with` holds the six files' ETags and sizes as the store keeps them (a changed file is refused there, audit 14). |
 | A regression that passed with other code counted | medium | **confirmed; fixed.** The regression records the code's hash and the step 12 verdict refuses one made with other code, or none, with or without a deviation (tested). |
 | The gate's baseline checked by its parameters, not its contents | medium | **confirmed; fixed.** The baseline record's SHA-256 is pinned in code; any other content is made again. |
+
+### 17, provenance of long runs, 21 November 2026
+
+| Finding | Severity | Verdict and what was done |
+|---|---|---|
+| F17-08: a record named the code current when it was written, not the code its process ran | high | **found while writing up; fixed.** `yoke.provenance` read the checkout's commit at each write. A run's modules are loaded when it starts, so a long run that straddles commits recorded a later commit than the code it ran. Two results here: turboSETI's 16 blocks (`turbo_checks.json`) and the 2016 reread (`rfi2016_reread.json`) started early on 20 November, turboSETI's at 08:05 at `865d3e0` and the reread's lane at 04:41, before `3cf9d43`; both record `d3e5699`, committed while they ran (neither carries the `command` field `3cf9d43` added, which shows their code was older). Whether the checkout had local changes when they started is not known. The block records each carry a fingerprint of the code that made them, which is unaffected. **Fixed:** the commit, state and diff are now taken when `yoke` is imported, and a record written after the checkout changed carries `code_changed_while_running` with what it holds then (tested); the ledger refuses such a record unless its row says so (tested). Control B's sweep, started before this, records as before. |
 
 ## 18. The report and its claims: 20 November 2026
 
@@ -1095,3 +1235,11 @@ provenance. Results still running are not listed until they finish.
 | The cadence test's asymmetry, blind OFF looks and weak ON looks, synthetic | 11 | `data/analysis/onoff_checks_synthetic.json` | `5de5877`, clean | `tools/onoff_checks.py synthetic` |
 | BLISS's runs match their pins (all 242) | 7 | `data/analysis/bliss_pins.json` | `749c7c2`, local changes (diff not kept) | `tools/bliss_checks.py pins` |
 | Step 10's blocks replayed from a fresh clone, fresh environments and the evidence package alone: identical | 16 | `data/analysis/fresh_replay.json` | `dcc383f`, local changes | `tools/fresh_replay.py` |
+| turboSETI's losses are in its detector; the zero-drift trial changes nothing | 3 | `data/analysis/turbo_checks.json` | `d3e5699`, clean (as recorded; the run started at 865d3e0, state then unknown: F17-08) | `tools/turbo_checks.py blocks` |
+| Time order changes no wrong choice's candidates | 4 | `data/analysis/false_chronological.json` | `d3e5699`, clean | `tools/false_checks.py chronological` |
+| The hit cap is not the cause of 2016's false candidates; two ON hits would cut them by 86% | 5, 6 | `data/analysis/rfi2016_reread.json` | `d3e5699`, clean (as recorded; the run started before 3cf9d43, commit and state then unknown: F17-08) | `tools/rfi2016.py reread` |
+| The strong fast misses are detected and measured outside the tolerances | 6 | `data/analysis/completeness_strong.json` | `d3e5699`, clean | `tools/completeness_checks.py strong` |
+| Shadow refresh changes no count that matters | 6 | `data/analysis/completeness_shadow.json` | `d3e5699`, clean | `tools/completeness_checks.py shadow` |
+| The detector's confirmed faults change no candidate at 30 on 12 blocks | 9, 11 | `data/analysis/detector_checks_blocks.json` | `d3e5699`, clean | `tools/detector_checks.py blocks` |
+| The curved matcher's first-wins and blind OFF looks change nothing on ten blocks | 10 | `data/analysis/curved_checks.json` | `d3e5699`, clean | `tools/curved_checks.py blocks` |
+| The two DC rules give identical counts on eight 2016 blocks | 14 | `data/analysis/dc_checks.json` | `d3e5699`, clean | `tools/dc_checks.py` |

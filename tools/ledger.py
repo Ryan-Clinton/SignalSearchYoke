@@ -78,6 +78,8 @@ def problems(row, data=None, ancestor=_is_ancestor):
         kept = diff and (data / "provenance" / "diffs" / f"{diff}.patch").is_file()
         if not kept and "diff not kept" not in row["note"]:
             bad.append("made with local changes whose diff is not kept: the row must say \"diff not kept\"")
+    if prov.get("code_changed_while_running") and "changed while running" not in row["note"]:
+        bad.append("the checkout changed while it ran: the row must say \"changed while running\" and how")
     if prov.get("command") and row["command"] and prov["command"][0] not in row["command"]:
         bad.append(f"made by {prov['command'][0]}, not {row['command']}")
     return bad

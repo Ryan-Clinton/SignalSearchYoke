@@ -177,6 +177,27 @@ class Provenance(unittest.TestCase):
         finally:
             shutil.rmtree(repo, ignore_errors=True)
 
+    def test_a_long_run_names_the_code_it_started_with(self):
+        repo = Path(tempfile.mkdtemp(prefix="ssy-prov-test-"))
+        try:
+            git = ["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@example.invalid"]
+            subprocess.run(git + ["init", "-q"], check=True)
+            (repo / "a.py").write_text("x = 1" + chr(10), encoding="utf-8")
+            subprocess.run(git + ["add", "."], check=True)
+            subprocess.run(git + ["commit", "-q", "-m", "one"], check=True)
+            with mock.patch.object(yoke, "ROOT", repo), mock.patch.dict(yoke._STARTED, {repo: yoke._code_state(repo)}):
+                first = yoke._STARTED[repo][0]
+                self.assertNotIn("code_changed_while_running", yoke.provenance())
+                (repo / "a.py").write_text("x = 2" + chr(10), encoding="utf-8")
+                subprocess.run(git + ["commit", "-q", "-am", "two"], check=True)
+                later = yoke.provenance()
+            self.assertEqual(later["git_commit"], first)                 # what the process loaded
+            self.assertIs(later["uncommitted_changes"], False)
+            moved = later["code_changed_while_running"]
+            self.assertNotEqual(moved["git_commit"], first)              # what the checkout held when written
+        finally:
+            yoke.remove_tree(repo)
+
 
 if __name__ == "__main__":
     unittest.main()
