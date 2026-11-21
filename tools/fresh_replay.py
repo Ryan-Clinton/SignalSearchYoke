@@ -110,6 +110,8 @@ def main(zip_path=None, say=print):
            "kind": "measured"}
     yoke.write(OUT, out, indent=1, stamp=True)
     say(f"fresh replay at {commit[:7]}: {'passed' if out['passed'] else 'FAILED'}")
+    if out["passed"]:                       # about 2 GB; a failure keeps it to look into
+        yoke.remove_tree(work)
     return 0
 
 

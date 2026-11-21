@@ -132,6 +132,20 @@ def provenance(record_version=1):
             "created_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
 
 
+def remove_tree(path):
+    """A folder removed whole, read-only files too (git's objects are read-only on Windows)."""
+    import shutil
+    import stat
+
+    def again(func, where, *_):
+        os.chmod(where, stat.S_IWRITE)
+        func(where)
+    if sys.version_info >= (3, 12):
+        shutil.rmtree(path, onexc=again)
+    else:
+        shutil.rmtree(path, onerror=again)
+
+
 def whole(path, valid=None):
     """Whether a record is there, parses whole and (with `valid`, a test of the record) is complete. One
     that does not parse, or fails `valid`, is moved aside to <name>.bad-<utc>-<random>, so its block is made

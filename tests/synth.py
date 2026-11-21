@@ -1,7 +1,9 @@
 """A synthetic cadence for the offline tests: six looks of Green Bank's
 high-resolution layout (16 spectra, 2.79 Hz channels, 18.25 s apart),
 noise only, small enough to search in seconds. No archive is read."""
+import atexit
 import os
+import shutil
 import sys
 import tempfile
 from pathlib import Path
@@ -12,6 +14,20 @@ ROOT = Path(__file__).resolve().parents[1]
 if "yoke" in sys.modules:       # loaded before this: its data folder is not this run's own, whatever it is
     raise RuntimeError("yoke was imported before tests/synth.py; import synth first, so the tests get their own "
                        "data folder")
+# Every temporary folder a test run makes, its data folder among them, goes in one folder of the run's own,
+# removed when the run ends.
+tempfile.tempdir = tempfile.mkdtemp(prefix="ssy-tests-")
+
+
+@atexit.register
+def _remove_run_folder(where=tempfile.tempdir):
+    try:
+        import yoke
+        yoke.remove_tree(where)
+    except OSError:                     # a file still open: the system's cleaning gets it
+        shutil.rmtree(where, ignore_errors=True)
+
+
 os.environ["SSY_DATA"] = tempfile.mkdtemp(prefix="ssy-test-data-")
 for p in (ROOT, ROOT / "tools", ROOT / "tools" / "bliss"):
     if str(p) not in sys.path:

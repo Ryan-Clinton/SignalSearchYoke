@@ -452,7 +452,10 @@ def reproduce(path, keep=None, say=print):
         say(f"  new: {rel(p)}")
     for e in sorted(res["environment"]):
         say(f"  note, made with another environment ({e}); the results compared the same")
-    return not (res["changed"] or res["missing"] or res["new"] or missed)
+    ok = not (res["changed"] or res["missing"] or res["new"] or missed)
+    if ok and not keep:                     # a failure keeps its tree to look into; a pass leaves nothing
+        yoke.remove_tree(tmp)
+    return ok
 
 
 def main(argv):
