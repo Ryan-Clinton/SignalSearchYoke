@@ -327,6 +327,10 @@ def block(target, session, urls, base, b, cls, block_list, say=_say):
                                  diag["plain"]["ours_judged"]["events"][TRUE_KEY][cf], ours_hits_turbo_ref, c)
             if ok:
                 r["found"]["ourhits_turbotest"].append(c)
+        # The same signal judged from turboSETI searched at 30 itself, against its search at 5 cut to > 30.
+        r["turbo_searched_at_30"] = _turbo_found(t_ft, t["drift"], diag["planted"]["direct"]["events"][TRUE_KEY]["30.0"],
+                                                 diag["plain"]["direct"]["events"][TRUE_KEY]["30.0"],
+                                                 diag["planted"]["direct"]["hits"], 30)[0]
         for c in SCORE:
             cf = str(float(c))
             nat_p = diag["planted"]["native"]["events"][TRUE_KEY][cf]
@@ -349,7 +353,11 @@ def block(target, session, urls, base, b, cls, block_list, say=_say):
     for j in range(6):
         a = {key(h) for h in nat["hits"][j] if h["snr"] > 30}
         d = {key(h) for h in direct["hits"][j] if h["snr"] > 30}
-        thr[str(j)] = {"cut_from_5": len(a), "searched_at_30": len(d), "only_cut": len(a - d), "only_searched": len(d - a)}
+        num_a = {key(h): h.get("top_hit_num") for h in nat["hits"][j] if h["snr"] > 30}
+        num_d = {key(h): h.get("top_hit_num") for h in direct["hits"][j] if h["snr"] > 30}
+        thr[str(j)] = {"cut_from_5": len(a), "searched_at_30": len(d), "only_cut": len(a - d), "only_searched": len(d - a),
+                       # find_events deduplicates by TopHitNum, which numbers a look's hits afresh in each search
+                       "same_hit_numbered_differently": sum(num_a[k] != num_d[k] for k in a & d)}
     ev_a = {(r["look"], round(r["freq_mhz"], 6)) for r in nat["events"][TRUE_KEY]["30.0"]}
     ev_d = {(r["look"], round(r["freq_mhz"], 6)) for r in direct["events"][TRUE_KEY]["30.0"]}
     out = {"target": target, "session": session, "block": b, "class": cls, "code": fp, "rows": rows, "false": false,
@@ -425,7 +433,10 @@ def summarise(blocks):
         "hits_only_in_the_cut_tables": sum(x["only_cut"] for b in blocks for x in b["threshold"]["hits_by_look"].values()),
         "hits_only_when_searched_at_30": sum(x["only_searched"] for b in blocks
                                              for x in b["threshold"]["hits_by_look"].values()),
-        "event_rows_differing": sum(b["threshold"]["event_rows_differing"] for b in blocks)}
+        "event_rows_differing": sum(b["threshold"]["event_rows_differing"] for b in blocks),
+        "hits_numbered_differently": sum(x.get("same_hit_numbered_differently", 0) for b in blocks
+                                         for x in b["threshold"]["hits_by_look"].values()),
+        "signals_at_30": pair(lambda r: 30 in r["found"]["turbo"], lambda r: r["turbo_searched_at_30"])["all"]}
     return out
 
 

@@ -18,8 +18,8 @@ For the planted six (the true choice of ON looks only) and the plain six
 - "zero_drift" (true choice): the same with the zero-drift trial searched
   (FindDoppler searches only |drift| > min_drift and refuses a negative
   min_drift, so min_drift is set to -1 on the object after it is made);
-- "direct" (planted): FindDoppler run at SNR 30 itself, against the SNR 5
-  run cut to > 30;
+- "direct" (planted and plain, true choice): FindDoppler run at SNR 30
+  itself, against the SNR 5 run cut to > 30;
 - "ours_judged": this search's hits through find_events, written as
   turboSETI writes its own: numbered in channel order as tophitsearch numbers
   its hits, the frequency at the first spectrum's middle, freq_start/freq_end
@@ -165,7 +165,7 @@ def main():
             rec["native"] = {"hits": [hits(t) for t in tables], "events": by_choice(tables, cuts, choices)}
             zt, _ = search(spec[kind], 5.0, Path(tmp) / kind, zero=True)
             rec["zero_drift"] = {"hits": [hits(t) for t in zt], "events": by_choice(zt, cuts, [TRUE])}
-            if kind == "planted":
+            if True:                    # both kinds: the unplanted run is what a planted event is judged against
                 direct, _ = search(spec[kind], 30.0, Path(tmp) / kind / "direct")
                 rec["direct"] = {"hits": [hits(t) for t in direct], "events": by_choice(direct, [30.0], [TRUE])}
             ours = [write_ours(dats[j], spec["ours"][kind][j], Path(tmp) / kind / "ours" / f"look{j}.dat",
