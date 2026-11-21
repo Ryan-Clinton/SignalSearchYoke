@@ -15,8 +15,11 @@ from unittest import mock
 import bliss_checks
 import completeness_checks
 import dc_checks
+import detector_misses
+import measure
 import matched
 import matched_tables
+import numpy as np
 import seti
 import yoke
 
@@ -154,6 +157,70 @@ class DcRead(unittest.TestCase):
             self.assertEqual(os.environ["SSY_DC_BY_CHUNK"], "1")
         finally:
             os.environ.pop("SSY_DC_BY_CHUNK", None)
+
+
+class DetectorMisses(unittest.TestCase):
+    """detector_misses.look: the detector's S/N on a signal's own track, its matching hit, and the pixels of the
+    track other hits blanked. Each must answer differently when the signal is not where it is said to be, or
+    when another hit crosses it."""
+    X, DRIFT = 5000.3, 0.5
+
+    def look(self, tones, x=X):
+        c = synth.cadence(3)[0]
+        sigma = float(np.median(c["sigma"]))
+        raw = measure.plant(c["raw"], [(t[0], t[1], t[2] * sigma / 4) for t in tones], synth.TSAMP, synth.FOFF)
+        s = dict(c["s"], spectra=raw)
+        f_hz = (synth.FCH1 + x * synth.FOFF) * 1e6
+        return detector_misses.look(raw, s, [(x, self.DRIFT, f_hz)], 0)[0]
+
+    def test_a_lone_signal(self):
+        r = self.look([(self.X, self.DRIFT, 60)])
+        self.assertIsNotNone(r["matching_hit_snr"])
+        self.assertGreater(r["exact_track"]["snr"], 15)
+        self.assertEqual(r["blanked_by_others"]["pixels"], 0)
+
+    def test_the_wrong_place_is_seen(self):
+        r = self.look([(self.X, self.DRIFT, 60)], x=self.X + 40)          # told it is 40 channels away
+        self.assertIsNone(r["matching_hit_snr"])
+        self.assertLess(r["exact_track"]["snr"], 8)
+
+    def test_a_crossing_hit_blanks_the_track(self):
+        # A stronger tone drifting the other way crosses the signal's track mid-look and is picked first.
+        r = self.look([(self.X, self.DRIFT, 60), (self.X - 52.0, -self.DRIFT, 200)])
+        self.assertGreater(r["blanked_by_others"]["pixels"], 0)
+        self.assertTrue(r["blanked_by_others"]["hits"])
+
+
+class CompletenessSwitches(unittest.TestCase):
+    """completeness_checks.pairs and shadow compare the search with a switch of its diagnostic copy turned; the
+    comparison says nothing if the switch does nothing. Each switch must change the answer on a case it is for."""
+
+    def setUp(self):
+        import search_variants
+        self.sv = search_variants
+        noise = np.random.default_rng(1).chisquare(102, size=(16, 16384)) * 1e3
+        self.noise, self.h = noise, 60 * float(np.median(measure.channel_noise(noise))) / 4
+
+    def search(self, tones, **kw):
+        p = measure.plant(self.noise, tones, synth.TSAMP, synth.FOFF)
+        return self.sv.search_variant(p, synth.FOFF, synth.TSAMP, synth.FCH1, **kw)
+
+    def test_the_corridor_switch(self):
+        # Two equal signals 4 channels apart drifting opposite ways at 3 Hz/s: the second is lost beside the
+        # first as the search is, and found without the corridor of excluded line starts.
+        x2, d2 = 8004.0, 3.0
+        f2 = synth.FCH1 + x2 * synth.FOFF
+        tones = [(8000.0, -3.0, self.h), (x2, d2, self.h)]
+        self.assertTrue(completeness_checks._found(self.search([(x2, d2, self.h)]), f2, d2))
+        self.assertFalse(completeness_checks._found(self.search(tones), f2, d2))
+        self.assertTrue(completeness_checks._found(self.search(tones, corridor=False), f2, d2))
+
+    def test_the_shadow_refresh_switch(self):
+        tones = [(8000.0 + 5 * k, (-1) ** k * 2.5, self.h * (0.3 + 0.1 * k)) for k in range(8)]
+
+        def keys(hs):
+            return {(round(h["frequency_mhz"], 6), round(h["drift_hz_s"], 3)) for h in hs}
+        self.assertNotEqual(keys(self.search(tones)), keys(self.search(tones, refresh_shadow=True)))
 
 
 if __name__ == "__main__":
