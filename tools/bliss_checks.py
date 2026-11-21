@@ -84,8 +84,10 @@ def pins(say=_say):
     session, recs, _ = _records()
     bad = []
     for r in recs:
-        for part, pv in r.get("provenance", {}).items():
-            pr = matched.bliss_pins_problems(pv or {})
+        prov = r.get("provenance") or {}
+        for part in ("plain", "planted"):               # both runs of every record; a missing one is not pinned
+            pv = prov.get(part)
+            pr = matched.bliss_pins_problems(pv or {}) if pv else ["no provenance for this run"]
             if pr:
                 bad.append({"block": r["block"], "part": part, "problems": pr})
     rec = {"target": TARGET, "session": session, "records": len(recs), "runs_checked": 2 * len(recs),
