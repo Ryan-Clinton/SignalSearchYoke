@@ -5,6 +5,7 @@ import synth  # noqa: F401  (first: the tests' own data folder)
 
 import copy
 import json
+import os
 import sqlite3
 import tempfile
 import unittest
@@ -13,8 +14,10 @@ from unittest import mock
 
 import bliss_checks
 import completeness_checks
+import dc_checks
 import matched
 import matched_tables
+import seti
 import yoke
 
 
@@ -136,6 +139,21 @@ class CompletenessRecords(unittest.TestCase):
         b = self.run_records(self.recs(), hits=(3000, 10))["occupancy_hits_at_the_sweep_cut"]
         self.assertEqual((a["5-20"]["share_30"], a["1000-more"]["share_30"]), (1.0, 0.5))
         self.assertEqual((b["5-20"]["share_30"], b["1000-more"]["share_30"]), (0.5, 1.0))
+
+
+class DcRead(unittest.TestCase):
+    """dc_checks reads each block under both DC rules; its result (identical counts, audit 14) means something only
+    if the switch reaches the reader at each call, not once at import."""
+
+    def test_each_read_under_its_rule_and_the_setting_put_back(self):
+        os.environ["SSY_DC_BY_CHUNK"] = "1"
+        try:
+            with mock.patch.object(seti, "read_looks", side_effect=lambda *a: seti.dc_rule()):
+                self.assertEqual(dc_checks._read([], (0, 1), True), "storage chunk")
+                self.assertEqual(dc_checks._read([], (0, 1), False), "coarse channel")
+            self.assertEqual(os.environ["SSY_DC_BY_CHUNK"], "1")
+        finally:
+            os.environ.pop("SSY_DC_BY_CHUNK", None)
 
 
 if __name__ == "__main__":
