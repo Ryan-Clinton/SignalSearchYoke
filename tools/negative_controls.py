@@ -147,12 +147,19 @@ def _bootstrap95(per_block, seed=4, boot=2000):
 
 def tables(say=print):
     rows, total = [], {"blocks": 0, 30: 0, 10: 0}
+    records, short = [], []
     for c in _choice()["chosen"]:
         rec_path = CONTROLS / "sweeps" / f"{c['target']}-{c['session']}.json"
-        if not rec_path.exists():
-            say(f"{c['session']}: not swept yet")
-            continue
-        done = json.loads(rec_path.read_text(encoding="utf-8"))["done"]
+        rec = json.loads(rec_path.read_text(encoding="utf-8")) if rec_path.exists() else None
+        if rec is None:
+            short.append(f"{c['session']}: not swept yet")
+        elif len(rec["done"]) != len(rec["blocks"]):
+            short.append(f"{c['session']}: {len(rec['done'])} of {len(rec['blocks'])} blocks")
+        records.append((c, rec))
+    if short:                                   # a rate over part of the control is not the control's rate
+        raise yoke.Refusal("INVALID_REQUEST", "The tables need every block of all four cadences: " + "; ".join(short))
+    for c, rec in records:
+        done = rec["done"]
         n = len(done)
         row = {"target": c["target"], "session": c["session"], "blocks": n,
                "complete_blocks": sum(1 for d in done.values() if d.get("complete") in (1, True))}

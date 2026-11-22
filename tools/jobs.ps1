@@ -7,9 +7,14 @@
 # with the project's Python ("python" means .venv\Scripts\python.exe). A job
 # is taken off the queue only when it exits 0, so after a restart or a power
 # cut the job it was on runs again; every job queued must therefore pick up
-# where it stopped (matched.py bliss skips the blocks already recorded). A job
-# that fails is tried again after 10 minutes, three times, then left on the
-# queue and the next one run. Output goes to data\logs\jobs.log, appended.
+# where it stopped (matched.py bliss skips the blocks already recorded).
+#
+# An outage is not a failure of the job. Jobs run with SSY_WAIT_FOR_NETWORK
+# set, so their reads wait it out (reading.py); a job that still ends on a
+# network error is run again after 10 minutes, as often as it takes, and that
+# is not counted. Any other failure is tried three times, 10 minutes apart;
+# then the job stays on the queue and the queue stops, since later jobs may
+# build on it. Output goes to data\logs\jobs.log, appended.
 # Only one copy runs: a second finds the lock held and exits.
 param([switch]$Install)
 
@@ -42,22 +47,50 @@ try {
     exit 0  # another copy is running the queue
 }
 
+function Test-NetworkFailure([long]$from) {
+    # Did this run of the job (the log from byte $from on) end on a network error? Its last 8 KB only: an
+    # outage the job waited out earlier, or one from an earlier run, must not excuse a real fault.
+    $f = [System.IO.File]::Open($log, "Open", "Read", "ReadWrite")
+    try {
+        $start = [Math]::Max($from, $f.Length - 8192)
+        if ($start -ge $f.Length) { return $false }
+        [void]$f.Seek($start, "Begin")
+        $bytes = New-Object byte[] ($f.Length - $start)
+        $got = $f.Read($bytes, 0, $bytes.Length)
+        $text = [System.Text.Encoding]::UTF8.GetString($bytes, 0, $got)
+    } finally { $f.Close() }
+    return $text -match 'requests\.exceptions\.(ConnectionError|ConnectTimeout|ReadTimeout|Timeout|ChunkedEncodingError)|NameResolutionError'
+}
+
 Start-Sleep -Seconds 60  # after a logon, let WSL and the drives come up
 Say "queue started"
-$failed = @{}
+$env:SSY_WAIT_FOR_NETWORK = "1"
 while ((Test-Path $queue) -and
-       ($job = Get-Content $queue | Where-Object { $_.Trim() -and -not $failed.ContainsKey($_) } | Select-Object -First 1)) {
+       ($job = Get-Content $queue | Where-Object { $_.Trim() } | Select-Object -First 1)) {
     $ok = $false
-    for ($try = 1; $try -le 3 -and -not $ok; $try++) {
+    $try = 1
+    while ($try -le 3 -and -not $ok) {
         Say "run (try $try): $job"
         $cmd = $job -replace '^python ', "`"$python`" "
+        $from = (Get-Item $log).Length
         cmd.exe /c "$cmd >> `"$log`" 2>&1"
-        $ok = ($LASTEXITCODE -eq 0)
-        Say "exit $LASTEXITCODE`: $job"
-        if (-not $ok -and $try -lt 3) { Start-Sleep -Seconds 600 }
+        $code = $LASTEXITCODE
+        $ok = ($code -eq 0)
+        Say "exit $code`: $job"
+        if ($ok) { break }
+        if (Test-NetworkFailure $from) {
+            Say "network failure, not counted; running it again in 10 minutes"
+            Start-Sleep -Seconds 600
+            continue
+        }
+        $try++
+        if ($try -le 3) { Start-Sleep -Seconds 600 }
+    }
+    if (-not $ok) {
+        Say "stopped after 3 tries; this job and those after it stay on the queue: $job"
+        break
     }
     $rest = @(Get-Content $queue | Where-Object { $_.Trim() -and $_ -ne $job })
-    if (-not $ok) { $rest += $job; $failed[$job] = $true; Say "left on the queue after 3 tries: $job" }
     Set-Content -Path $queue -Value $rest -Encoding utf8
 }
 Say "queue ended"

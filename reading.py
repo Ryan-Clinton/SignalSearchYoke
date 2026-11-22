@@ -17,10 +17,18 @@ fresh TLS handshake to Berkeley costs about 0.9 s against 0.165 s), retries
 with back-off on 429 and 5xx, and a limit on requests in flight across the
 whole process (THREADS, at most MAX_THREADS), for the server's sake:
 Breakthrough Listen publishes no rate limit, so this keeps to a modest one.
+
+An outage is not a fault of the job. With SSY_WAIT_FOR_NETWORK set (the job
+queue sets it), a request that fails for a reason of the network or the
+server's health waits and is asked again, for as long as it takes, saying so
+in the log. An answer that is wrong (a changed file, a missing one, the wrong
+bytes) still stops the job at once. Without the setting, as at a prompt, the
+failure is reported after the session's own short retries.
 """
 import hashlib
 import io
 import json
+import os
 import threading
 import time
 from collections import OrderedDict
@@ -79,10 +87,61 @@ def session():
     return s
 
 
+WAIT_SETTING = "SSY_WAIT_FOR_NETWORK"
+WAIT_FIRST = 15                # seconds before asking again after an outage begins
+WAIT_MOST = 300                # and never longer than this between asks
+WAIT_SAY_EVERY = 1800          # how often a long outage is mentioned in the log
+OUTAGE_ERRORS = (requests.exceptions.ConnectionError, requests.exceptions.Timeout,
+                 requests.exceptions.ChunkedEncodingError)
+OUTAGE_STATUS = (429, 500, 502, 503, 504)
+_outage = {"since": None, "said": 0.0}
+_outage_lock = threading.Lock()
+
+
+def _outage_note(why, url):
+    """One line when an outage begins and one every WAIT_SAY_EVERY, however many threads are waiting."""
+    now = time.monotonic()
+    with _outage_lock:
+        if _outage["since"] is None:
+            _outage.update(since=now, said=now)
+            print(f"network: waiting ({why}, {url.split('/')[2]}); nothing is lost, the read is asked again", flush=True)
+        elif now - _outage["said"] >= WAIT_SAY_EVERY:
+            _outage["said"] = now
+            print(f"network: still waiting after {(now - _outage['since']) / 60:.0f} min ({why})", flush=True)
+
+
+def _outage_over():
+    with _outage_lock:
+        if _outage["since"] is not None:
+            print(f"network: back after {(time.monotonic() - _outage['since']) / 60:.1f} min", flush=True)
+            _outage["since"] = None
+
+
+def _ask(request, url):
+    """The reply to `request()`, within the limit on requests in flight (not held while waiting out an outage)."""
+    wait = WAIT_FIRST
+    while True:
+        reply, error = None, None
+        try:
+            with _gate:
+                reply = request()
+        except OUTAGE_ERRORS as e:
+            error = e
+        if error is None and reply.status_code not in OUTAGE_STATUS:
+            _outage_over()
+            return reply
+        if not os.environ.get(WAIT_SETTING):
+            if error is not None:
+                raise error
+            return reply
+        _outage_note(type(error).__name__ if error is not None else f"HTTP {reply.status_code}", url)
+        time.sleep(wait)
+        wait = min(wait * 2, WAIT_MOST)
+
+
 def head(url):
     """The file's size and ETag."""
-    with _gate:
-        reply = session().head(url, timeout=TIMEOUT, allow_redirects=True)
+    reply = _ask(lambda: session().head(url, timeout=TIMEOUT, allow_redirects=True), url)
     reply.raise_for_status()
     return int(reply.headers["Content-Length"]), reply.headers.get("ETag", "")
 
@@ -100,8 +159,7 @@ def get_range(url, start, end, etag=None):
     headers = {"Range": f"bytes={start}-{end}"}
     if etag:
         headers["If-Match"] = etag
-    with _gate:
-        reply = session().get(url, headers=headers, timeout=TIMEOUT)
+    reply = _ask(lambda: session().get(url, headers=headers, timeout=TIMEOUT), url)
     if reply.status_code == 412:
         index_path(url).unlink(missing_ok=True)
         with _index_lock:
