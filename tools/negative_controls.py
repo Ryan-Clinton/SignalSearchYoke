@@ -10,7 +10,9 @@ wrong ON/OFF choices only stand in for. Supplementary: no verdict of steps
     python tools/negative_controls.py tables        the rates from the swept cadences
     python tools/negative_controls.py checks        the checks on every candidate, in the controls' own store (resumes)
     python tools/negative_controls.py summary       after the checks; where the candidates fall; beside one wrong choice
+    python tools/negative_controls.py context       the candidate version 6 of the checks beside those in force
     python tools/negative_controls.py package       the choice, sweep records, verdicts and results, with their hashes
+    (any of these with --control c: control C, docs/control-c.md)
     python tools/negative_controls.py replay [DIR]  the tables and summary made again from the package alone
     python tools/negative_controls.py recheck       the checks run again from nothing on a copy of the store
 
@@ -50,9 +52,20 @@ sys.path.insert(0, str(ROOT / "tools"))
 
 import yoke  # noqa: E402
 
+def _which_control():
+    """Control B by default; `--control c` (or SSY_CONTROL=c, which the subprocesses inherit) for control C, the
+    next four sessions by the same rule (docs/control-c.md)."""
+    if "--control" in sys.argv:
+        i = sys.argv.index("--control")
+        os.environ["SSY_CONTROL"] = sys.argv[i + 1].lower()
+        del sys.argv[i:i + 2]
+    return os.environ.get("SSY_CONTROL", "b")
+
+
+CONTROL = _which_control()
 COUNT = 4
-OUT = yoke.DATA / "analysis" / "negative_controls"
-CONTROLS = yoke.DATA / "controls"           # the controls' own data folder (their store, sweeps, indexes)
+OUT = yoke.DATA / "analysis" / ("negative_controls" if CONTROL == "b" else f"negative_controls_{CONTROL}")
+CONTROLS = yoke.DATA / ("controls" if CONTROL == "b" else f"controls_{CONTROL}")   # the control's own data folder
 PROJECT_SESSIONS = {"AGBT17A_999_68", "AGBT16A_999_192", "AGBT19B_999_104"}
 PROJECT_TARGETS = {"KIC8462852", "HIP17147", "NGC6946"}
 WIDTHS_HZ = (2.7939677238464355, 2.84)
@@ -80,6 +93,11 @@ def select(say=print):
     s12.OUT = OUT / "replies"
     s12.READ_SESSIONS = set(s12.READ_SESSIONS) | PROJECT_SESSIONS
     s12.READ_TARGETS = set(s12.READ_TARGETS) | PROJECT_TARGETS
+    if CONTROL != "b":
+        # a later control takes the next sessions by the same rule: never one an earlier control read
+        before = json.loads((yoke.DATA / "analysis" / "negative_controls" / "choice.json").read_text(encoding="utf-8"))
+        s12.READ_SESSIONS |= {c["session"] for c in before["chosen"]}
+        s12.READ_TARGETS |= {s12._bare(c["target"]) for c in before["chosen"]}
     names, sha = s12.catalogue_targets()
     replies, tried, chosen = [], [], []
     for target in names:
@@ -322,14 +340,16 @@ def tables(say=print):
     return out
 
 
-def checks_here(say=print):
-    """Every current candidate through the checks as they are, kept in this process's store (SSY_DATA is the
+def checks_here(say=print, bands_as_context=False):
+    """Every current candidate through the checks as they are (with `bands_as_context`, the candidate version 6 of
+    docs/control-c.md, kept under its own version beside them), in this process's store (SSY_DATA is the
     controls' folder). No reports are written: docs/leads is for the project's own sessions."""
     import check
     import store
     import vetting
+    version = vetting.VERSION_BANDS_AS_CONTEXT if bands_as_context else vetting.VERSION
     db = store.connect()
-    done = store.checked_events(db, vetting.VERSION, vetting.N_CHECKS)
+    done = store.checked_events(db, version, vetting.N_CHECKS)
     rows = [r for r in db.execute("SELECT * FROM events WHERE label='candidate' AND superseded_run IS NULL"
                                   " ORDER BY session, block_idx, event_id").fetchall() if r["event_id"] not in done]
     say(f"{len(done)} checked already, {len(rows)} to check")
@@ -343,19 +363,22 @@ def checks_here(say=print):
         e = check._event(db, r, where)
         own = {x[0] for x in db.execute("SELECT hit_id FROM event_hits WHERE event_id=?", (r["event_id"],))}
         lead = f"{check.lead_id(targets[session]['name'], session, e['frequency_mhz'])}-e{r['event_id']}"
-        result = check.vet_from_store(db, e, looks, session, targets[session], own, hits=hits[session])
-        store.save_checks(db, lead, result["checks"], vetting.VERSION, r["event_id"])
+        result = check.vet_from_store(db, e, looks, session, targets[session], own, hits=hits[session],
+                                      bands_as_context=bands_as_context)
+        store.save_checks(db, lead, result["checks"], version, r["event_id"])
         if n % 25 == 0 or n == len(rows):
             say(f"  {n} of {len(rows)} checked")
     db.close()
 
 
 def checks(say=print):
-    r = subprocess.run([sys.executable, "-u", str(Path(__file__)), "checks-here"], env=dict(os.environ, SSY_DATA=str(CONTROLS)))
-    if r.returncode == yoke.NETWORK_EXIT:
-        sys.exit(yoke.NETWORK_EXIT)
-    if r.returncode:
-        raise yoke.Refusal("INTERNAL_ERROR", f"the checks stopped ({r.returncode})")
+    """The checks in force on every candidate, then the candidate version 6 beside them (each resumes)."""
+    for part in ("checks-here", "checks-here-context"):
+        r = subprocess.run([sys.executable, "-u", str(Path(__file__)), part], env=dict(os.environ, SSY_DATA=str(CONTROLS)))
+        if r.returncode == yoke.NETWORK_EXIT:
+            sys.exit(yoke.NETWORK_EXIT)
+        if r.returncode:
+            raise yoke.Refusal("INTERNAL_ERROR", f"the checks stopped ({r.returncode})")
 
 
 def verdict_class(verdict):
@@ -449,6 +472,29 @@ def summary(say=print):
     for g, v in out["groups"].items():
         say(f"{g}: {json.dumps(v)}")
     say(json.dumps(out["one_wrong_choice_on_the_project_sessions"]))
+    return out
+
+
+def context(say=print):
+    """The candidate version 6 of the checks (docs/control-c.md) beside the checks in force, on every candidate of
+    the control: what each leaves unexplained, at 30 and 10, over all blocks and by class."""
+    import vetting
+    records = _whole_control()
+    db = _store()
+    try:
+        by = {"in_force": candidate_verdicts(db, vetting.VERSION, vetting.N_CHECKS),
+              "bands_as_context": candidate_verdicts(db, vetting.VERSION_BANDS_AS_CONTEXT, vetting.N_CHECKS)}
+    finally:
+        db.close()
+    out = {"versions": {"in_force": vetting.VERSION, "bands_as_context": vetting.VERSION_BANDS_AS_CONTEXT},
+           "control": CONTROL, "kind": "measured"}
+    for name, events in by.items():
+        out[name] = summary_rows(records, events)["groups"]
+    yoke.write(OUT / "checks_context.json", out, indent=1, stamp=True)
+    for name in by:
+        g = out[name]["all four"]
+        say(f"{name}: unexplained at 30 {g['at_30']['unexplained']} ({g['at_30']['unexplained_rate']} a block), "
+            f"at 10 {g['at_10']['unexplained']}")
     return out
 
 
@@ -585,8 +631,12 @@ def main():
         checks()
     elif cmd == "checks-here":
         checks_here()
+    elif cmd == "checks-here-context":
+        checks_here(bands_as_context=True)
     elif cmd == "summary":
         summary()
+    elif cmd == "context":
+        context()
     elif cmd == "package":
         package()
     elif cmd == "replay":

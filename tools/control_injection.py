@@ -23,12 +23,23 @@ sys.path.insert(0, str(ROOT / "tools"))
 
 import yoke  # noqa: E402
 
-SEED = 20261124
+def _which_control():
+    """Control B by default; `--control c` (or SSY_CONTROL=c) for control C (docs/control-c.md)."""
+    if "--control" in sys.argv:
+        i = sys.argv.index("--control")
+        os.environ["SSY_CONTROL"] = sys.argv[i + 1].lower()
+        del sys.argv[i:i + 2]
+    return os.environ.get("SSY_CONTROL", "b")
+
+
+CONTROL = _which_control()
+SEED = {"b": 20261124, "c": 20261125}[CONTROL]
 PER_CLASS = 4                    # blocks a cadence: this many capped and this many complete
 LANES = 3
 CUTS = (30, 10)
 TRUE = (0, 2, 4)
-OUT = Path(os.environ.get("SSY_INJECTION_OUT") or yoke.DATA / "analysis" / "negative_controls" / "injection")
+OUT = Path(os.environ.get("SSY_INJECTION_OUT") or yoke.DATA / "analysis" / (
+    "negative_controls" if CONTROL == "b" else f"negative_controls_{CONTROL}") / "injection")
 
 
 def pick_blocks(done, n, seed, per_class=PER_CLASS):
@@ -110,7 +121,10 @@ def one_block(cadence, k, info, ctx):
                 if event not in verdicts:
                     v = check.vet_from_store(ctx["db"], candidates[event], looks, session, ctx["target"], own=(),
                                              on_positions=TRUE, hits=ctx["hits"])
-                    verdicts[event] = {"verdict": v["verdict"], "reasons": v["reasons"]}
+                    v6 = check.vet_from_store(ctx["db"], candidates[event], looks, session, ctx["target"], own=(),
+                                              on_positions=TRUE, hits=ctx["hits"], bands_as_context=True)
+                    verdicts[event] = {"verdict": v["verdict"], "reasons": v["reasons"],
+                                       "verdict_context": v6["verdict"], "reasons_context": v6["reasons"]}
                 at.update(verdicts[event])
             row["at"][str(cut)] = at
         for lk in looks:
@@ -212,13 +226,14 @@ def watch(jobs, wait=5.0):
         time.sleep(wait)
 
 
-def stage_counts(tones, cut):
+def stage_counts(tones, cut, key="verdict"):
     """How many planted signals reach each stage at `cut`; those already matching a candidate of the unplanted block
-    are counted apart and out of every stage."""
+    are counted apart and out of every stage. `key`: "verdict" (the checks in force) or "verdict_context" (the
+    candidate version 6)."""
     at = [t["at"][str(cut)] for t in tones]
     own = [a for a in at if not a["already_in_the_block"]]
     kept = [a for a in own if a["candidate"]]
-    verdicts = Counter(str(a["verdict"]).split(" (")[0] for a in kept)
+    verdicts = Counter(str(a[key]).split(" (")[0] for a in kept)
     left = sum(n for v, n in verdicts.items() if v.startswith("unexplained"))
     return {"planted": len(at), "already_in_the_block": len(at) - len(own), "counted": len(own),
             "hit_in_any_on_look": sum(a["hit_looks"] > 0 for a in own), "hit_in_all_three": sum(a["hit_looks"] == 3 for a in own),
@@ -228,10 +243,10 @@ def stage_counts(tones, cut):
             "unexplained_of_candidates": round(left / len(kept), 4) if kept else None}
 
 
-def _block_interval(records, cut, of="counted", seed=SEED, boot=2000):
+def _block_interval(records, cut, of="counted", seed=SEED, boot=2000, key="verdict"):
     """The share left unexplained (of the counted signals, or with of="candidates" of the candidates), 95% over
     blocks drawn again with replacement."""
-    counts = [stage_counts(r["tones"], cut) for r in records]
+    counts = [stage_counts(r["tones"], cut, key) for r in records]
     pairs = np.array([[c["unexplained"], c[of]] for c in counts], float)
     if not len(pairs) or not pairs[:, 1].sum():
         return None
@@ -245,13 +260,13 @@ def _block_interval(records, cut, of="counted", seed=SEED, boot=2000):
     return [round(float(v), 4) for v in np.percentile(shares, [2.5, 97.5])]
 
 
-def weighted(records, cut, w_capped, seed=SEED, boot=2000):
+def weighted(records, cut, w_capped, seed=SEED, boot=2000, key="verdict"):
     """The balanced sample reweighted to a population whose share of capped blocks is `w_capped`: each class's
     rates combined by its share, with blocks drawn again within each class. Shares of counted signals left
     unexplained, and unexplained among candidates."""
     rng = np.random.default_rng([seed, 1])
     by = {cls: np.array([[c["unexplained"], c["candidates"], c["counted"]] for c in
-                         (stage_counts(r["tones"], cut) for r in records if r["class"] == cls)], float)
+                         (stage_counts(r["tones"], cut, key) for r in records if r["class"] == cls)], float)
           for cls in ("complete", "capped")}
     if any(not len(x) or not x[:, 2].sum() for x in by.values()):
         return None
@@ -270,14 +285,14 @@ def weighted(records, cut, w_capped, seed=SEED, boot=2000):
             "unexplained_of_candidates": [round(point[1], 4)] + [round(float(v), 4) for v in np.percentile(good[:, 1], [2.5, 97.5])]}
 
 
-def summarise(records):
+def summarise(records, key="verdict"):
     def part(rs, cut, keep=lambda t: True):
-        return stage_counts([t for r in rs for t in r["tones"] if keep(t)], cut)
+        return stage_counts([t for r in rs for t in r["tones"] if keep(t)], cut, key)
     def with_intervals(rs, cut):
         c = part(rs, cut)
-        lo = _block_interval(rs, cut, "candidates")
+        lo = _block_interval(rs, cut, "candidates", key=key)
         # the protocol's reading: informative where the lower end for unexplained among candidates is 0.5 or more
-        return dict(c, share_unexplained_interval=_block_interval(rs, cut),
+        return dict(c, share_unexplained_interval=_block_interval(rs, cut, key=key),
                     unexplained_of_candidates_interval=lo,
                     reading="the checks kept planted signals here" if lo and lo[0] >= 0.5 else
                     "not shown that the checks keep real signals here")
@@ -292,8 +307,9 @@ def summarise(records):
                                 for b in sorted({t["bin"] for r in records for t in r["tones"]})}
         cell["by_strength"] = {str(s): part(records, cut, lambda t, s=s: t["s_in"] == s)
                                for s in sorted({t["s_in"] for r in records for t in r["tones"]})}
-        reasons = Counter(x for r in records for t in r["tones"] for x in t["at"][str(cut)].get("reasons", [])
-                          if not str(t["at"][str(cut)].get("verdict", "")).startswith("unexplained"))
+        why = "reasons" if key == "verdict" else "reasons_context"
+        reasons = Counter(x for r in records for t in r["tones"] for x in t["at"][str(cut)].get(why, [])
+                          if not str(t["at"][str(cut)].get(key, "")).startswith("unexplained"))
         cell["what_the_checks_cited_against_kept_signals"] = dict(reasons.most_common())
         out[str(cut)] = cell
     return out
@@ -338,9 +354,16 @@ def tables(say=print):
     capped = sum(d.get("complete") not in (1, True) for _, rec in control for d in rec["done"].values())
     blocks = sum(len(rec["done"]) for _, rec in control)
     out = {"blocks": len(records), "signals": sum(len(r["tones"]) for r in records), "cuts": summarise(records),
-           "weighted_to_control_b": {"population": f"control B's {blocks} blocks, {capped} of them capped",
+           "weighted_to_control_b": {"population": f"control {CONTROL.upper()}'s {blocks} blocks, {capped} of them capped",
                                      **{str(cut): weighted(records, cut, capped / blocks) for cut in CUTS}},
            "kind": "measured"}
+    judged = [t["at"][str(c)] for r in records for t in r["tones"] for c in CUTS
+              if t["at"][str(c)].get("verdict")]
+    if judged and all("verdict_context" in a for a in judged):
+        # the candidate version 6 of the checks (docs/control-c.md), on the same planted candidates
+        out["cuts_bands_as_context"] = summarise(records, "verdict_context")
+        out["weighted_bands_as_context"] = {str(cut): weighted(records, cut, capped / blocks, key="verdict_context")
+                                            for cut in CUTS}
     yoke.write(OUT.parent / "injection.json", out, indent=1, stamp=True)
     for cut, cell in out["cuts"].items():
         for g in ("all", "capped", "complete"):

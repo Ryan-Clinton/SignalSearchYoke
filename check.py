@@ -179,7 +179,7 @@ def target_of(db, session):
 
 
 def vet_from_store(db, e, looks, session, target, own=(), on_positions=None, hits=None, report_dir=None,
-                   lead=None):
+                   lead=None, bands_as_context=False):
     """The checks on an event with the store's evidence, as every candidate
     of a sweep gets them: recurrence in the files `recurrence_files` names
     (the store's hits `own` left out), check 6's background, and the
@@ -198,7 +198,7 @@ def vet_from_store(db, e, looks, session, target, own=(), on_positions=None, hit
         f"SELECT f_start_mhz FROM hits WHERE hit_id IN ({','.join('?' * len(own))})", tuple(own))] if own else []
     return vetting.vet(e, looks, target, others, hits if hits is not None else session_hits(db, session),
                        report_dir=report_dir, lead=lead, background=background,
-                       occupancy=occupancy.load(db, session), own_mhz=own_f)
+                       occupancy=occupancy.load(db, session), own_mhz=own_f, bands_as_context=bands_as_context)
 
 
 def check_event(db, row, say=print, report_dir=None):

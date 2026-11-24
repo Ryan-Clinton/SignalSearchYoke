@@ -186,6 +186,38 @@ class Lanes(unittest.TestCase):
         self.assertEqual(ci.watch([self.P(0), self.P(yoke.NETWORK_EXIT)], wait=0), [0, yoke.NETWORK_EXIT])
 
 
+class BandsAsContext(unittest.TestCase):
+    """The candidate version 6 of the checks: a band alone no longer makes a verdict; anything else still does."""
+
+    def vet(self, f, drift, context):
+        import vetting
+        from types import SimpleNamespace
+        look = SimpleNamespace(step=0.05, tstart=58000.0, hits=[], position=0, complete=True)
+        event = {"frequency_mhz": f, "drift_hz_s": drift, "looks": [], "stamps": None, "off_snr_max": 3.0}
+        return vetting.vet(event, [look] * 6, None, (), (), bands_as_context=context)
+
+    def test_a_band_alone_no_longer_decides(self):
+        f = next((lo + hi) / 2 for lo, hi, _ in __import__("vetting").BANDS if hi - lo > 0.1)
+        in_force, candidate = self.vet(f, 1.3, False), self.vet(f, 1.3, True)
+        self.assertTrue(in_force["verdict"].startswith("likely interference"))
+        self.assertIn("known interference bands", in_force["reasons"])
+        self.assertTrue(candidate["verdict"].startswith("unexplained"))
+        self.assertIn("context only", candidate["checks"][2]["result"])
+        self.assertNotEqual(in_force["version"], candidate["version"])
+
+    def test_other_signs_still_decide(self):
+        f = next((lo + hi) / 2 for lo, hi, _ in __import__("vetting").BANDS if hi - lo > 0.1)
+        got = self.vet(f, 0.0, True)                         # zero drift is still a sign
+        self.assertTrue(got["verdict"].startswith("likely interference"))
+        self.assertNotIn("known interference bands", got["reasons"])
+
+    def test_the_stage_counts_read_either_version(self):
+        a = at(verdict="likely interference (indicated: known interference bands)")
+        a["verdict_context"], a["reasons_context"] = "unexplained, weak", []
+        self.assertEqual(ci.stage_counts([tone(a)], 30)["unexplained"], 0)
+        self.assertEqual(ci.stage_counts([tone(a)], 30, "verdict_context")["unexplained"], 1)
+
+
 class LeaveOneOut(unittest.TestCase):
     def test_a_lone_check_is_what_it_costs(self):
         planted = [("capped", "likely interference (indicated: known interference bands)", ["known interference bands"]),

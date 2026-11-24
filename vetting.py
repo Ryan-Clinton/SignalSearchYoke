@@ -45,6 +45,9 @@ VERSION = ("5 (20 Nov 2026: check 8 leaves the candidate's own hits out of the s
            "with a - b = 1 made a*f1 - b*f2 = f by themselves; check 6 keeps the same target's other sessions apart, "
            "as a repeat at the target, not interference; check 1 calls a look of unknown completeness or a missing "
            "stamp not sound. No recorded verdict of version 4 changes: tools/vetting_checks.py)")
+# Not in force: the candidate version tested on control C (docs/control-c.md), as version 5 with one change.
+VERSION_BANDS_AS_CONTEXT = ("6 candidate (24 Nov 2026): as 5, but check 3's band is context, not a sign of "
+                            "interference by itself (docs/control-c.md)")
 N_CHECKS = 10                                   # the checks vet() makes on every candidate
 C = 299792458.0
 GBT_LAT, GBT_LON = 38.4331, -79.8398            # degrees (north, east)
@@ -280,7 +283,7 @@ def _check(n, name, result, strength=None, **evidence):
 
 
 def vet(event, looks, target=None, others=(), session_hits=(), report_dir=None, lead=None, background=None,
-        occupancy=None, own_mhz=()):
+        occupancy=None, own_mhz=(), bands_as_context=False):
     """The checks on one candidate. `event` as onoff.judge gives it (with
     `matches` and `stamps`); `looks` its cadence (LookInfo or onoff.Look);
     `target` {ra_hours, dec_deg, name}; `others` hits at other targets
@@ -293,7 +296,10 @@ def vet(event, looks, target=None, others=(), session_hits=(), report_dir=None, 
     `occupancy` the session's measured occupancy (occupancy.load), from
     which checks 7 and 9 take their chances; without it they take the
     uniform ones of checks version 3. `own_mhz`: the frequencies (MHz) of the
-    candidate's own hits, which check 8 does not count as other signals."""
+    candidate's own hits, which check 8 does not count as other signals.
+    `bands_as_context`: the candidate version of the checks under test on control C (docs/control-c.md): check 3
+    still names the band, but being in one is not by itself a sign of interference. Every other check is the
+    same. Its verdicts carry VERSION_BANDS_AS_CONTEXT; the checks in force are unchanged."""
     f, drift = event["frequency_mhz"], event["drift_hz_s"]
     l0 = looks[event.get("seed_position", 0)]
     step = l0.step
@@ -323,8 +329,9 @@ def vet(event, looks, target=None, others=(), session_hits=(), report_dir=None, 
 
     # 3. known bands
     band = next((b for b in BANDS if b[0] <= f <= b[1]), None)
-    checks.append(_check(3, "known interference bands", band[2] if band else "in no listed band",
-                         "indicated" if band else None, band=band and list(band)))
+    checks.append(_check(3, "known interference bands", (band[2] + (" (context only)" if bands_as_context else ""))
+                         if band else "in no listed band",
+                         "indicated" if band and not bands_as_context else None, band=band and list(band)))
 
     # 4. zero or very low drift
     low = abs(drift) < step
@@ -487,7 +494,8 @@ def vet(event, looks, target=None, others=(), session_hits=(), report_dir=None, 
                                                                 for n, w, h in CHECKLIST],
                          rio="to be scored by hand" if verdict == "unexplained, strong" else "not needed"))
     out = {"verdict": verdict, "reasons": [c["name"] for c in shown_ + indicated], "checks": checks,
-           "version": VERSION, "checked": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+           "version": VERSION_BANDS_AS_CONTEXT if bands_as_context else VERSION,
+           "checked": datetime.now(timezone.utc).isoformat(timespec="seconds")}
     if report_dir is not None and lead:
         out["report"] = write_report(out, event, lead, Path(report_dir), target)
     return out
