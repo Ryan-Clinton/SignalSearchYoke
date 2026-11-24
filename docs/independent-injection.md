@@ -73,4 +73,35 @@ block is not part of the result, and nothing above was changed after it.
 
 ## Changes after this was fixed
 
-None.
+**24 November 2026, after the first run of all 16 blocks: setigen's
+Doppler smearing turned on, and the 16 blocks run again.**
+
+- **What the first run showed.** Under setigen's planting, almost no
+  signal drifting faster than 1 Hz/s was found by either pipeline. At
+  S/N 10, 1 to 2 Hz/s: this search 8 and turboSETI 0, against 202 and 6
+  with this project's planting. At 2 to 4 Hz/s: 2 and 0, against 95 and 0.
+- **The cause.** By default (`doppler_smearing=False`), setigen puts each
+  spectrum's tone where it is at the spectrum's start and does not spread
+  it over the channels it crosses while the spectrum is taken. A real tone
+  integrated over a spectrum, and `measure.plant`, are centred half a
+  spectrum later. Both pipelines are scored against that centre, within
+  6 Hz. setigen's tones were therefore drift × 9.1 s away from it, which
+  is 18 Hz at 2 Hz/s, so they were scored as missed.
+- **How it was measured.** One tone drifting at 2 Hz/s was planted in an
+  empty frame with the session's channel width and sampling. The centre
+  of each spectrum lay 0.0 Hz from the start-of-spectrum path with
+  setigen's default, 16.3 Hz with its Doppler smearing, and 18.3 Hz with
+  `measure.plant`.
+- **The change.** setigen plants with `doppler_smearing=True`, its own
+  model of a tone integrated over a spectrum. With it the centre falls
+  within 2 Hz of the scoring's at 2 Hz/s, and within about 4 Hz at
+  4 Hz/s. Nothing else changes: not the blocks, the signals, the scoring,
+  the measure or how it is read.
+- **What is kept.** The first run's records are kept in
+  `data/analysis/independent_injection/unsmeared/`, and the report gives
+  both runs.
+- **Why this is not a choice made after seeing the result.** It corrects
+  where the signals were planted relative to where they are scored, and
+  that error is shown on synthetic data. The direction of its effect on
+  the measure was not known beforehand: it removed fast signals from both
+  pipelines.

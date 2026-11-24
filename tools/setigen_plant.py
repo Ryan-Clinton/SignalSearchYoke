@@ -5,8 +5,11 @@ its own environment (docs/environments/setigen-windows.txt), called by tools/ind
 
 IN holds `looks` (n, time, channel) float, `fch1` (MHz, channel 0), `foff` (MHz), `tsamp` (s), `x` (n, signals): each
 signal's channel at each look's start (fractional), `drift` (Hz/s), `snr` (setigen's own S/N, integrated over the
-look). setigen is given the data in ascending frequency, as its frames are indexed, and the result is turned back.
-OUT holds `looks` with the signals added.
+look), and `smear` (optional, default off): setigen's Doppler smearing, which spreads each spectrum's tone over
+the channels it crosses while the spectrum is taken, as a real tone is. Without it setigen puts the tone where it is at
+the spectrum's start, half a spectrum's drift from where the scoring looks (docs/independent-injection.md). setigen is
+given the data in ascending frequency, as its frames are indexed, and the result is turned back. OUT holds `looks`
+with the signals added.
 """
 import sys
 
@@ -14,7 +17,7 @@ import numpy as np
 import setigen as stg
 
 
-def plant(looks, fch1, foff, tsamp, x, drift, snr):
+def plant(looks, fch1, foff, tsamp, x, drift, snr, smear=False):
     out = np.empty_like(looks)
     width = abs(foff) * 1e6
     n_f = looks.shape[2]
@@ -29,7 +32,8 @@ def plant(looks, fch1, foff, tsamp, x, drift, snr):
             f_hz = (fch1 + xi * foff) * 1e6
             frame.add_signal(stg.constant_path(f_start=f_hz, drift_rate=float(d)),
                              stg.constant_t_profile(level=frame.get_intensity(snr=float(s))),
-                             stg.sinc2_f_profile(width=2 * width), stg.constant_bp_profile(level=1))
+                             stg.sinc2_f_profile(width=2 * width), stg.constant_bp_profile(level=1),
+                             doppler_smearing=bool(smear))
         got = frame.get_data()
         out[j] = got[:, ::-1] if flip else got
     return out
@@ -38,7 +42,7 @@ def plant(looks, fch1, foff, tsamp, x, drift, snr):
 def main():
     data = np.load(sys.argv[1])
     looks = plant(data["looks"], float(data["fch1"]), float(data["foff"]), float(data["tsamp"]), data["x"],
-                  data["drift"], data["snr"])
+                  data["drift"], data["snr"], bool(data["smear"]) if "smear" in data else False)
     np.savez(sys.argv[2], looks=looks)
 
 

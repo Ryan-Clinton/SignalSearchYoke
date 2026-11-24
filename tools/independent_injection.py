@@ -4,10 +4,15 @@ planting (measure.plant) favour this search over turboSETI?
 
     python tools/independent_injection.py run       16 blocks of the 2017 session (hours; resumes)
     python tools/independent_injection.py tables
+    python tools/independent_injection.py tables-first   the first run's, without Doppler smearing
 
 Each chosen block of the matched run is read again and the same signals (the same seed) are planted by setigen in the
 three ON looks; this search and turboSETI are run on them and scored exactly as the matched run scores. The same
 signals planted by measure.plant are the matched records' own results.
+
+setigen plants with its Doppler smearing (SMEAR), a change logged in the protocol: the first run, without it, put each
+tone half a spectrum's drift from where the scoring looks. That run is kept in FIRST, and `tables-first` rebuilds its
+tables.
 """
 import json
 import os
@@ -28,6 +33,8 @@ SEED = 20261124
 PER_CLASS = 8
 CUTS = ("10", "30")
 OUT = yoke.DATA / "analysis" / "independent_injection"
+FIRST = OUT / "unsmeared"          # the first run, without setigen's Doppler smearing
+SMEAR = True
 SETIGEN_PYTHON = Path(os.environ.get("SSY_SETIGEN_PYTHON") or Path(os.environ.get("LOCALAPPDATA", "")) /
                       "ssy-setigen" / "Scripts" / "python.exe")
 READ_THREADS = 4
@@ -51,7 +58,8 @@ def setigen_planted(cad, ts, work):
     on = list(matched.TRUE)
     x = np.array([[matched.where(cad, t, j)[0] for t in ts] for j in on])
     np.savez(work / "in.npz", looks=np.stack([cad[j]["raw"] for j in on]), fch1=s["fch1"], foff=s["foff"],
-             tsamp=s["tsamp"], x=x, drift=np.array([t["drift"] for t in ts]), snr=np.array([t["s_in"] for t in ts], float))
+             tsamp=s["tsamp"], x=x, drift=np.array([t["drift"] for t in ts]), snr=np.array([t["s_in"] for t in ts], float),
+             smear=SMEAR)
     done = subprocess.run([str(SETIGEN_PYTHON), "-I", str(ROOT / "tools" / "setigen_plant.py"), str(work / "in.npz"),
                            str(work / "out.npz")], capture_output=True, text=True, timeout=1800)
     if done.returncode:
@@ -95,7 +103,13 @@ def one_block(k, rec, slices, urls, work):
                              "turboseti": r["turboseti"][c]["three_looks"] == "recovered"
                              and r["turboseti_on_hits"][c] == 3}}
         rows.append({"drift": t["drift"], "s_in": t["s_in"], "bin": t["bin"], "at": at})
-    return {"block": k, "class": rec["class"], "tones": rows, "kind": "measured"}
+    return {"block": k, "class": rec["class"], "smearing": SMEAR, "tones": rows, "kind": "measured"}
+
+
+def _whole_block(smearing):
+    """A block record complete and planted with this smearing (the first run's records carry no field: off)."""
+    import matched
+    return lambda r: len(r.get("tones", [])) == matched.TONES and bool(r.get("smearing", False)) == smearing
 
 
 def run(say=print):
@@ -117,7 +131,9 @@ def run(say=print):
     block_list = seti.blocks(seti.reading.prepare(urls[:1])[0])
     for k, cls in chosen.items():
         out = OUT / f"block_{k:03d}.json"
-        if yoke.whole(out, lambda r: len(r.get("tones", [])) == matched.TONES):
+        if out.exists() and not yoke.whole(out, _whole_block(SMEAR)):
+            raise yoke.Refusal("INVALID_REQUEST", f"{out.name} is not this run's (smearing {SMEAR}): move it aside")
+        if yoke.whole(out, _whole_block(SMEAR)):
             continue
         rec = json.loads((base / f"block_{k:03d}.json").read_text(encoding="utf-8"))
         work = OUT / "work"
@@ -151,16 +167,16 @@ def difference_of_advantages(blocks, cut, seed=SEED, boot=4000):
     return {"difference": float(d(idx)), "interval": [float(v) for v in np.percentile(draws, [2.5, 97.5])]}
 
 
-def tables(say=print):
-    import matched
+def tables(say=print, folder=OUT, smearing=SMEAR):
     choice = json.loads((OUT / "choice.json").read_text(encoding="utf-8"))
     blocks = []
     for k in choice["chosen"]:
-        p = OUT / f"block_{int(k):03d}.json"
-        if not yoke.whole(p, lambda r: len(r.get("tones", [])) == matched.TONES):
-            raise yoke.Refusal("INVALID_REQUEST", f"block {k} not done")
+        p = folder / f"block_{int(k):03d}.json"
+        if not yoke.whole(p, _whole_block(smearing)):
+            raise yoke.Refusal("INVALID_REQUEST", f"block {k} not done (smearing {smearing})")
         blocks.append(json.loads(p.read_text(encoding="utf-8")))
-    out = {"blocks": len(blocks), "signals": sum(len(b["tones"]) for b in blocks), "cuts": {}, "kind": "measured"}
+    out = {"blocks": len(blocks), "signals": sum(len(b["tones"]) for b in blocks), "smearing": smearing, "cuts": {},
+           "kind": "measured"}
     for c in CUTS:
         cell = {}
         for how in ("own", "setigen"):
@@ -180,7 +196,7 @@ def tables(say=print):
         cell["reading"] = ("the project's planting favours this search" if lo > 0 else
                            "not shown that the project's planting favours this search")
         out["cuts"][c] = cell
-    yoke.write(OUT / "tables.json", out, indent=1, stamp=True)
+    yoke.write(folder / "tables.json", out, indent=1, stamp=True)
     for c, cell in out["cuts"].items():
         say(f"at {c}: own {cell['own']}, setigen {cell['setigen']}; {cell['reading']}")
     return out
@@ -192,6 +208,8 @@ def main():
         run()
     elif cmd == "tables":
         tables()
+    elif cmd == "tables-first":
+        tables(folder=FIRST, smearing=False)
     else:
         sys.exit(__doc__)
 
