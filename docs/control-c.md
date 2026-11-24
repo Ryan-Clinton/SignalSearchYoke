@@ -60,6 +60,9 @@ these hold:
    over all four cadences. The upper end of the interval from resampled
    runs of 16 consecutive blocks must be at most 0.05.
 
+`tools/control_c_verdict.py` applies this rule. It was written and tested
+before any of control C's results existed.
+
 If either fails, version 5 stays, and the result is reported as measured.
 Either way the outcome is written up, failure included. Nothing about
 either version, or any threshold, is changed after control C's data is
