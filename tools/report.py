@@ -63,10 +63,11 @@ def control_summary(ctab, csum, inj):
             f"{min(r['rate_30'] for r in ctab['sessions']):.2g} to {max(r['rate_30'] for r in ctab['sessions']):.2g} "
             f"false candidates a block at S/N 30 ({a30['rate']:.3g} over all four, bunched in "
             f"{a30['blocks_with_any']} of {n(a30['blocks'])} blocks), and the checks left none unexplained. "
-            "Signals planted in the same cadences show the checks "
-            + (f"keeping real-looking signals in {' and '.join(kept)}" if kept else "not shown to keep real-looking "
-               "signals in either complete blocks or blocks at the hit limit")
-            + (f", but not shown to in {' and '.join(lost)}" if kept and lost else "") + ".")
+            "Signals planted in the same cadences show "
+            + (f"the checks keeping most real-looking signals in {' and '.join(kept)}" if kept else "the checks not "
+               "shown to keep real-looking signals in either complete blocks or blocks at the hit limit")
+            + (f", but not in {' and '.join(lost)}, which lie mostly in listed interference bands" if kept and lost
+               else "") + ".")
 
 
 def control_section(ctab, csum, inj, replay, recheck):

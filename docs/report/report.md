@@ -1,6 +1,6 @@
 # Comparing radio-signal searches on Breakthrough Listen data
 
-Ryan Clinton. Version 1.6, 2026-11-20.
+Ryan Clinton. Version 1.7, 2026-11-24.
 
 ## Summary
 
@@ -13,6 +13,8 @@ On a second session, fixed in advance (HIP17147, 2016), this search again found 
 On a third session, chosen by a rule from the archive's metadata and fixed in advance (NGC6946, a galaxy, at C band in 2019), every criterion fixed beforehand was met at its point estimate: this search found 2,404 of 7,040 signals against turboSETI's 247, and neither raised a false candidate. That band was quiet (3 of 64 blocks crowded), and 64 blocks leave the rates' intervals reaching 0.12, above the limit.
 
 These are three sessions from one telescope. They do not show better sensitivity in general.
+
+Four real cadences of other targets, chosen by a rule fixed beforehand and searched whole, gave 0.029 to 0.31 false candidates a block at S/N 30 (0.125 over all four, bunched in 18 of 1,267 blocks), and the checks left none unexplained. Signals planted in the same cadences show the checks keeping most real-looking signals in complete blocks, but not in blocks at the hit limit, which lie mostly in listed interference bands.
 
 ## The question
 
@@ -51,7 +53,15 @@ False candidates at S/N 30 (distinct, over the 19 wrong choices):
 | block | BLISS's event stage | this search's test | this search's test, with shadow hits | this search's test, hits grouped at S/N 5 |
 |---|---|---|---|---|
 | 35 | 1,610 | 85 | 85 | 1 |
+| 49 | 0 | 1 | 1 | 1 |
+| 79 | 0 | 0 | 0 | 0 |
 | 129 | 2,627 | 205 | 130 | 0 |
+| 131 | 2 | 0 | 0 | 0 |
+| 139 | 10 | 17 | 17 | 9 |
+| 166 | 0 | 0 | 0 | 0 |
+| 185 | 0 | 0 | 0 | 0 |
+| 221 | 1 | 0 | 0 | 0 |
+| 231 | 0 | 0 | 0 | 0 |
 
 With the hits the same, this search's test removes most of them: BLISS's event stage is the larger cause. The rest come from BLISS grouping its hits at the higher cut; grouped at S/N 5 and cut afterwards, almost none are left. These are two blocks, run after the main result was seen.
 
@@ -117,8 +127,39 @@ At the lower cuts the ratio falls (about ten times as many found at 30 each, abo
 - BLISS's hits through this search's test, and the same-hit control, are combinations of two pipelines, designed after the main result was seen.
 - Of the planted signals BLISS finds at S/N 10 and this search raises no candidate for, 28 were traced stage by stage. 17 are found strongly in all three ON looks and then called interference because one OFF look reaches S/N 6 to 8 along the track with no OFF transmission identified: low-level OFF evidence consistent with noise (0.66% of 10,000 random unplanted tracks reach 6; that is the test's rate on noise, not a loss rate for these signals, which were chosen because BLISS found them). 2 meet something real in an OFF look, 7 are missed by the detector (mostly in crowded blocks) and 2 are too faint. The threshold was set beforehand and is not moved for this.
 - The 8 signals the detector gave no matching hit for were measured through its stages, the detector unchanged; the first failure seen in each: 6 the hit cap, 2 found, but measured outside the tolerances. The hit cap is the 2,000 hits kept a look: in crowded looks the signal, at S/N 12.3 to 40.6, lies below that many stronger hits, and a cap of 5,000 to 20,000 finds it. Those measured outside the tolerances drift fast (2.0 and 1.6 Hz/s); their measured drift was 0.05 Hz/s off, just outside the tolerance. Neither is changed here: the detector stays as step 10 ran it.
+- The false-candidate control is four cadences: enough to show the rate varies between them, not to say how much it varies between sessions in general. Its interval over blocks describes those four observations only.
 - The frozen recovery criterion compares two Wilson intervals, which treat the planted signals as independent; signals share their block and their session. The paired difference with a bootstrap over blocks (above) is the better measure, and it is supplementary. All the blocks of a session come from one observation, so none of these intervals speaks for other sessions.
 - BLISS's hits through this search's test, supplementary in the third session, could not be run there: the step that hands BLISS each block expects a slice width these blocks do not have, and the frozen rule records that rather than adapting it.
+
+## A false-candidate control on four real cadences
+
+The false-candidate counts above judge each block with the 19 wrong choices of three ON looks, which stand in for cadences with no signal. To see what real cadences give, four cadences of other targets, never read by this project, were chosen by a rule fixed before any of their data was read (the first four Green Bank sessions, in the order of Breakthrough Listen's target list, in the layout the search was validated on). Each was searched whole by the search as frozen, in its own time order. No candidate in them is taken to be a signal, so what they give is a false-alarm count on real cadences.
+
+| cadence | band | blocks | candidates at S/N 30 | a block | at S/N 10 | left unexplained by the checks |
+|---|---|---|---|---|---|---|
+| HIP2 | L | 308 | 30 | 0.0974 | 59 | 0 |
+| HIP169 | L | 308 | 11 | 0.0357 | 137 | 0 |
+| HIP171 | L | 308 | 9 | 0.0292 | 466 | 0 |
+| HIP194 | S | 343 | 108 | 0.315 | 525 | 0 |
+| all four | | 1,267 | 158 | 0.125 | 1,187 | 0 |
+
+The rate depends on the cadence: at S/N 30, 0.029 to 0.31 a block. Over all four it is 0.125, and drawing runs of 16 consecutive blocks again within each cadence gives 0.022 to 0.31; that describes these four observations only, and four are too few to say how much the rate varies between sessions. The candidates are bunched: all 158 at S/N 30 lie in 18 of the 1,267 blocks, 86 of them in one. 157 are in the 174 blocks where a look reached the search's limit on hits, which are the crowded ones; that the limit itself makes them is not shown.
+
+On the three L-band cadences the rate at S/N 30 is 0.054 a block; one wrong choice of ON looks, weighted as the published rates are, gives 2.1 on the 2016 session and 0.0036 on the 2017 one. So 2016's level of false candidates is not what these L-band cadences give in their real order, but the stand-in is not a steady guide either; different sessions are compared, so this cannot separate the method from the sessions' own interference. The S-band cadence gives 0.31.
+
+The checks called every one of the 1,187 candidates at S/N 10 and over interference (119 shown, 1,068 likely), and left none unexplained. Most of those verdicts rest on signs short of proof, chiefly zero or very low drift, look-alikes in the cadence and crowding. The tables and verdict counts were made again from the packaged records alone (identical), and the checks run again from nothing changed 0 of 1,187 verdicts; both on the same computer, so not an independent verification.
+
+**Would the checks keep a real signal?** A zero means little if they would also explain away a signal. Following a protocol fixed beforehand, 3,520 signals were planted in the ON looks of 32 blocks of these cadences, half the blocks at the hit limit and half complete, drawn by their completeness alone, and put through the search, the cadence test and the checks as they are:
+
+| blocks | signals counted | a hit in an ON look at S/N 30 | candidates | left unexplained | unexplained among candidates (95% over blocks) |
+|---|---|---|---|---|---|
+| complete | 1,760 | 646 | 605 | 447 | 0.74 (0.56 to 0.90) |
+| at the hit limit | 1,760 | 489 | 421 | 86 | 0.20 (0.05 to 0.38) |
+| all | 3,520 | 1,135 | 1,026 | 533 | 0.52 (0.36 to 0.67) |
+
+Against the planted candidates they did not keep, the check cited most was known interference bands (401 times), then crowding (80), zero or very low drift (56), recurrence at other targets and times (56). A signal in a listed interference band is marked likely interference whatever it is, and the crowded blocks lie mostly in those bands; so there the checks cannot keep a real signal, by design.
+
+By the reading fixed in the protocol (informative where the lower end of the interval for unexplained among candidates is at least 0.5), the checks kept planted signals in complete blocks, and were not shown to keep them in blocks at the hit limit. So control B's zero is informative in complete blocks, and says little in blocks at the hit limit. Planted tones are clean and do not behave like every real transmitter.
 
 ## What the code audits found that bears on these results
 
@@ -154,6 +195,7 @@ The observations are from the Breakthrough Listen Open Data Archive (Lebofsky et
 - 1.4 (2026-11-19): recovery weighted to each session's share of crowded and clean blocks beside the sample's; the neighbouring-block check made over consecutive blocks of the session; the matched cut by one rule throughout; the blocks of each session stated.
 - 1.5 (2026-11-19): checks of the planted signals: a tone in the voltages, finer sampling, the DC bin and a fixed flux, none of which moves recovery.
 - 1.6 (2026-11-20): what the code audits found, stated where it bears on the results: the 2016 reads' DC bins, the false-candidate count and its intervals, turboSETI's zero drift and fast-drift reporting, how BLISS was run; the planted signals counted per session; the injection checks' small differences stated as such; references completed.
+- 1.7 (2026-11-24): a false-candidate control on four real cadences of other targets, chosen by a rule fixed beforehand and searched whole, with the checks' verdicts on its candidates; and signals planted in those cadences, to show how many real-looking signals the checks keep.
 
 ## Records this version was written from
 
@@ -161,12 +203,25 @@ The observations are from the Breakthrough Listen Open Data Archive (Lebofsky et
 - data/measurements/step10.json: written 2026-11-14T09:41:25Z, commit de48e39
 - data/measurements/step12.json: written 2026-11-19T09:20:07Z, commit f161e25
 - bliss_control/block_035.json: finished 2026-11-18T15:20:01Z
+- bliss_control/block_049.json: finished 2026-11-20T13:30:45Z
+- bliss_control/block_079.json: finished 2026-11-20T13:32:33Z
 - bliss_control/block_129.json: finished 2026-11-18T15:37:02Z
+- bliss_control/block_131.json: finished 2026-11-20T13:34:20Z
+- bliss_control/block_139.json: finished 2026-11-20T13:36:50Z
+- bliss_control/block_166.json: finished 2026-11-20T13:38:38Z
+- bliss_control/block_185.json: finished 2026-11-20T13:40:41Z
+- bliss_control/block_221.json: finished 2026-11-20T13:42:28Z
+- bliss_control/block_231.json: finished 2026-11-20T13:44:55Z
 - data/analysis/operating_points.json: written 2026-11-19T11:43:06Z, commit 21a919e
-- data/analysis/injection_voltage.json: written 2026-11-19T13:26:48Z, commit 4968719
+- data/analysis/injection_voltage.json: written 2026-11-20T08:04:45Z, commit 865d3e0
 - data/analysis/injection_substeps.json: written 2026-11-20T01:58:16Z, commit 782bf3c
 - data/analysis/injection_dc.json: written 2026-11-20T02:28:09Z, commit 03f5836
 - data/analysis/injection_flux.json: written 2026-11-19T14:48:25Z, commit 4968719
 - data/analysis/bliss_only/trace_summary.json: written 2026-11-19T00:54:45Z, commit 2b1b22b
 - data/analysis/bliss_only/detector_misses.json: written 2026-11-19T02:28:46Z, commit 3fd7837
 - data/measurements/off_null.json: written 2026-11-11T02:41:54Z, commit e5f6c77
+- data/analysis/negative_controls/tables.json: written 2026-11-24T02:56:15Z, commit 6a50490
+- data/analysis/negative_controls/summary.json: written 2026-11-24T02:56:28Z, commit 6a50490
+- data/analysis/negative_controls/package_replay.json: written 2026-11-24T02:56:34Z, commit 6a50490
+- data/analysis/negative_controls/package_recheck.json: written 2026-11-24T03:24:25Z, commit 6a50490
+- data/analysis/negative_controls/injection.json: written 2026-11-24T08:29:51Z, commit a4bede0
