@@ -97,6 +97,12 @@ Doppler smearing turned on, and the 16 blocks run again.**
   within 2 Hz of the scoring's at 2 Hz/s, and within about 4 Hz at
   4 Hz/s. Nothing else changes: not the blocks, the signals, the scoring,
   the measure or how it is read.
+- **Bounding each signal.** With smearing on, setigen works each signal
+  out over the whole frame of about a million channels, and one look took
+  over 30 minutes. Each signal is therefore bounded to the channels its
+  track crosses, plus 200 either side (`bounding_f_range`). On a test
+  frame this gave the same placement and power to the printed precision.
+  One look of 110 signals then takes 4 s.
 - **What is kept.** The first run's records are kept in
   `data/analysis/independent_injection/unsmeared/`, and the report gives
   both runs.

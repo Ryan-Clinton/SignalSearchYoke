@@ -16,6 +16,8 @@ import sys
 import numpy as np
 import setigen as stg
 
+BOUND_CHANNELS = 200
+
 
 def plant(looks, fch1, foff, tsamp, x, drift, snr, smear=False):
     out = np.empty_like(looks)
@@ -30,10 +32,15 @@ def plant(looks, fch1, foff, tsamp, x, drift, snr, smear=False):
             raise SystemExit("setigen_plant.py: the frame's frequencies are not the data's")
         for xi, d, s in zip(x[j], drift, snr):
             f_hz = (fch1 + xi * foff) * 1e6
+            # With smearing, setigen works each signal out over the whole frame unless bounded: bound it to the
+            # channels its track crosses and BOUND_CHANNELS either side (checked: the same placement and power)
+            end = f_hz + float(d) * data.shape[0] * tsamp
+            bound = ({"bounding_f_range": (min(f_hz, end) - BOUND_CHANNELS * width, max(f_hz, end) + BOUND_CHANNELS * width)}
+                     if smear else {})
             frame.add_signal(stg.constant_path(f_start=f_hz, drift_rate=float(d)),
                              stg.constant_t_profile(level=frame.get_intensity(snr=float(s))),
                              stg.sinc2_f_profile(width=2 * width), stg.constant_bp_profile(level=1),
-                             doppler_smearing=bool(smear))
+                             doppler_smearing=bool(smear), **bound)
         got = frame.get_data()
         out[j] = got[:, ::-1] if flip else got
     return out
