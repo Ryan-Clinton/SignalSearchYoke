@@ -471,7 +471,7 @@ def package(say=print):
 
 
 def _unstamped(rec):
-    return {k: v for k, v in rec.items() if k not in ("provenance", "one_wrong_choice_on_the_project_sessions")}
+    return {k: v for k, v in rec.items() if k not in ("provenance", "kind", "one_wrong_choice_on_the_project_sessions")}
 
 
 def replay(folder=None, say=print):

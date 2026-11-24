@@ -242,6 +242,55 @@ class TheWholeControl(unittest.TestCase):
             self.verdicts()
 
 
+class Replay(TheWholeControl):
+    """negative_controls.replay: right package passes as written by tables and summary; a changed one is refused."""
+
+    def package(self):
+        folder = self.folder / "package"
+        (folder / "sweeps").mkdir(parents=True)
+        records = []
+        for c in self.chosen:
+            text = (self.folder / "sweeps" / f"{c['target']}-{c['session']}.json").read_text(encoding="utf-8")
+            (folder / "sweeps" / f"{c['target']}-{c['session']}.json").write_text(text, encoding="utf-8")
+            records.append((c, json.loads(text)))
+        events = self.verdicts()
+        put = lambda n, r: (folder / n).write_text(json.dumps(r), encoding="utf-8")  # noqa: E731
+        put("choice.json", {"chosen": self.chosen})
+        put("verdicts.json", {"events": events})
+        put("tables.json", dict(negative_controls.table_rows(records), provenance={}))
+        put("summary.json", dict(negative_controls.summary_rows(records, events), kind="measured", provenance={},
+                                 one_wrong_choice_on_the_project_sessions={}))
+        self.seal(folder)
+        return folder
+
+    @staticmethod
+    def seal(folder):
+        files = {p.relative_to(folder).as_posix(): negative_controls._sha(p) for p in folder.rglob("*.json")
+                 if p.name != "manifest.json"}
+        (folder / "manifest.json").write_text(json.dumps({"files": files}), encoding="utf-8")
+
+    def test_a_right_package_replays(self):
+        got = negative_controls.replay(self.package(), say=lambda *a: None)
+        self.assertTrue(got["tables_same"] and got["summary_same"])
+
+    def test_a_changed_file_is_refused(self):
+        folder = self.package()
+        path = folder / "verdicts.json"
+        path.write_text(path.read_text(encoding="utf-8").replace("likely", "unexplained"), encoding="utf-8")
+        with self.assertRaises(yoke.Refusal):
+            negative_controls.replay(folder, say=lambda *a: None)
+
+    def test_a_changed_verdict_is_refused_even_when_rehashed(self):
+        folder = self.package()
+        path = folder / "verdicts.json"
+        rec = json.loads(path.read_text(encoding="utf-8"))
+        rec["events"][0]["verdict"] = "unexplained, strong"
+        path.write_text(json.dumps(rec), encoding="utf-8")
+        self.seal(folder)
+        with self.assertRaises(yoke.Refusal):
+            negative_controls.replay(folder, say=lambda *a: None)
+
+
 class ConsecutiveBlocks(unittest.TestCase):
     def test_bunched_counts_widen_the_interval(self):
         bunched = [0] * 90 + [10] * 10
