@@ -5,6 +5,7 @@ scoring then counts a detected signal as missed. This is a new scoring version b
 this search; no frozen verdict uses it.
 
     python tools/midlook.py run TARGET     each matched block read again, planted again, searched (resumes)
+    python tools/midlook.py run TARGET --from-end   the same from the last block, for a second lane
     python tools/midlook.py tables         recovery as published, at mid-look, and at mid-look with tolerances
                                            that grow with drift (A6-05), by drift range
 
@@ -87,7 +88,7 @@ def one_block(target, k, rec, slices, urls):
             "published_reproduced": not differ, "differ": differ[:20], "kind": "measured"}
 
 
-def run(target, say=print):
+def run(target, say=print, from_end=False):
     import matched
     import seti
     import store
@@ -105,8 +106,11 @@ def run(target, say=print):
         k = int(p.stem.split("_")[1])
         if not yoke.whole(out / f"block_{k:03d}.json", lambda r: len(r.get("tones", [])) > 0):
             todo.append((k, p))
-    say(f"{target}: {len(todo)} blocks to read again")
-    for k, p in todo:
+    say(f"{target}: {len(todo)} blocks to read again" + (", from the end" if from_end else ""))
+    for k, p in (todo[::-1] if from_end else todo):
+        # a second lane may work the same session from the other end: skip what it has finished
+        if yoke.whole(out / f"block_{k:03d}.json", lambda r: len(r.get("tones", [])) > 0):
+            continue
         rec = json.loads(p.read_text(encoding="utf-8"))
         got = one_block(target, k, rec, seti.read_looks(urls, *block_list[k]), urls)
         yoke.write(out / f"block_{k:03d}.json", got, indent=None, stamp=True)
@@ -147,7 +151,7 @@ def tables(say=print):
 def main():
     cmd = sys.argv[1] if len(sys.argv) > 1 else ""
     if cmd == "run" and len(sys.argv) > 2:
-        run(sys.argv[2])
+        run(sys.argv[2], from_end="--from-end" in sys.argv[3:])
     elif cmd == "tables":
         tables()
     else:
