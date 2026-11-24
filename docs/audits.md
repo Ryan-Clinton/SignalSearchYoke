@@ -26,7 +26,7 @@ answered it.
 | 1 | Scientific methodology | 1 | critical | **done** (19 Nov 2026), re-audited the same day; see below |
 | 2 | Signal injection accuracy | 1 | critical | **re-audited** (20 Nov 2026): the paired reruns finished, no change to either pipeline's recovery beyond 2 signals in 880; see below |
 | 3 | turboSETI comparison fairness | 1 | critical | **measured** (21 Nov 2026): the 16 blocks run; turboSETI loses most signals before its event stage, with no hit at SNR 5; the zero-drift trial changes nothing; matched operating points cannot be resolved on 8 blocks a session; see below |
-| 4 | False-positive methodology | 1 | critical | **in progress** (21 Nov 2026): record-based checks done; time order changes no wrong choice's candidates; control B (four real cadences of other targets in their own order) chosen by a rule fixed first, running; see below |
+| 4 | False-positive methodology | 1 | critical | **in progress** (21 Nov 2026): record-based checks done; time order changes no wrong choice's candidates; control B (four real cadences of other targets in their own order, chosen by a rule fixed first) **measured**: 0.125 candidates a block at 30 over 1,267 blocks, none left unexplained by the checks, 157 of the 158 in blocks at the hit cap; see below |
 | 5 | The 2016 interference failure | 1 | critical | **measured** (21 Nov 2026): all 23 blocks read again; the cap is not the cause (raising it removes 137 of 3,654); the OFF looks hold weak related hits under the veto; two ON hits would cut the false candidates by 86%; see below |
 | 6 | Detector completeness and missed signals | 1 | high | **in progress** (21 Nov 2026): the cap, crowding, close pairs and offsets measured; the strong 2017 misses are detected and measured outside the tolerances, which compare frequencies at the look's start; shadow refresh changes nothing that counts; see below |
 | 7 | BLISS comparison | 1 | high | **in progress** (21 Nov 2026): provenance enforced, two-ON split measured; on eight blocks chosen beforehand the same-hit control finds no large event-stage effect; see below |
@@ -355,7 +355,7 @@ cadences. Every finding was checked against the code and the records.
 | F4-05: concentrated interference and correlated blocks | high | **built in part** (`false_checks.py windows`): the false rate's interval with windows of 4 and 16 consecutive blocks resampled within each class; 2016 this search at 30: by block [14.6185, 69.675], by 4 [11.4274, 70.4456], by 16 [2.7473, 80.3749]. A tail absent from a session cannot be drawn from it; the three sessions' rates (0.068, 39.1 and 0 at 30) are the measure of session-to-session spread so far: **planned**, more sessions (audit 24). |
 | F4-06: the matched cuts are chosen on the blocks they are judged on | high | **stated; in part already held out.** The frozen cut of steps 10 and 12, 30, was step 4's matched cut on the 2017 session, then tested on 2016 (failed) and 2019 (held): that is the out-of-sample test of one threshold. Choosing thresholds on some sessions and testing them on others more widely: **planned** (control C, audit 24). |
 | F4-07: cadence candidates before vetting are not vetted false alarms | medium | **built**: the report names the count a cadence-candidate yield before vetting. Measuring the yield after vetting, and how often vetting rejects planted signals: **planned** in audits 5 and 12. |
-| Control B: real, time-ordered negative-control cadences from other directions | — | **chosen and queued** (below): four sessions by a rule fixed first. |
+| Control B: real, time-ordered negative-control cadences from other directions | — | **measured** (below, "control B measured"): four sessions by a rule fixed first. |
 
 ### 4, re-audited at d441e00, 20 November 2026
 
@@ -366,7 +366,7 @@ cadences. Every finding was checked against the code and the records.
 | More tests | — | **built**: the union and recurrence of the 19 choices, windows by block number, single-link grouping within reach, the conservative interval at zero, the kept candidates with ON looks at odd places. |
 | The windows' uneven groups | medium | **built in part**: the number of windows by class is recorded and fewer than 20 marked; the coverage case "correlated in runs of 4" above is the validation of block against window resampling that the data allow. |
 | The new records in the evidence package | — | **planned at the next build**: data/analysis is in the package and its records carry the commit that made them. |
-| Independent negative-control cadences | — | **planned** (control B), as before: the rearranged looks of one cadence are not a substitute. |
+| Independent negative-control cadences | — | **measured** (control B, below): the rearranged looks of one cadence are not a substitute. Four cadences are too few for a session-to-session spread. |
 
 ### 4, re-audited again at 4f3ff26, 20 November 2026
 
@@ -423,7 +423,37 @@ ON, OFF pairs. **No choice's count or candidates differ**, at 10 or at 30
 (1,977 and 787 distinct candidates over all choices both ways; 45 and 13
 choices with any). So for this search the order of the looks does not
 change the false-candidate count. Exchangeability with the real choice
-remains control B's (running).
+is control B's, next.
+
+### 4, control B measured, 24 November 2026
+
+All four cadences were swept whole by the frozen search (search version 4
+on every block; its code last changed on 20 November, before the sweep
+began), 1,267 blocks and 3.69 million hits, in a store of their own. The
+candidates then went through the checks as they are (`negative_controls.py
+checks`), which added only their own table: every block, hit and candidate
+is unchanged. Rates are from `data/analysis/negative_controls/tables.json`
+and the rest from `summary.json`.
+
+| Cadence | Band | Blocks | Candidates at 30 | A block at 30 (bootstrap 95%) | At 10 | A block at 10 | Unexplained after the checks |
+|---|---|---|---|---|---|---|---|
+| HIP 2 | L | 308 | 30 | 0.097 (0.010 to 0.227) | 59 | 0.192 | 0 |
+| HIP 169 | L | 308 | 11 | 0.036 (0.007 to 0.081) | 137 | 0.445 | 0 |
+| HIP 171 | L | 308 | 9 | 0.029 (0.003 to 0.068) | 466 | 1.513 | 0 |
+| HIP 194 | S | 343 | 108 | 0.315 (0.003 to 0.898) | 525 | 1.531 | 0 |
+| The three at L band | L | 924 | 50 | 0.054 (0.018 to 0.101) | 662 | 0.717 | 0 |
+| All four | | 1,267 | 158 | 0.125 (0.031 to 0.282) | 1,187 | 0.937 | 0 |
+
+| Finding | Severity | Verdict |
+|---|---|---|
+| The rate before the checks | high | **measured: it depends on the cadence.** At the frozen cut the four differ elevenfold. The exact Poisson interval over all four (0.106 to 0.146) assumes independent candidates, which these are not, and is not the result; the block bootstrap above is wider, and neither describes the spread between sessions, for which four cadences are too few. |
+| How bunched the candidates are | high | **measured.** All 158 at 30 lie in 18 of the 1,267 blocks, and 113 in the busiest three. One block of HIP 194 (block 42, from 1,921.0 MHz) holds 86, and that session's 108 lie in four blocks. |
+| The hit cap | high | **measured: nearly every candidate at 30 is in a capped block.** 157 of the 158 are in the 174 blocks where a look reached the cap; the 1,093 complete blocks hold one. This is an association: capped blocks are the crowded ones, and whether the cap itself makes these candidates is not tested here. At 10 the complete blocks hold 250 of the 1,187, 228 of them in HIP 194. So a rate from complete blocks alone would be far lower at 30, and these capped blocks are not searched completely either. |
+| After the checks | high | **measured: none unexplained.** Of the 1,187 at 10 and over, 119 are called interference (shown) and 1,068 likely interference (indicated); at 30, 18 and 140. The 95% upper limit on the unexplained rate is 0.0029 a block over the four. This says the checks explain away the control's candidates. It does not by itself say how many real signals they would keep; that is measured with planted signals (audit 6 and the vetting tables). Most verdicts at 30 rest on "indicated" signs, chiefly zero or very low drift, look-alikes and crowding, not on shown recurrence. |
+| Against one wrong ON/OFF choice | high | **the stand-in is not a steady guide to real cadences.** One wrong choice on the project's sessions, weighted by class as the published rates are, gives 0.0036 (2017), 2.10 (2016) and 0 (2019) a block at 30. The three L-band controls give 0.029 to 0.097: well above the 2017 stand-in and about 20 to 70 times below 2016's. So 2016's level of false candidates **is not what L-band cadences in their real order typically give**, on these three. Different sessions are being compared, so this cannot separate the wrong-choice method from the sessions' own interference. |
+
+The weighted rates here differ from F4-01's (0.0091 and 1.7468), which are
+over the blocks as sampled. Nothing in steps 4, 10 or 12 changes.
 
 ## 5. The 2016 interference failure: 20 November 2026
 
@@ -1243,3 +1273,5 @@ provenance. Results still running are not listed until they finish.
 | The detector's confirmed faults change no candidate at 30 on 12 blocks | 9, 11 | `data/analysis/detector_checks_blocks.json` | `d3e5699`, clean | `tools/detector_checks.py blocks` |
 | The curved matcher's first-wins and blind OFF looks change nothing on ten blocks | 10 | `data/analysis/curved_checks.json` | `d3e5699`, clean | `tools/curved_checks.py blocks` |
 | The two DC rules give identical counts on eight 2016 blocks | 14 | `data/analysis/dc_checks.json` | `d3e5699`, clean | `tools/dc_checks.py` |
+| Control B's false-candidate rates on four real cadences | 4 | `data/analysis/negative_controls/tables.json` | `57fe445`, clean | `tools/negative_controls.py tables` |
+| Control B: none unexplained after the checks; candidates bunched and in capped blocks; one wrong choice beside it | 4 | `data/analysis/negative_controls/summary.json` | `6e77639`, clean | `tools/negative_controls.py summary` |
