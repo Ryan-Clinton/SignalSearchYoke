@@ -28,8 +28,8 @@ import report  # noqa: E402
 SLUG = "comparing-searches"
 TITLE = "Comparing radio-signal searches on Breakthrough Listen data"
 SUMMARY = ("Planted signals in Breakthrough Listen's Green Bank data, counted at matched false-candidate rates: "
-           "a new search against turboSETI and BLISS on two sessions, the second fixed in advance, where both "
-           "pipelines failed the false-candidate limit.")
+           "a new search against turboSETI and BLISS on three sessions, two fixed in advance, and a false-candidate "
+           "control on four real cadences of other targets.")
 # The public versions only: 0.1 was a draft never published, and the site dates the
 # report (citation_publication_date) from the first version listed.
 REVISIONS = (
