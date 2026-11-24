@@ -11,8 +11,8 @@
 #
 # An outage is not a failure of the job. Jobs run with SSY_WAIT_FOR_NETWORK
 # set, so their reads wait it out (reading.py); a job that still ends on a
-# network error is run again after 10 minutes, as often as it takes, and that
-# is not counted. Any other failure is tried three times, 10 minutes apart;
+# network error exits 75 and is run again after 10 minutes, as often as it
+# takes, and that is not counted. Any other failure is tried three times, 10 minutes apart;
 # then the job stays on the queue and the queue stops, since later jobs may
 # build on it. Output goes to data\logs\jobs.log, appended.
 # Only one copy runs: a second finds the lock held and exits.
@@ -47,20 +47,7 @@ try {
     exit 0  # another copy is running the queue
 }
 
-function Test-NetworkFailure([long]$from) {
-    # Did this run of the job (the log from byte $from on) end on a network error? Its last 8 KB only: an
-    # outage the job waited out earlier, or one from an earlier run, must not excuse a real fault.
-    $f = [System.IO.File]::Open($log, "Open", "Read", "ReadWrite")
-    try {
-        $start = [Math]::Max($from, $f.Length - 8192)
-        if ($start -ge $f.Length) { return $false }
-        [void]$f.Seek($start, "Begin")
-        $bytes = New-Object byte[] ($f.Length - $start)
-        $got = $f.Read($bytes, 0, $bytes.Length)
-        $text = [System.Text.Encoding]::UTF8.GetString($bytes, 0, $got)
-    } finally { $f.Close() }
-    return $text -match 'requests\.exceptions\.(ConnectionError|ConnectTimeout|ReadTimeout|Timeout|ChunkedEncodingError)|NameResolutionError'
-}
+$networkExit = 75  # yoke.NETWORK_EXIT: the job itself says a network error ended it
 
 Start-Sleep -Seconds 60  # after a logon, let WSL and the drives come up
 Say "queue started"
@@ -72,13 +59,12 @@ while ((Test-Path $queue) -and
     while ($try -le 3 -and -not $ok) {
         Say "run (try $try): $job"
         $cmd = $job -replace '^python ', "`"$python`" "
-        $from = (Get-Item $log).Length
         cmd.exe /c "$cmd >> `"$log`" 2>&1"
         $code = $LASTEXITCODE
         $ok = ($code -eq 0)
         Say "exit $code`: $job"
         if ($ok) { break }
-        if (Test-NetworkFailure $from) {
+        if ($code -eq $networkExit) {
             Say "network failure, not counted; running it again in 10 minutes"
             Start-Sleep -Seconds 600
             continue

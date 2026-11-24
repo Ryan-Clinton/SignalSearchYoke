@@ -29,6 +29,7 @@ import hashlib
 import io
 import json
 import os
+import sys
 import threading
 import time
 from collections import OrderedDict
@@ -94,24 +95,42 @@ WAIT_SAY_EVERY = 1800          # how often a long outage is mentioned in the log
 OUTAGE_ERRORS = (requests.exceptions.ConnectionError, requests.exceptions.Timeout,
                  requests.exceptions.ChunkedEncodingError)
 OUTAGE_STATUS = (429, 500, 502, 503, 504)
-_outage = {"since": None, "said": 0.0}
+_outage = {"since": None, "said": 0.0, "last_good": None}
 _outage_lock = threading.Lock()
 
 
+def _network_exit(kind, value, trace):
+    """A queued job ended by a network error says so by its exit code (yoke.NETWORK_EXIT), which the queue reads
+    instead of searching the log. Any other error exits as Python's does."""
+    sys.__excepthook__(kind, value, trace)
+    if os.environ.get(WAIT_SETTING) and isinstance(value, OUTAGE_ERRORS):
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os._exit(yoke.NETWORK_EXIT)
+
+
+sys.excepthook = _network_exit
+
+
 def _outage_note(why, url):
-    """One line when an outage begins and one every WAIT_SAY_EVERY, however many threads are waiting."""
+    """One line when an outage begins and one every WAIT_SAY_EVERY, however many threads are waiting, each with
+    when a read last succeeded. To end the wait, stop the job: it resumes from its last finished unit."""
     now = time.monotonic()
     with _outage_lock:
+        good = _outage["last_good"] or "none yet in this run"
         if _outage["since"] is None:
             _outage.update(since=now, said=now)
-            print(f"network: waiting ({why}, {url.split('/')[2]}); nothing is lost, the read is asked again", flush=True)
+            print(f"network: waiting ({why}, {url.split('/')[2]}); last good read {good}; nothing is lost, the read "
+                  "is asked again", flush=True)
         elif now - _outage["said"] >= WAIT_SAY_EVERY:
             _outage["said"] = now
-            print(f"network: still waiting after {(now - _outage['since']) / 60:.0f} min ({why})", flush=True)
+            print(f"network: still waiting after {(now - _outage['since']) / 60:.0f} min ({why}); last good read {good}",
+                  flush=True)
 
 
 def _outage_over():
     with _outage_lock:
+        _outage["last_good"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         if _outage["since"] is not None:
             print(f"network: back after {(time.monotonic() - _outage['since']) / 60:.1f} min", flush=True)
             _outage["since"] = None

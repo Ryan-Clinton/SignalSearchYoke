@@ -3,6 +3,8 @@ import synth  # noqa: F401  (first: the tests' own data folder)
 
 import json
 import os
+import sqlite3
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -79,45 +81,181 @@ class Waiting(unittest.TestCase):
         self.assertEqual(seen, [before])
 
 
-class TablesNeedTheWholeControl(unittest.TestCase):
+class ExitCode(unittest.TestCase):
+    """The queue tells an outage from a fault by the job's exit code, whatever the log holds."""
+
+    def run_job(self, body, waiting=True):
+        root = str(Path(__file__).resolve().parents[1])
+        env = {k: v for k, v in os.environ.items() if k != reading.WAIT_SETTING}
+        if waiting:
+            env[reading.WAIT_SETTING] = "1"
+        code = f"import sys; sys.path.insert(0, {root!r}); import reading, requests\n{body}"
+        return subprocess.run([sys.executable, "-c", code], env=env, capture_output=True).returncode
+
+    def test_a_network_error_exits_75(self):
+        self.assertEqual(self.run_job("raise requests.exceptions.ConnectionError('no name')"), yoke.NETWORK_EXIT)
+
+    def test_a_fault_after_a_network_error_is_a_fault(self):
+        body = ("try:\n    raise requests.exceptions.ConnectionError('requests.exceptions.ConnectionError')\n"
+                "except Exception as e:\n    print(repr(e))\nraise ValueError('a real fault')")
+        self.assertEqual(self.run_job(body), 1)
+
+    def test_at_a_prompt_it_exits_as_python_does(self):
+        self.assertEqual(self.run_job("raise requests.exceptions.ConnectionError('x')", waiting=False), 1)
+
+
+class TheWholeControl(unittest.TestCase):
+    """Planted faults in the choice, the sweep records, the store and the verdicts must each be refused."""
+    VERSION = "v"
+
     def setUp(self):
         self.folder = Path(tempfile.mkdtemp(prefix="ssy-controls-"))
         (self.folder / "sweeps").mkdir()
-        self.chosen = [{"target": "A", "session": "S1"}, {"target": "B", "session": "S2"}]
+        self.chosen = [{"target": t, "session": f"S{t}", "looks": [{"url": f"u{t}{i}"} for i in range(6)]} for t in "ABCD"]
+        self.db_path = self.folder / "ssy.sqlite"
+        db = sqlite3.connect(self.db_path)
+        db.executescript("""CREATE TABLE cadences (cadence TEXT, session TEXT, target TEXT, urls TEXT);
+            CREATE TABLE blocks (session TEXT, block_idx INTEGER, f_lo_mhz REAL, f_hi_mhz REAL, status TEXT);
+            CREATE TABLE events (event_id INTEGER, session TEXT, block_idx INTEGER, snr REAL, f_start_mhz REAL,
+                                 drift_hz_s REAL, label TEXT, superseded_run INTEGER);
+            CREATE TABLE checks (event_id INTEGER, lead TEXT, name TEXT, result TEXT, version TEXT, checked_utc TEXT);""")
+        for n, c in enumerate(self.chosen):
+            db.execute("INSERT INTO cadences VALUES (?,?,?,?)", (c["session"], c["session"], c["target"],
+                                                                json.dumps([x["url"] for x in c["looks"]])))
+            db.executemany("INSERT INTO blocks VALUES (?,?,?,?, 'done')", [(c["session"], k, k, k + 1) for k in range(2)])
+            db.execute("INSERT INTO events VALUES (?,?,0,40,0.5,0,'candidate',NULL)", (n + 1, c["session"]))
+            self.evaluate(db, n + 1, "likely interference (indicated: x)", self.VERSION, "t1")
+            self.write(c, 2)
+        db.commit()
+        db.close()
 
-    def write(self, target, session, done):
-        block = {"complete": True, "events": []}
-        rec = {"blocks": [[0, 1], [1, 2]], "done": {str(k): block for k in range(done)}}
-        (self.folder / "sweeps" / f"{target}-{session}.json").write_text(json.dumps(rec), encoding="utf-8")
+    @staticmethod
+    def evaluate(db, event, verdict, version, when):
+        db.executemany("INSERT INTO checks VALUES (?,?,?,?,?,?)",
+                       [(event, f"L{event}", "1. data", "x", version, when), (event, f"L{event}", "10. report", verdict, version, when)])
+
+    def write(self, c, done, **change):
+        make = lambda k: {"complete": True, "from_mhz": k, "to_mhz": k + 1, "search_version": self.VERSION,  # noqa: E731
+                          "events": [{"snr": 40}] if k == 0 else []}
+        rec = {"blocks": [[0, 1], [1, 2]], "done": {str(k): make(k) for k in range(done)}}
+        rec["done"].update(change)
+        (self.folder / "sweeps" / f"{c['target']}-{c['session']}.json").write_text(json.dumps(rec), encoding="utf-8")
 
     def tables(self):
         with mock.patch.object(negative_controls, "CONTROLS", self.folder), \
                 mock.patch.object(negative_controls, "_choice", return_value={"chosen": self.chosen}), \
-                mock.patch.object(yoke, "write") as wrote:
+                mock.patch("seti.SEARCH_VERSION", self.VERSION), mock.patch.object(yoke, "write") as wrote:
             try:
                 return negative_controls.tables(say=lambda *a: None), wrote
             except yoke.Refusal as e:
                 self.assertFalse(wrote.called)
-                return None, e
+                return None, str(e)
 
-    def test_a_cadence_not_swept_is_refused(self):
-        self.write("A", "S1", 2)
-        got, why = self.tables()
-        self.assertIsNone(got)
-        self.assertIn("S2: not swept yet", str(why))
+    def edit(self, sql, *args):
+        db = sqlite3.connect(self.db_path)
+        with db:
+            db.execute(sql, args)
+        db.close()
 
-    def test_a_cadence_part_swept_is_refused(self):
-        self.write("A", "S1", 2)
-        self.write("B", "S2", 1)
-        got, why = self.tables()
-        self.assertIsNone(got)
-        self.assertIn("S2: 1 of 2 blocks", str(why))
+    def verdicts(self):
+        db = sqlite3.connect(self.db_path)
+        try:
+            return negative_controls.candidate_verdicts(db, self.VERSION, 2)
+        finally:
+            db.close()
 
     def test_the_whole_control_is_tabled(self):
-        self.write("A", "S1", 2)
-        self.write("B", "S2", 2)
         got, _ = self.tables()
-        self.assertEqual(got["over_all"]["blocks"], 4)
+        self.assertEqual((got["over_all"]["blocks"], got["over_all"]["rate_30"]), (8, 0.5))
+
+    def test_a_cadence_not_swept_is_refused(self):
+        (self.folder / "sweeps" / "D-SD.json").unlink()
+        self.assertIn("SD: not swept yet", self.tables()[1])
+
+    def test_a_cadence_part_swept_is_refused(self):
+        self.write(self.chosen[3], 1)
+        self.assertIn("SD: 1 of 2 blocks", self.tables()[1])
+
+    def test_a_wrong_block_number_is_refused(self):
+        c = self.chosen[1]
+        path = self.folder / "sweeps" / "B-SB.json"
+        rec = json.loads(path.read_text(encoding="utf-8"))
+        rec["done"]["99"] = rec["done"].pop("1")
+        path.write_text(json.dumps(rec), encoding="utf-8")
+        self.assertIn(f"{c['session']}: its block numbers", self.tables()[1])
+
+    def test_a_moved_boundary_is_refused(self):
+        self.write(self.chosen[0], 2, **{"1": {"complete": True, "from_mhz": 1.5, "to_mhz": 2, "search_version": "v", "events": []}})
+        self.assertIn("not at its boundaries", self.tables()[1])
+
+    def test_another_search_version_is_refused(self):
+        self.write(self.chosen[0], 2, **{"1": {"complete": True, "from_mhz": 1, "to_mhz": 2, "search_version": "old", "events": []}})
+        self.assertIn("search version", self.tables()[1])
+
+    def test_another_cadence_in_the_store_is_refused(self):
+        self.edit("UPDATE cadences SET urls=? WHERE cadence='SC'", json.dumps(["other"] * 6))
+        self.assertIn("not the one chosen", self.tables()[1])
+
+    def test_a_block_missing_from_the_store_is_refused(self):
+        self.edit("DELETE FROM blocks WHERE session='SA' AND block_idx=1")
+        self.assertIn("store's blocks", self.tables()[1])
+
+    def test_a_candidate_missing_from_the_store_is_refused(self):
+        self.edit("DELETE FROM events WHERE event_id=1")
+        self.assertIn("candidates differ", self.tables()[1])
+
+    def test_fewer_than_four_are_refused(self):
+        for chosen in (self.chosen[:3], self.chosen[:3] + [dict(self.chosen[3], session="SA")],
+                       self.chosen[:3] + [dict(self.chosen[3], target="A")]):
+            with mock.patch.object(negative_controls, "OUT", self.folder):
+                (self.folder / "choice.json").write_text(json.dumps({"chosen": chosen}), encoding="utf-8")
+                with self.assertRaises(yoke.Refusal):
+                    negative_controls._choice()
+
+    def test_one_verdict_each(self):
+        self.assertEqual({e["verdict"] for e in self.verdicts()}, {"likely interference (indicated: x)"})
+
+    def test_an_old_version_is_not_read(self):
+        self.edit("UPDATE checks SET version='old' WHERE event_id=2")
+        with self.assertRaises(yoke.Refusal):
+            self.verdicts()
+
+    def test_an_old_verdict_beside_the_current_is_ignored(self):
+        db = sqlite3.connect(self.db_path)
+        with db:
+            self.evaluate(db, 2, "unexplained, strong", "old", "t0")
+        db.close()
+        got = {e["event_id"]: e["verdict"] for e in self.verdicts()}
+        self.assertTrue(got[2].startswith("likely"))
+
+    def test_two_current_evaluations_are_refused(self):
+        db = sqlite3.connect(self.db_path)
+        with db:
+            self.evaluate(db, 2, "unexplained, weak", self.VERSION, "t2")
+        db.close()
+        with self.assertRaises(yoke.Refusal):
+            self.verdicts()
+
+    def test_a_cut_off_evaluation_is_not_a_verdict(self):
+        self.edit("DELETE FROM checks WHERE event_id=3 AND name='1. data'")
+        with self.assertRaises(yoke.Refusal):
+            self.verdicts()
+
+
+class ConsecutiveBlocks(unittest.TestCase):
+    def test_bunched_counts_widen_the_interval(self):
+        bunched = [0] * 90 + [10] * 10
+        spread = ([0] * 9 + [10]) * 10
+        a, b = negative_controls._windows95([bunched], 16), negative_controls._windows95([spread], 16)
+        self.assertGreater(a[1] - a[0], 2 * (b[1] - b[0]))
+
+    def test_none_stays_none(self):
+        self.assertEqual(negative_controls._windows95([[0] * 50], 4), [0.0, 0.0])
+
+    def test_the_mean_is_near_the_rate(self):
+        low, high = negative_controls._windows95([[1, 2] * 100], 3)
+        self.assertLess(low, 1.5)
+        self.assertGreater(high, 1.5)
 
 
 class ControlSummary(unittest.TestCase):

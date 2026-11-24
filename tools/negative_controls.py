@@ -10,6 +10,9 @@ wrong ON/OFF choices only stand in for. Supplementary: no verdict of steps
     python tools/negative_controls.py tables        the rates from the swept cadences
     python tools/negative_controls.py checks        the checks on every candidate, in the controls' own store (resumes)
     python tools/negative_controls.py summary       after the checks; where the candidates fall; beside one wrong choice
+    python tools/negative_controls.py package       the choice, sweep records, verdicts and results, with their hashes
+    python tools/negative_controls.py replay [DIR]  the tables and summary made again from the package alone
+    python tools/negative_controls.py recheck       the checks run again from nothing on a copy of the store
 
 The rule, fixed before any of its listings were read (20 November 2026):
 
@@ -99,6 +102,8 @@ def select(say=print):
             chosen.append({"target": target, **run, "header": geo})
             say(f"chosen {len(chosen)}: {target} {session}")
             break
+    if len(chosen) != COUNT:
+        raise yoke.Refusal("NOT_FOUND", f"Only {len(chosen)} of {COUNT} sessions pass the rule: no choice is written.")
     rec = {"rule": "tools/negative_controls.py, the rule in its docstring", "count_asked": COUNT,
            "catalogue": {"file": "config/isaacson2017_table1.tsv", "sha256": sha, "stars": len(names)},
            "chosen": chosen, "passed_over": tried, "replies": replies, "kind": "measured"}
@@ -108,7 +113,105 @@ def select(say=print):
 
 
 def _choice():
-    return json.loads((OUT / "choice.json").read_text(encoding="utf-8"))
+    """The choice record, refused unless it holds exactly COUNT different sessions of COUNT different targets."""
+    rec = json.loads((OUT / "choice.json").read_text(encoding="utf-8"))
+    chosen = rec["chosen"]
+    if len(chosen) != COUNT or len({c["session"] for c in chosen}) != COUNT or len({c["target"] for c in chosen}) != COUNT:
+        raise yoke.Refusal("INVALID_REQUEST", f"The choice must hold {COUNT} different sessions of {COUNT} different "
+                                              f"targets; it holds {len(chosen)} entries.")
+    return rec
+
+
+def sweep_problems(c, rec, version=None):
+    """Why a cadence's sweep record is not the whole cadence: its blocks exactly 0 to n-1 at the record's own
+    boundaries, each by one search version."""
+    name, blocks, done = c["session"], rec["blocks"], rec["done"]
+    if len(done) != len(blocks):
+        return [f"{name}: {len(done)} of {len(blocks)} blocks"]
+    if set(done) != {str(k) for k in range(len(blocks))}:
+        return [f"{name}: its block numbers are not 0 to {len(blocks) - 1}"]
+    out = [f"{name}: block {k} is not at its boundaries" for k, (lo, hi) in enumerate(blocks)
+           if abs(done[str(k)]["from_mhz"] - lo) > 1e-6 or abs(done[str(k)]["to_mhz"] - hi) > 1e-6]
+    versions = {d.get("search_version") for d in done.values()}
+    if len(versions) != 1 or (version is not None and versions != {version}):
+        out.append(f"{name}: not all by the search version in force")
+    return out
+
+
+def store_problems(db, c, rec):
+    """Where the store and the sweep record disagree: the cadence's target and files, each block's place, and
+    the candidates of each block."""
+    name, done = c["session"], rec["done"]
+    row = db.execute("SELECT target, urls FROM cadences WHERE cadence=?", (name,)).fetchone()
+    if row is None:
+        return [f"{name}: no such cadence in the store"]
+    out = []
+    if row[0] != c["target"] or json.loads(row[1]) != [x["url"] for x in c["looks"]]:
+        out.append(f"{name}: the store's cadence is not the one chosen")
+    held = {b: (lo, hi) for b, lo, hi in db.execute(
+        "SELECT block_idx, f_lo_mhz, f_hi_mhz FROM blocks WHERE session=? AND status='done'", (name,))}
+    if set(held) != {int(k) for k in done}:
+        out.append(f"{name}: the store's blocks are not the record's")
+    elif any(abs(held[int(k)][0] - d["from_mhz"]) > 1e-6 or abs(held[int(k)][1] - d["to_mhz"]) > 1e-6
+             for k, d in done.items()):
+        out.append(f"{name}: a block's boundaries differ between the store and the record")
+    count = dict(db.execute("SELECT block_idx, count(*) FROM events WHERE session=? AND label='candidate' AND "
+                            "superseded_run IS NULL GROUP BY block_idx", (name,)).fetchall())
+    if any(count.get(int(k), 0) != len(d["events"]) for k, d in done.items()):
+        out.append(f"{name}: a block's candidates differ between the store and the record")
+    return out
+
+
+def _store():
+    import sqlite3
+    return sqlite3.connect(f"file:{(CONTROLS / 'ssy.sqlite').as_posix()}?mode=ro", uri=True)
+
+
+def _whole_control():
+    """[(choice, sweep record)] of all four cadences, refused unless each is whole and agrees with the store."""
+    import seti
+    records, problems = [], []
+    for c in _choice()["chosen"]:
+        path = CONTROLS / "sweeps" / f"{c['target']}-{c['session']}.json"
+        rec = json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+        if rec is None:
+            problems.append(f"{c['session']}: not swept yet")
+        else:
+            problems += sweep_problems(c, rec, seti.SEARCH_VERSION)
+        records.append((c, rec))
+    if not problems:
+        db = _store()
+        try:
+            for c, rec in records:
+                problems += store_problems(db, c, rec)
+        finally:
+            db.close()
+    if problems:                                # a rate over part of the control is not the control's rate
+        raise yoke.Refusal("INVALID_REQUEST", "The control needs every block of all four cadences: " + "; ".join(problems))
+    return records
+
+
+def candidate_verdicts(db, version, n_checks):
+    """Every current candidate with its one whole evaluation by this version of the checks; refused if any has
+    none, or more than one."""
+    evaluations = {}
+    for event, verdict in db.execute(
+            "SELECT event_id, max(CASE WHEN name='10. report' THEN result END) FROM checks WHERE version=?"
+            " GROUP BY event_id, lead, checked_utc HAVING count(DISTINCT name) >= ?", (version, n_checks)):
+        evaluations.setdefault(event, []).append(verdict)
+    events, none, many = [], 0, 0
+    for event, session, block, snr, f, drift in db.execute(
+            "SELECT event_id, session, block_idx, snr, f_start_mhz, drift_hz_s FROM events WHERE label='candidate' "
+            "AND superseded_run IS NULL ORDER BY event_id"):
+        got = evaluations.get(event, [])
+        none += not got or got[0] is None
+        many += len(got) > 1
+        events.append({"event_id": event, "session": session, "block": block, "snr": snr, "frequency_mhz": f,
+                       "drift_hz_s": drift, "verdict": got[0] if got else None})
+    if none or many:
+        raise yoke.Refusal("INVALID_REQUEST", f"{none} candidates have no whole evaluation by the checks in force and "
+                                              f"{many} have more than one")
+    return events
 
 
 def sweep_one(target, session, urls):
@@ -125,6 +228,8 @@ def run(say=print):
         urls = [x["url"] for x in c["looks"]]
         r = subprocess.run([sys.executable, "-u", str(Path(__file__)), "sweep-one", c["target"], c["session"], *urls],
                            env=env)
+        if r.returncode == yoke.NETWORK_EXIT:
+            sys.exit(yoke.NETWORK_EXIT)
         if r.returncode:
             raise yoke.Refusal("INTERNAL_ERROR", f"{c['session']}: the sweep stopped ({r.returncode})")
 
@@ -147,19 +252,26 @@ def _bootstrap95(per_block, seed=4, boot=2000):
     return [round(float(v), 4) for v in np.percentile(means, [2.5, 97.5])]
 
 
-def tables(say=print):
+def _windows95(per_session, w, seed=4, boot=2000):
+    """The rate a block, 2.5 and 97.5 percentiles, drawing runs of `w` consecutive blocks with replacement within
+    each session (per_session: each session's counts in frequency order), so neighbouring blocks stay together."""
+    import numpy as np
+    rng = np.random.default_rng([seed, w])
+    total = sum(len(x) for x in per_session)
+    if not total:
+        return None
+    draws = np.zeros(boot)
+    for x in per_session:
+        x, n = np.asarray(x, float), len(x)
+        size = min(w, n)
+        sums = np.convolve(x, np.ones(size), "valid")
+        picks = sums[rng.integers(0, len(sums), (boot, int(np.ceil(n / size))))]
+        draws += picks.mean(axis=1) / size * n
+    return [round(float(v), 4) for v in np.percentile(draws / total, [2.5, 97.5])]
+
+
+def table_rows(records):
     rows, total = [], {"blocks": 0, 30: 0, 10: 0}
-    records, short = [], []
-    for c in _choice()["chosen"]:
-        rec_path = CONTROLS / "sweeps" / f"{c['target']}-{c['session']}.json"
-        rec = json.loads(rec_path.read_text(encoding="utf-8")) if rec_path.exists() else None
-        if rec is None:
-            short.append(f"{c['session']}: not swept yet")
-        elif len(rec["done"]) != len(rec["blocks"]):
-            short.append(f"{c['session']}: {len(rec['done'])} of {len(rec['blocks'])} blocks")
-        records.append((c, rec))
-    if short:                                   # a rate over part of the control is not the control's rate
-        raise yoke.Refusal("INVALID_REQUEST", "The tables need every block of all four cadences: " + "; ".join(short))
     for c, rec in records:
         done = rec["done"]
         n = len(done)
@@ -181,8 +293,13 @@ def tables(say=print):
                            for c in (30, 10)},
                         **{f"interval_{c}": _poisson95(total[c], total["blocks"]) if total["blocks"] else None
                            for c in (30, 10)}}}
+    return out
+
+
+def tables(say=print):
+    out = table_rows(_whole_control())
     yoke.write(OUT / "tables.json", out, indent=1, stamp=True)
-    for r in rows:
+    for r in out["sessions"]:
         say(f"{r['target']} {r['session']}: {r['blocks']} blocks, at 30 {r['rate_30']} a block {r['interval_30']}, "
             f"at 10 {r['rate_10']} {r['interval_10']}")
     return out
@@ -218,6 +335,8 @@ def checks_here(say=print):
 
 def checks(say=print):
     r = subprocess.run([sys.executable, "-u", str(Path(__file__)), "checks-here"], env=dict(os.environ, SSY_DATA=str(CONTROLS)))
+    if r.returncode == yoke.NETWORK_EXIT:
+        sys.exit(yoke.NETWORK_EXIT)
     if r.returncode:
         raise yoke.Refusal("INTERNAL_ERROR", f"the checks stopped ({r.returncode})")
 
@@ -241,7 +360,12 @@ def describe(events, blocks, cut):
     in_whole = sum(1 for e in at if blocks[(e["session"], e["block"])])
     unexplained = classes["unexplained, strong"] + classes["unexplained, weak"]
     per_block = [by_block.get(b, 0) for b in blocks]
-    return {"blocks": n, "candidates": len(at), "rate": round(len(at) / n, 4) if n else None,
+    in_order = {}
+    for b in sorted(blocks):
+        in_order.setdefault(b[0], []).append(by_block.get(b, 0))
+    return {"bootstrap_consecutive_blocks": {str(w): _windows95(list(in_order.values()), w) for w in (4, 16)},
+            "unexplained_interval_is": "exact Poisson: a model that takes candidates as independent, which these are not",
+            "blocks": n, "candidates": len(at), "rate": round(len(at) / n, 4) if n else None,
             "by_verdict": {k: classes[k] for k in ("interference", "likely interference", "unexplained, strong",
                                                   "unexplained, weak")},
             "unexplained": unexplained, "unexplained_rate": round(unexplained / n, 4) if n else None,
@@ -276,21 +400,9 @@ def _one_wrong_choice():
     return out
 
 
-def summary(say=print):
-    import sqlite3
-    db = sqlite3.connect(f"file:{(CONTROLS / 'ssy.sqlite').as_posix()}?mode=ro", uri=True)
-    events = [{"session": s, "block": b, "snr": snr, "verdict": v, "frequency_mhz": f} for s, b, snr, f, v in db.execute(
-        "SELECT e.session, e.block_idx, e.snr, e.f_start_mhz, c.result FROM events e LEFT JOIN checks c ON"
-        " c.event_id=e.event_id AND c.name='10. report' WHERE e.label='candidate' AND e.superseded_run IS NULL")]
-    db.close()
-    missing = sum(1 for e in events if e["verdict"] is None)
-    if missing:
-        raise yoke.Refusal("INVALID_REQUEST", f"{missing} candidates have not been through the checks")
+def summary_rows(records, events):
     blocks, sessions = {}, []
-    for c in _choice()["chosen"]:
-        rec = json.loads((CONTROLS / "sweeps" / f"{c['target']}-{c['session']}.json").read_text(encoding="utf-8"))
-        if len(rec["done"]) != len(rec["blocks"]):
-            raise yoke.Refusal("INVALID_REQUEST", f"{c['session']} is not swept whole")
+    for c, rec in records:
         here = {(c["session"], int(k)): d.get("complete") in (1, True) for k, d in rec["done"].items()}
         blocks.update(here)
         sessions.append({"target": c["target"], "session": c["session"], "band": "S" if rec["blocks"][0][0] > 1500 else "L",
@@ -299,16 +411,131 @@ def summary(say=print):
     for band in ("L", "S"):
         names = {s["session"] for s in sessions if s["band"] == band}
         groups[f"{band} band"] = {k: v for k, v in blocks.items() if k[0] in names}
-    out = {"sessions": sessions,
-           "groups": {g: {f"at_{cut}": describe(events, b, cut) for cut in (30, 10)} for g, b in groups.items()},
-           "one_wrong_choice_on_the_project_sessions": _one_wrong_choice(), "kind": "measured"}
+    return {"sessions": sessions,
+            "groups": {g: {f"at_{cut}": describe(events, b, cut) for cut in (30, 10)} for g, b in groups.items()}}
+
+
+def summary(say=print):
+    import vetting
+    records = _whole_control()
+    db = _store()
+    try:
+        events = candidate_verdicts(db, vetting.VERSION, vetting.N_CHECKS)
+    finally:
+        db.close()
+    out = dict(summary_rows(records, events), one_wrong_choice_on_the_project_sessions=_one_wrong_choice(),
+               kind="measured")
     yoke.write(OUT / "summary.json", out, indent=1, stamp=True)
+    sessions = out["sessions"]
     for s in sessions:
         say(f"{s['target']} ({s['band']}): {json.dumps(s['at_30'])}")
     for g, v in out["groups"].items():
         say(f"{g}: {json.dumps(v)}")
     say(json.dumps(out["one_wrong_choice_on_the_project_sessions"]))
     return out
+
+
+PACKAGE = OUT / "package"
+
+
+def _sha(path):
+    import hashlib
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def package(say=print):
+    """The control's evidence in one folder: the choice, the sweep records, every candidate's verdict and the two
+    results, with their hashes."""
+    import shutil
+    import seti
+    import vetting
+    records = _whole_control()
+    db = _store()
+    try:
+        events = candidate_verdicts(db, vetting.VERSION, vetting.N_CHECKS)
+    finally:
+        db.close()
+    (PACKAGE / "sweeps").mkdir(parents=True, exist_ok=True)
+    copied = [(OUT / n, PACKAGE / n) for n in ("choice.json", "tables.json", "summary.json")]
+    copied += [(CONTROLS / "sweeps" / f"{c['target']}-{c['session']}.json",
+                PACKAGE / "sweeps" / f"{c['target']}-{c['session']}.json") for c, _ in records]
+    for a, b in copied:
+        shutil.copyfile(a, b)
+    (PACKAGE / "verdicts.json").write_text(json.dumps({"checks_version": vetting.VERSION, "events": events}, indent=0),
+                                           encoding="utf-8")
+    names = sorted(p for p in PACKAGE.rglob("*.json") if p.name != "manifest.json")
+    yoke.write(PACKAGE / "manifest.json", {"search_version": seti.SEARCH_VERSION, "checks_version": vetting.VERSION,
+                                           "files": {p.relative_to(PACKAGE).as_posix(): _sha(p) for p in names},
+                                           "kind": "measured"}, indent=1, stamp=True)
+    say(f"packaged {len(names)} files, {len(events)} verdicts")
+
+
+def _unstamped(rec):
+    return {k: v for k, v in rec.items() if k not in ("provenance", "one_wrong_choice_on_the_project_sessions")}
+
+
+def replay(folder=None, say=print):
+    """The tables and summary made again from the package alone (not the store), and compared with those it holds."""
+    folder = Path(folder) if folder else PACKAGE
+    load = lambda p: json.loads((folder / p).read_text(encoding="utf-8"))  # noqa: E731
+    wrong = [n for n, sha in load("manifest.json")["files"].items() if _sha(folder / n) != sha]
+    if wrong:
+        raise yoke.Refusal("INTERNAL_ERROR", f"Files differ from the manifest: {wrong}")
+    chosen = load("choice.json")["chosen"]
+    if len(chosen) != COUNT or len({c["session"] for c in chosen}) != COUNT:
+        raise yoke.Refusal("INVALID_REQUEST", "The package does not hold four cadences.")
+    records = [(c, load(f"sweeps/{c['target']}-{c['session']}.json")) for c in chosen]
+    problems = [p for c, rec in records for p in sweep_problems(c, rec)]
+    events = load("verdicts.json")["events"]
+    by_block = {}
+    for e in events:
+        by_block[(e["session"], e["block"])] = by_block.get((e["session"], e["block"]), 0) + 1
+    problems += [f"{c['session']}: the verdicts and the sweep record differ" for c, rec in records
+                 if any(by_block.get((c["session"], int(k)), 0) != len(d["events"]) for k, d in rec["done"].items())]
+    if problems:
+        raise yoke.Refusal("INVALID_REQUEST", "; ".join(problems))
+    same_tables = _unstamped(table_rows(records)) == _unstamped(load("tables.json"))
+    same_summary = _unstamped(summary_rows(records, events)) == _unstamped(load("summary.json"))
+    if not (same_tables and same_summary):
+        raise yoke.Refusal("INTERNAL_ERROR", f"The replay differs: tables {same_tables}, summary {same_summary}.")
+    out = {"files_checked": len(load("manifest.json")["files"]), "candidates": len(events), "tables_same": True,
+           "summary_same": True, "is": "made again from the package on this computer by this code; not an independent "
+                                       "verification", "kind": "measured"}
+    if folder == PACKAGE:
+        yoke.write(OUT / "package_replay.json", out, indent=1, stamp=True)
+    say(f"replayed: tables and summary identical, {len(events)} verdicts")
+    return out
+
+
+def recheck(say=print):
+    """The checks run again from nothing on a copy of the store: every candidate's verdict must come out the same."""
+    import shutil
+    import sqlite3
+    import vetting
+    work = yoke.DATA / "controls-recheck"
+    if work.exists():
+        yoke.remove_tree(work)
+    work.mkdir()
+    shutil.copyfile(CONTROLS / "ssy.sqlite", work / "ssy.sqlite")
+    db = sqlite3.connect(work / "ssy.sqlite")
+    with db:
+        db.execute("DELETE FROM checks")
+    db.close()
+    r = subprocess.run([sys.executable, "-u", str(Path(__file__)), "checks-here"], env=dict(os.environ, SSY_DATA=str(work)))
+    if r.returncode:
+        raise yoke.Refusal("INTERNAL_ERROR", f"the checks stopped ({r.returncode})")
+    db = sqlite3.connect(f"file:{(work / 'ssy.sqlite').as_posix()}?mode=ro", uri=True)
+    again = {e["event_id"]: e["verdict"] for e in candidate_verdicts(db, vetting.VERSION, vetting.N_CHECKS)}
+    db.close()
+    first = {e["event_id"]: e["verdict"] for e in
+             json.loads((PACKAGE / "verdicts.json").read_text(encoding="utf-8"))["events"]}
+    differ = sorted(k for k in set(first) | set(again) if first.get(k) != again.get(k))
+    yoke.write(OUT / "package_recheck.json", {"candidates": len(first), "verdicts_differing": len(differ),
+                                              "first_differing": differ[:20], "kind": "measured"}, indent=1, stamp=True)
+    yoke.remove_tree(work)
+    say(f"checks run again: {len(first)} candidates, {len(differ)} verdicts differ")
+    if differ:
+        raise yoke.Refusal("INTERNAL_ERROR", f"{len(differ)} verdicts differ")
 
 
 def main():
@@ -327,6 +554,12 @@ def main():
         checks_here()
     elif cmd == "summary":
         summary()
+    elif cmd == "package":
+        package()
+    elif cmd == "replay":
+        replay(sys.argv[2] if len(sys.argv) > 2 else None)
+    elif cmd == "recheck":
+        recheck()
     else:
         sys.exit(__doc__)
 

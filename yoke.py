@@ -60,6 +60,9 @@ def jsonable(value):
     return str(value)
 
 
+NETWORK_EXIT = 75              # a job's exit code when a network error ended it (EX_TEMPFAIL): tools/jobs.ps1 runs it again
+
+
 def main(command, work, as_json=False):
     """Run work(). With as_json, what it prints goes to stderr and one JSON
     envelope to stdout."""
