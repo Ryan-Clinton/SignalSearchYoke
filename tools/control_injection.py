@@ -164,10 +164,11 @@ def stage_counts(tones, cut):
             "unexplained_of_candidates": round(left / len(kept), 4) if kept else None}
 
 
-def _block_interval(records, cut, seed=SEED, boot=2000):
-    """The share of counted signals left unexplained, 95% over blocks drawn again with replacement."""
-    pairs = np.array([[stage_counts(r["tones"], cut)["unexplained"], stage_counts(r["tones"], cut)["counted"]]
-                      for r in records], float)
+def _block_interval(records, cut, of="counted", seed=SEED, boot=2000):
+    """The share left unexplained (of the counted signals, or with of="candidates" of the candidates), 95% over
+    blocks drawn again with replacement."""
+    counts = [stage_counts(r["tones"], cut) for r in records]
+    pairs = np.array([[c["unexplained"], c[of]] for c in counts], float)
     if not len(pairs) or not pairs[:, 1].sum():
         return None
     rng = np.random.default_rng(seed)
@@ -179,12 +180,19 @@ def _block_interval(records, cut, seed=SEED, boot=2000):
 def summarise(records):
     def part(rs, cut, keep=lambda t: True):
         return stage_counts([t for r in rs for t in r["tones"] if keep(t)], cut)
+    def with_intervals(rs, cut):
+        c = part(rs, cut)
+        lo = _block_interval(rs, cut, "candidates")
+        # the protocol's reading: informative where the lower end for unexplained among candidates is 0.5 or more
+        return dict(c, share_unexplained_interval=_block_interval(rs, cut),
+                    unexplained_of_candidates_interval=lo,
+                    reading="the checks kept planted signals here" if lo and lo[0] >= 0.5 else
+                    "not shown that the checks keep real signals here")
     out = {}
     for cut in CUTS:
-        cell = {"all": dict(part(records, cut), share_unexplained_interval=_block_interval(records, cut))}
+        cell = {"all": with_intervals(records, cut)}
         for cls in ("capped", "complete"):
-            rs = [r for r in records if r["class"] == cls]
-            cell[cls] = dict(part(rs, cut), share_unexplained_interval=_block_interval(rs, cut))
+            cell[cls] = with_intervals([r for r in records if r["class"] == cls], cut)
         cell["by_cadence"] = {t: part([r for r in records if r["target"] == t], cut)
                               for t in dict.fromkeys(r["target"] for r in records)}
         cell["by_drift_bin"] = {str(b): part(records, cut, lambda t, b=b: t["bin"] == b)

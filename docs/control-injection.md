@@ -78,4 +78,8 @@ changed after it.
 
 ## Changes after this was fixed
 
-None.
+- 24 November 2026, after the first block: `tables` did not compute the
+  interval the reading above uses (unexplained among candidates), only the
+  share of all counted signals. It now computes both and states the reading
+  by the rule above. No block was re-run, and the planting, the blocks and
+  the measures are unchanged.

@@ -94,6 +94,15 @@ class Summary(unittest.TestCase):
         self.assertEqual((got["capped"]["unexplained"], got["complete"]["unexplained"], got["all"]["unexplained"]), (0, 1, 1))
         self.assertEqual(got["what_the_checks_cited_against_kept_signals"], {"zero or very low drift": 1})
 
+    def test_the_reading_follows_the_protocol(self):
+        kept = [{"target": "A", "class": "complete", "tones": [tone(at())] * 4}] * 3
+        lost = [{"target": "A", "class": "capped", "tones": [tone(at(verdict="likely interference (indicated: x)"))] * 4}] * 3
+        got = ci.summarise(kept + lost)["30"]
+        self.assertEqual(got["complete"]["unexplained_of_candidates_interval"], [1.0, 1.0])
+        self.assertTrue(got["complete"]["reading"].startswith("the checks kept"))
+        self.assertTrue(got["capped"]["reading"].startswith("not shown"))
+        self.assertTrue(got["all"]["reading"].startswith("not shown"))      # half kept: its lower end is under 0.5
+
 
 if __name__ == "__main__":
     unittest.main()
