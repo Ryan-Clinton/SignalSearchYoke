@@ -227,12 +227,17 @@ def injector_section(ii, first):
     w("")
     c = ii["cuts"]["10"]
     d = c["own_minus_setigen_advantage"]
-    w(f"At S/N 10, this search's share found minus turboSETI's is {d['difference']:+.3f} larger with this project's "
-      f"planting than with setigen's ({d['interval'][0]:+.3f} to {d['interval'][1]:+.3f}, blocks resampled). By the "
+    w(f"At S/N 10, this search's share found minus turboSETI's, with this project's planting less the same with "
+      f"setigen's, is {d['difference']:+.3f} ({d['interval'][0]:+.3f} to {d['interval'][1]:+.3f}, blocks "
+      "resampled). By the "
       "reading fixed beforehand, "
       + ("**this project's planting favours this search**, and the recovery comparison above overstates its lead "
          "by about that much on these blocks." if c["reading"].startswith("the project") else
-         "it is not shown that this project's planting favours this search.")
+         "it is not shown that this project's planting favours this search."
+         + (" The gap is wider with setigen's planting, though the ratio is smaller "
+            f"({c['setigen']['ratio']:g} against {c['own']['ratio']:g}): setigen's signals were found more often by "
+            "both pipelines, which is expected, since its S/N is set from its own estimate of the noise."
+            if d["interval"][1] < 0 else ""))
       + " By drift range (S/N 10; this search and turboSETI, this project's planting then setigen's):")
     w("")
     w("| drift (Hz/s) | this project's planting | setigen's |")
