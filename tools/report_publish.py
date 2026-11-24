@@ -17,6 +17,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -144,6 +145,15 @@ def pdf(md_full, figures, out_pdf):
                                "--no-first-run", f"--user-data-dir={tmp / 'profile'}",
                                f"--print-to-pdf={out_pdf}", page.as_uri()],
                               capture_output=True, text=True, timeout=180)
+        # Chrome may hand the print to a process of its own and return at once: wait for the file to be written
+        # and to stop growing.
+        deadline, size = time.monotonic() + 180, -1
+        while time.monotonic() < deadline:
+            now = out_pdf.stat().st_size if out_pdf.exists() else -1
+            if now > 0 and now == size:
+                break
+            size = now
+            time.sleep(1)
         if not out_pdf.exists():
             raise SystemExit(f"report_publish.py: the PDF was not printed: {done.stderr[-500:]}")
     data = out_pdf.read_bytes()
