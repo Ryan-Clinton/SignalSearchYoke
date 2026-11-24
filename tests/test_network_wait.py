@@ -54,6 +54,18 @@ class Waiting(unittest.TestCase):
         self.assertEqual(len(lines), 2)                       # when it began and when it ended, not one a try
         self.assertIn("back after", lines[1])
 
+    def test_the_network_is_not_called_back_on_a_bad_reply(self):
+        _, _, said, _ = self.ask([requests.exceptions.ConnectionError("x"), _reply(206)])
+        self.assertIn("back after", said.call_args_list[-1].args[0])
+        s = mock.Mock()
+        s.get.side_effect = [requests.exceptions.ConnectionError("x"), _reply(200)]      # answered, the wrong bytes
+        with mock.patch.dict(os.environ, {reading.WAIT_SETTING: "1"}), mock.patch.object(reading, "session", return_value=s), \
+                mock.patch.object(reading.time, "sleep"), mock.patch("builtins.print") as said:
+            with self.assertRaises(yoke.Refusal):
+                reading.get_range(URL, 0, 3)
+        reading._outage["since"] = None
+        self.assertFalse(any("back after" in c.args[0] for c in said.call_args_list))
+
     def test_a_refused_reply_is_not_a_good_read(self):
         reading._outage["last_good"] = None
         with self.assertRaises(requests.exceptions.HTTPError):
@@ -328,6 +340,16 @@ class Replay(TheWholeControl):
         folder = self.package()
         path = folder / "verdicts.json"
         path.write_text(path.read_text(encoding="utf-8").replace("likely", "unexplained"), encoding="utf-8")
+        with self.assertRaises(yoke.Refusal):
+            negative_controls.replay(folder, say=lambda *a: None)
+
+    def test_a_changed_candidate_with_the_same_count_is_refused_even_when_rehashed(self):
+        folder = self.package()
+        path = folder / "verdicts.json"
+        rec = json.loads(path.read_text(encoding="utf-8"))
+        rec["events"][0]["snr"] = 25.0                    # the same count a block, another S/N
+        path.write_text(json.dumps(rec), encoding="utf-8")
+        self.seal(folder)
         with self.assertRaises(yoke.Refusal):
             negative_controls.replay(folder, say=lambda *a: None)
 

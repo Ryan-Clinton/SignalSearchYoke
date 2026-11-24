@@ -129,32 +129,50 @@ def one_block(cadence, k, info, ctx):
             row["at"][str(cut)] = at
         for lk in looks:
             lk.flat = None
-    import vetting
     return {"target": cadence["target"], "session": session, "block": k, "class": info["class"],
-            "versions": {"search": seti.SEARCH_VERSION, "checks": vetting.VERSION},
+            "versions": _versions_now(),
             "complete": [bool(x[2]) for x in searched], "tones": rows, "kind": "measured"}
 
 
-# the files whose code makes a record: a record without its versions written in is taken only if none has changed
-# since the commit it was made at
-MADE_BY = ("seti.py", "searching.py", "onoff.py", "measure.py", "injection.py", "matched.py", "vetting.py",
-           "check.py", "tools/control_injection.py")
-
-
 def _versions_now():
+    """The versions a record is made by: the search, the checks in force, and the candidate version 6."""
     import seti
     import vetting
-    return {"search": seti.SEARCH_VERSION, "checks": vetting.VERSION}
+    return {"search": seti.SEARCH_VERSION, "checks": vetting.VERSION, "checks_context": vetting.VERSION_BANDS_AS_CONTEXT}
 
 
-def _code_unchanged_since(commit):
+# where each version is written: (file, name)
+VERSION_NAMES = {"search": ("seti.py", "SEARCH_VERSION"), "checks": ("vetting.py", "VERSION"),
+                 "checks_context": ("vetting.py", "VERSION_BANDS_AS_CONTEXT")}
+
+
+def versions_at(commit):
+    """The versions as the code held them at `commit` (a key is missing where its name did not exist then), read
+    from the files at that commit: for records made before records carried their versions."""
+    import ast
+    out = {}
     if not commit:
-        return False
-    done = subprocess.run(["git", "-C", str(ROOT), "diff", "--quiet", commit, "HEAD", "--", *MADE_BY[:-1]])
-    return done.returncode == 0
+        return out
+    for key, (path, name) in VERSION_NAMES.items():
+        got = subprocess.run(["git", "-C", str(ROOT), "show", f"{commit}:{path}"], capture_output=True, text=True)
+        if got.returncode:
+            continue
+        for node in ast.parse(got.stdout).body:
+            if isinstance(node, ast.Assign) and any(getattr(t, "id", None) == name for t in node.targets):
+                out[key] = ast.literal_eval(node.value)
+    return out
 
 
-def record_problems(rec, cadence, k, info, versions=None, unchanged=_code_unchanged_since):
+def _needed(rec):
+    """The versions a record must be made by: the search and the checks in force, and version 6 where the record
+    carries its verdicts."""
+    keys = {"search", "checks"}
+    if any("verdict_context" in a for t in rec.get("tones", []) for a in t.get("at", {}).values()):
+        keys.add("checks_context")
+    return keys
+
+
+def record_problems(rec, cadence, k, info, versions=None, at_commit=versions_at):
     """Why a block record is not this block's whole result under the protocol."""
     import matched
     name = f"{cadence['target']} {k}"
@@ -173,10 +191,10 @@ def record_problems(rec, cadence, k, info, versions=None, unchanged=_code_unchan
         out.append(f"{name}: not six looks")
     if versions is not None:
         made = rec.get("versions")
-        if made is not None and made != versions:
+        if made is None:            # made before records carried them: the versions its commit's code held
+            made = at_commit(rec.get("provenance", {}).get("git_commit"))
+        if any(made.get(key) != versions[key] for key in _needed(rec)):
             out.append(f"{name}: made by another version of the search or the checks")
-        if made is None and not unchanged(rec.get("provenance", {}).get("git_commit")):
-            out.append(f"{name}: made before versions were recorded, by code that has changed since")
     return out
 
 
@@ -315,6 +333,31 @@ def summarise(records, key="verdict"):
     return out
 
 
+def weighted_cells(records, cut, shares, key="verdict", seed=SEED, boot=2000):
+    """Beside `weighted`: the sample reweighted by cadence and class together. `shares` is each (target, class)'s
+    share of the control's blocks; each cell's blocks are drawn again within the cell."""
+    rng = np.random.default_rng([seed, 2])
+    cells = {}
+    for r in records:
+        c = stage_counts(r["tones"], cut, key)
+        cells.setdefault((r["target"], r["class"]), []).append([c["unexplained"], c["candidates"], c["counted"]])
+    cells = {k: np.array(v, float) for k, v in cells.items()}
+    if set(cells) != set(shares) or any(not x[:, 2].sum() for x in cells.values()):
+        return None
+
+    def est(sums):
+        u = sum(shares[k] * s[0] / s[2] for k, s in sums.items())
+        c = sum(shares[k] * s[1] / s[2] for k, s in sums.items())
+        return u, (u / c if c else np.nan)
+    point = est({k: x.sum(axis=0) for k, x in cells.items()})
+    draws = np.array([est({k: x[rng.integers(0, len(x), len(x))].sum(axis=0) for k, x in cells.items()})
+                      for _ in range(boot)])
+    good = draws[~np.isnan(draws[:, 1])]
+    return {"share_unexplained": [round(point[0], 4)] + [round(float(v), 4) for v in np.percentile(draws[:, 0], [2.5, 97.5])],
+            "unexplained_of_candidates": [round(point[1], 4)] + [round(float(v), 4) for v in np.percentile(good[:, 1], [2.5, 97.5])],
+            "note": "supplementary; four blocks a cell, so each cell's resampling is coarse"}
+
+
 def choice_problems(choice, control):
     """Why the choice record is not the protocol's draw from control B ([(cadence, sweep record)])."""
     want = [{"target": c["target"], "session": c["session"], "urls": [x["url"] for x in c["looks"]],
@@ -357,6 +400,10 @@ def tables(say=print):
            "weighted_to_control_b": {"population": f"control {CONTROL.upper()}'s {blocks} blocks, {capped} of them capped",
                                      **{str(cut): weighted(records, cut, capped / blocks) for cut in CUTS}},
            "kind": "measured"}
+    shares = {(c["target"], cls): sum((d.get("complete") in (1, True)) == (cls == "complete")
+                                      for d in rec["done"].values()) / blocks
+              for c, rec in control for cls in ("complete", "capped")}
+    out["weighted_by_cadence_and_class"] = {str(cut): weighted_cells(records, cut, shares) for cut in CUTS}
     judged = [t["at"][str(c)] for r in records for t in r["tones"] for c in CUTS
               if t["at"][str(c)].get("verdict")]
     if judged and all("verdict_context" in a for a in judged):
@@ -364,6 +411,8 @@ def tables(say=print):
         out["cuts_bands_as_context"] = summarise(records, "verdict_context")
         out["weighted_bands_as_context"] = {str(cut): weighted(records, cut, capped / blocks, key="verdict_context")
                                             for cut in CUTS}
+        out["weighted_by_cadence_and_class_bands_as_context"] = {
+            str(cut): weighted_cells(records, cut, shares, key="verdict_context") for cut in CUTS}
     yoke.write(OUT.parent / "injection.json", out, indent=1, stamp=True)
     for cut, cell in out["cuts"].items():
         for g in ("all", "capped", "complete"):

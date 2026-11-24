@@ -108,7 +108,7 @@ class Records(unittest.TestCase):
     """record_problems: a block record is the protocol's whole result, or it is refused."""
     C = {"target": "A", "session": "S", "urls": []}
     INFO = {"class": "capped", "range": [1, 2]}
-    V = {"search": "s", "checks": "c"}
+    V = {"search": "s", "checks": "c", "checks_context": "x"}
 
     def rec(self, n=matched.TONES, **change):
         tones = [{"x0": float(i), "drift": 0.1 * i, "s_in": 30, "bin": 0, "at": {"30": at(), "10": at()}} for i in range(n)]
@@ -117,8 +117,8 @@ class Records(unittest.TestCase):
         r.update(change)
         return r
 
-    def problems(self, rec, unchanged=lambda c: True):
-        return ci.record_problems(rec, self.C, 7, self.INFO, self.V, unchanged)
+    def problems(self, rec, held=None):
+        return ci.record_problems(rec, self.C, 7, self.INFO, self.V, lambda c: dict(self.V) if held is None else held)
 
     def test_a_whole_record_passes(self):
         self.assertEqual(self.problems(self.rec()), [])
@@ -143,11 +143,30 @@ class Records(unittest.TestCase):
     def test_another_version_is_refused(self):
         self.assertTrue(self.problems(self.rec(versions={"search": "old", "checks": "c"})))
 
-    def test_no_versions_needs_unchanged_code(self):
+    def test_no_versions_reads_them_from_its_commit(self):
         r = self.rec()
         del r["versions"]
-        self.assertEqual(self.problems(r, lambda c: True), [])
-        self.assertTrue(self.problems(r, lambda c: False))
+        self.assertEqual(self.problems(r), [])
+        self.assertTrue(self.problems(r, held={"search": "s", "checks": "old"}))
+        self.assertEqual(self.problems(r, held={"search": "s", "checks": "c"}), [])   # version 6 not yet written
+
+    def test_version_6_verdicts_need_version_6(self):
+        r = self.rec()
+        for t in r["tones"]:
+            t["at"]["30"]["verdict_context"] = "unexplained, weak"
+        self.assertEqual(self.problems(r), [])
+        r["versions"]["checks_context"] = "an earlier 6"
+        self.assertTrue(self.problems(r))
+        del r["versions"]
+        self.assertTrue(self.problems(r, held={"search": "s", "checks": "c"}))
+
+    def test_the_versions_held_at_a_commit_are_read(self):
+        got = ci.versions_at("c7dcf67")
+        import seti
+        import vetting
+        self.assertEqual((got["search"], got["checks"]), (seti.SEARCH_VERSION, vetting.VERSION))
+        self.assertNotIn("checks_context", got)
+        self.assertEqual(ci.versions_at(None), {})
 
 
 class Intervals(unittest.TestCase):
@@ -163,6 +182,19 @@ class Intervals(unittest.TestCase):
         recs = [kept] * 3 + [lost] * 3
         self.assertAlmostEqual(ci.weighted(recs, 30, 0.5)["unexplained_of_candidates"][0], 0.5)
         self.assertAlmostEqual(ci.weighted(recs, 30, 0.137)["unexplained_of_candidates"][0], 0.863)
+
+
+class ByCadenceAndClass(unittest.TestCase):
+    def test_each_cell_by_its_share(self):
+        kept = lambda t, cls: {"target": t, "class": cls, "tones": [tone(at())] * 4}  # noqa: E731
+        lost = lambda t, cls: {"target": t, "class": cls, "tones": [tone(at(verdict="likely interference (indicated: x)"))] * 4}  # noqa: E731
+        recs = [kept("A", "complete")] * 2 + [lost("A", "capped")] * 2 + [kept("B", "complete")] * 2 + [kept("B", "capped")] * 2
+        shares = {("A", "complete"): 0.45, ("A", "capped"): 0.05, ("B", "complete"): 0.4, ("B", "capped"): 0.1}
+        self.assertAlmostEqual(ci.weighted_cells(recs, 30, shares)["unexplained_of_candidates"][0], 0.95)
+
+    def test_a_missing_cell_is_not_guessed(self):
+        recs = [{"target": "A", "class": "complete", "tones": [tone(at())] * 4}]
+        self.assertIsNone(ci.weighted_cells(recs, 30, {("A", "complete"): 0.5, ("A", "capped"): 0.5}))
 
 
 class Lanes(unittest.TestCase):

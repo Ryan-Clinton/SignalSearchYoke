@@ -129,9 +129,10 @@ def _outage_note(why, url):
 
 
 def _read_good():
-    """A reply checked and taken: the time the log gives as the last good read."""
+    """A reply checked and taken: the time the log gives as the last good read, and the end of any outage."""
     with _outage_lock:
         _outage["last_good"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    _outage_over()
 
 
 def _outage_over():
@@ -152,8 +153,7 @@ def _ask(request, url):
         except OUTAGE_ERRORS as e:
             error = e
         if error is None and reply.status_code not in OUTAGE_STATUS:
-            _outage_over()
-            return reply
+            return reply            # the outage is over only when the reply is checked and taken (_read_good)
         if not os.environ.get(WAIT_SETTING):
             if error is not None:
                 raise error

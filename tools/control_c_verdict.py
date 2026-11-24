@@ -62,16 +62,29 @@ def paired_difference(rows, classes, w_capped=None, only=None, seed=SEED, boot=B
     if np.isnan(point) or len(draws) < boot / 2:
         return None
     lo, hi = np.percentile(draws, [2.5, 97.5])
-    return {"difference": round(float(point), 4), "interval": [round(float(lo), 4), round(float(hi), 4)]}
+    # full precision for the decision; rounded copies for the reader
+    return {"difference": float(point), "interval": [float(lo), float(hi)],
+            "shown": {"difference": round(float(point), 4), "interval": [round(float(lo), 4), round(float(hi), 4)]}}
 
 
 def false_rate(per_session, run=RUN):
     """Real candidates left unexplained a block over all cadences (per_session: each cadence's counts a block in
     frequency order), and the 95% interval from runs of `run` consecutive blocks drawn again."""
+    import measure
     import negative_controls as nc
     total, blocks = sum(sum(x) for x in per_session), sum(len(x) for x in per_session)
-    return {"unexplained": int(total), "blocks": blocks, "rate": round(total / blocks, 4),
-            "interval": nc._windows95(per_session, run)}
+    rate, interval = total / blocks, nc._windows95(per_session, run, digits=None)
+    # beside the rule, not part of it: with none left, resampled runs can only give 0 to 0, which does not mean
+    # the rate is known to be 0; the exact Poisson limit says how high it could be if the blocks were independent
+    poisson_upper = measure.poisson_interval(int(total))[1] / blocks
+    return {"unexplained": int(total), "blocks": blocks, "rate": rate, "interval": interval,
+            "poisson_upper_95": poisson_upper,
+            "shown": {"rate": round(rate, 4), "interval": [round(v, 4) for v in interval] if interval else None,
+                      "poisson_upper_95": round(poisson_upper, 4)},
+            "about_the_intervals": "the interval resamples runs of consecutive blocks within each cadence (the "
+                                   "rule's); with no unexplained candidate it is 0 to 0 whatever the true rate. The "
+                                   "Poisson limit is a model taking blocks as independent. Neither speaks for "
+                                   "sessions beyond these four."}
 
 
 def decide(capped, weighted, rate):
@@ -117,7 +130,8 @@ def main(say=print):
            "limits": {"rate": LIMIT_RATE, "upper": LIMIT_UPPER, "run": RUN}, **decide(capped, weighted, rate),
            "kind": "measured"}
     yoke.write(nc.OUT / "verdict.json", out, indent=1, stamp=True)
-    say(json.dumps({k: out[k] for k in ("planted_capped", "planted_weighted", "real_unexplained_by_version_6", "so")}))
+    say(json.dumps({k: out[k] for k in ("planted_capped", "planted_weighted", "real_unexplained_by_version_6", "so")},
+                   default=float))
     return out
 
 

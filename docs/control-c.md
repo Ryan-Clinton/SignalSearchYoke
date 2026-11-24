@@ -86,3 +86,17 @@ that result is reported as descriptive only.
   session already chosen, and the draw was made again. Only the archive
   listing and the first file's header had been read. Control B's draw is
   unaffected: its four sessions were all different.
+- 24 November 2026, while control C's sweep ran and before any of its
+  results existed:
+  - Planted records now name version 6's version as well as version 5's,
+    and are refused if either differs.
+  - A record made before versions were recorded is checked against the
+    versions its commit's code held.
+  - The rule decides on full-precision values, rounding only what is shown.
+  - Beside the rule's interval, an exact Poisson upper limit is reported,
+    because resampled runs give 0 to 0 when nothing is left unexplained,
+    whatever the true rate.
+  - A supplementary estimate weighted by cadence and class together is
+    given.
+
+  The rule's criteria and limits are unchanged.

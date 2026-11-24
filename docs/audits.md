@@ -443,6 +443,18 @@ At SNR 10: complete 0.75 (0.56 to 0.91), capped 0.18 (0.04 to 0.34).
 
 The tools behind these were tightened at `ac59d3c`, and every result above was made again with them and came out the same: each planted record must be the protocol's whole result (110 different signals, both cuts, six looks, the right block, the versions); the choice record must be the protocol's draw; the store and the sweep records must agree candidate by candidate (identity, frequency, drift, S/N), not only in number; a whole evaluation is exactly ten checks with one final verdict; the replay checks the package's file list and versions and names what it does not replay (the wrong-choice rates, made from the project sessions' records); a resampled draw with no candidates is left out instead of counted as none kept (no figure moved); the parallel lanes are watched together, so a fault in one is reported at once; and the time of the last good read is set only after a reply is checked. Report 1.7's figures are unchanged by any of it.
 
+### 4, control C under way, 24 November 2026
+
+Control B's candidates judged by the candidate version 6 (`negative_controls.py
+context`, descriptive only, since version 6 was designed on control B): at
+30, none unexplained, as under version 5; at 10, 9 of 1,187, the 9 the
+leave-one-out found. Control C is chosen (HIP 400, AGBT16B_999_09; HIP 428,
+AGBT16B_999_101; HIP 436, AGBT16A_999_248; HIP 443, AGBT16B_999_132) and its
+sweep is running. Its protocol, the rule for adopting version 6, and the tool
+that applies it (`tools/control_c_verdict.py`, with a synthetic test from the
+choice records to the decision) were committed before any of its results
+existed; the changes made since are logged in `docs/control-c.md`.
+
 ### 4, the time-order test, 21 November 2026
 
 F4-02's measurement (`tools/false_checks.py chronological`, 16 blocks):

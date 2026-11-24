@@ -291,7 +291,7 @@ def _bootstrap95(per_block, seed=4, boot=2000):
     return [round(float(v), 4) for v in np.percentile(means, [2.5, 97.5])]
 
 
-def _windows95(per_session, w, seed=4, boot=2000):
+def _windows95(per_session, w, seed=4, boot=2000, digits=4):
     """The rate a block, 2.5 and 97.5 percentiles, drawing runs of `w` consecutive blocks with replacement within
     each session (per_session: each session's counts in frequency order), so neighbouring blocks stay together."""
     import numpy as np
@@ -306,7 +306,8 @@ def _windows95(per_session, w, seed=4, boot=2000):
         sums = np.convolve(x, np.ones(size), "valid")
         picks = sums[rng.integers(0, len(sums), (boot, int(np.ceil(n / size))))]
         draws += picks.mean(axis=1) / size * n
-    return [round(float(v), 4) for v in np.percentile(draws / total, [2.5, 97.5])]
+    ends = [float(v) for v in np.percentile(draws / total, [2.5, 97.5])]
+    return ends if digits is None else [round(v, digits) for v in ends]
 
 
 def table_rows(records):
@@ -574,6 +575,15 @@ def replay(folder=None, say=print):
                  if any(by_block.get((c["session"], int(k)), 0) != len(d["events"]) for k, d in rec["done"].items())]
     if problems:
         raise yoke.Refusal("INVALID_REQUEST", "; ".join(problems))
+    held = {}
+    for e in events:
+        held.setdefault((e["session"], int(e["block"])), set()).add(
+            _candidate_key(e["event_id"], e["frequency_mhz"], e["drift_hz_s"], e["snr"]))
+    for c, rec in records:                  # the same identity test as the live tables' against the store
+        if any(held.get((c["session"], int(k)), set()) != {_candidate_key(e["event_id"], e["frequency_mhz"],
+                                                                          e["drift_hz_s"], e["snr"])
+                                                             for e in d["events"]} for k, d in rec["done"].items()):
+            raise yoke.Refusal("INVALID_REQUEST", f"{c['session']}: the verdicts' candidates and the sweep record's differ")
     same_tables = _unstamped(table_rows(records)) == _unstamped(load("tables.json"))
     same_summary = _unstamped(summary_rows(records, events)) == _unstamped(load("summary.json"))
     if not (same_tables and same_summary):
