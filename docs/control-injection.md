@@ -83,3 +83,10 @@ changed after it.
   share of all counted signals. It now computes both and states the reading
   by the rule above. No block was re-run, and the planting, the blocks and
   the measures are unchanged.
+- 24 November 2026, after the result: the tables now refuse any record that
+  is not the protocol's whole result, and leave a resampled draw with no
+  candidates out of an interval instead of counting it as none kept (no
+  figure moved). Two analyses were added beside the protocol's, which is
+  unchanged: the result reweighted to control B's own mix of capped and
+  complete blocks, and each check left out in turn. Both are reported as
+  added after the result was seen.
