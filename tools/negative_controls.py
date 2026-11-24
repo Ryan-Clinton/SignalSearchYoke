@@ -108,6 +108,10 @@ def select(say=print):
         rows = s12._query(replies, target=target) or []
         gbt = [r for r in rows if s12._is_gbt(r.get("telescope"))]
         for session, rs in s12._sessions(gbt).items():
+            if any(c["session"] == session for c in chosen):
+                # one session can be listed under several catalogue stars: each control holds a session once
+                tried.append({"target": target, "session": session, "passed_over": "already chosen"})
+                continue
             run, why = s12.structural(session, rs, replies, True)
             if run is None:
                 tried.append({"target": target, "session": session, "passed_over": why})

@@ -76,4 +76,10 @@ that result is reported as descriptive only.
 
 ## Changes after this was fixed
 
-None.
+- 24 November 2026, before any spectra were read: the first draw chose the
+  same session, AGBT16B_999_09, under three catalogue stars (HIP 400, 428
+  and 443), because the rule skipped targets already chosen but not
+  sessions. A control holds a session once, so the rule now passes over a
+  session already chosen, and the draw was made again. Only the archive
+  listing and the first file's header had been read. Control B's draw is
+  unaffected: its four sessions were all different.
