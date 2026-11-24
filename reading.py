@@ -128,9 +128,14 @@ def _outage_note(why, url):
                   flush=True)
 
 
-def _outage_over():
+def _read_good():
+    """A reply checked and taken: the time the log gives as the last good read."""
     with _outage_lock:
         _outage["last_good"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _outage_over():
+    with _outage_lock:
         if _outage["since"] is not None:
             print(f"network: back after {(time.monotonic() - _outage['since']) / 60:.1f} min", flush=True)
             _outage["since"] = None
@@ -162,7 +167,9 @@ def head(url):
     """The file's size and ETag."""
     reply = _ask(lambda: session().head(url, timeout=TIMEOUT, allow_redirects=True), url)
     reply.raise_for_status()
-    return int(reply.headers["Content-Length"]), reply.headers.get("ETag", "")
+    size = int(reply.headers["Content-Length"])
+    _read_good()
+    return size, reply.headers.get("ETag", "")
 
 
 class Changed(yoke.Refusal):
@@ -199,6 +206,7 @@ def get_range(url, start, end, etag=None):
     with _stats_lock:
         STATS["requests"] += 1
         STATS["bytes"] += len(data)
+    _read_good()
     return data
 
 

@@ -54,6 +54,17 @@ class Waiting(unittest.TestCase):
         self.assertEqual(len(lines), 2)                       # when it began and when it ended, not one a try
         self.assertIn("back after", lines[1])
 
+    def test_a_refused_reply_is_not_a_good_read(self):
+        reading._outage["last_good"] = None
+        with self.assertRaises(requests.exceptions.HTTPError):
+            self.ask([_reply(404)])
+        self.assertIsNone(reading._outage["last_good"])
+        with self.assertRaises(yoke.Refusal):
+            self.ask([_reply(200)])                             # the wrong bytes
+        self.assertIsNone(reading._outage["last_good"])
+        self.ask([_reply(206)])
+        self.assertIsNotNone(reading._outage["last_good"])
+
     def test_without_the_setting_it_is_reported(self):
         with self.assertRaises(requests.exceptions.ConnectionError):
             self.ask([requests.exceptions.ConnectionError("no name")], waiting=False)
@@ -135,8 +146,9 @@ class TheWholeControl(unittest.TestCase):
                        [(event, f"L{event}", "1. data", "x", version, when), (event, f"L{event}", "10. report", verdict, version, when)])
 
     def write(self, c, done, **change):
+        event = {"event_id": self.chosen.index(c) + 1, "frequency_mhz": 0.5, "drift_hz_s": 0.0, "snr": 40.0}
         make = lambda k: {"complete": True, "from_mhz": k, "to_mhz": k + 1, "search_version": self.VERSION,  # noqa: E731
-                          "events": [{"snr": 40}] if k == 0 else []}
+                          "events": [dict(event)] if k == 0 else []}
         rec = {"blocks": [[0, 1], [1, 2]], "done": {str(k): make(k) for k in range(done)}}
         rec["done"].update(change)
         (self.folder / "sweeps" / f"{c['target']}-{c['session']}.json").write_text(json.dumps(rec), encoding="utf-8")
@@ -204,6 +216,22 @@ class TheWholeControl(unittest.TestCase):
         self.edit("DELETE FROM events WHERE event_id=1")
         self.assertIn("candidates differ", self.tables()[1])
 
+    def test_a_changed_snr_with_the_same_count_is_refused(self):
+        self.edit("UPDATE events SET snr=25 WHERE event_id=2")          # under 30 now: the rate would move
+        self.assertIn("candidates differ", self.tables()[1])
+
+    def test_a_swapped_candidate_with_the_same_count_is_refused(self):
+        self.edit("UPDATE events SET f_start_mhz=0.7 WHERE event_id=3")
+        self.assertIn("candidates differ", self.tables()[1])
+
+    def test_a_duplicate_final_verdict_is_refused(self):
+        db = sqlite3.connect(self.db_path)
+        with db:
+            db.execute("INSERT INTO checks VALUES (2, 'L2', '10. report', 'unexplained, strong', 'v', 't1')")
+        db.close()
+        with self.assertRaises(yoke.Refusal):
+            self.verdicts()
+
     def test_fewer_than_four_are_refused(self):
         for chosen in (self.chosen[:3], self.chosen[:3] + [dict(self.chosen[3], session="SA")],
                        self.chosen[:3] + [dict(self.chosen[3], target="A")]):
@@ -256,7 +284,7 @@ class Replay(TheWholeControl):
         events = self.verdicts()
         put = lambda n, r: (folder / n).write_text(json.dumps(r), encoding="utf-8")  # noqa: E731
         put("choice.json", {"chosen": self.chosen})
-        put("verdicts.json", {"events": events})
+        put("verdicts.json", {"checks_version": "c", "events": events})
         put("tables.json", dict(negative_controls.table_rows(records), provenance={}))
         put("summary.json", dict(negative_controls.summary_rows(records, events), kind="measured", provenance={},
                                  one_wrong_choice_on_the_project_sessions={}))
@@ -267,11 +295,34 @@ class Replay(TheWholeControl):
     def seal(folder):
         files = {p.relative_to(folder).as_posix(): negative_controls._sha(p) for p in folder.rglob("*.json")
                  if p.name != "manifest.json"}
-        (folder / "manifest.json").write_text(json.dumps({"files": files}), encoding="utf-8")
+        (folder / "manifest.json").write_text(json.dumps({"files": files, "search_version": "v", "checks_version": "c"}),
+                                              encoding="utf-8")
 
     def test_a_right_package_replays(self):
         got = negative_controls.replay(self.package(), say=lambda *a: None)
         self.assertTrue(got["tables_same"] and got["summary_same"])
+        self.assertTrue(got["not_replayed"])
+
+    def test_an_unlisted_file_is_refused(self):
+        folder = self.package()
+        (folder / "extra.json").write_text("{}", encoding="utf-8")
+        with self.assertRaises(yoke.Refusal):
+            negative_controls.replay(folder, say=lambda *a: None)
+
+    def test_a_missing_sweep_even_when_resealed_is_refused(self):
+        folder = self.package()
+        (folder / "sweeps" / "D-SD.json").unlink()
+        self.seal(folder)
+        with self.assertRaises(yoke.Refusal):
+            negative_controls.replay(folder, say=lambda *a: None)
+
+    def test_another_search_version_in_the_manifest_is_refused(self):
+        folder = self.package()
+        m = json.loads((folder / "manifest.json").read_text(encoding="utf-8"))
+        m["search_version"] = "other"
+        (folder / "manifest.json").write_text(json.dumps(m), encoding="utf-8")
+        with self.assertRaises(yoke.Refusal):
+            negative_controls.replay(folder, say=lambda *a: None)
 
     def test_a_changed_file_is_refused(self):
         folder = self.package()

@@ -6,6 +6,7 @@ Supplementary: no verdict of steps 4, 10 or 12 changes, and the frozen search an
     python tools/control_injection.py choose     the blocks, by the protocol's rule (once)
     python tools/control_injection.py run        every chosen block, in three lanes (hours; resumes)
     python tools/control_injection.py tables     the survival at each stage
+    python tools/control_injection.py checks-left-out   each check left out in turn (from the records)
 """
 import json
 import os
@@ -114,8 +115,55 @@ def one_block(cadence, k, info, ctx):
             row["at"][str(cut)] = at
         for lk in looks:
             lk.flat = None
+    import vetting
     return {"target": cadence["target"], "session": session, "block": k, "class": info["class"],
+            "versions": {"search": seti.SEARCH_VERSION, "checks": vetting.VERSION},
             "complete": [bool(x[2]) for x in searched], "tones": rows, "kind": "measured"}
+
+
+# the files whose code makes a record: a record without its versions written in is taken only if none has changed
+# since the commit it was made at
+MADE_BY = ("seti.py", "searching.py", "onoff.py", "measure.py", "injection.py", "matched.py", "vetting.py",
+           "check.py", "tools/control_injection.py")
+
+
+def _versions_now():
+    import seti
+    import vetting
+    return {"search": seti.SEARCH_VERSION, "checks": vetting.VERSION}
+
+
+def _code_unchanged_since(commit):
+    if not commit:
+        return False
+    done = subprocess.run(["git", "-C", str(ROOT), "diff", "--quiet", commit, "HEAD", "--", *MADE_BY[:-1]])
+    return done.returncode == 0
+
+
+def record_problems(rec, cadence, k, info, versions=None, unchanged=_code_unchanged_since):
+    """Why a block record is not this block's whole result under the protocol."""
+    import matched
+    name = f"{cadence['target']} {k}"
+    if not isinstance(rec, dict):
+        return [f"{name}: no record"]
+    out = []
+    if (rec.get("target"), rec.get("session"), rec.get("block"), rec.get("class")) != (
+            cadence["target"], cadence["session"], k, info["class"]):
+        out.append(f"{name}: the record is of another block")
+    tones = rec.get("tones", [])
+    if len(tones) != matched.TONES or len({(round(t["x0"], 4), round(t["drift"], 5)) for t in tones}) != matched.TONES:
+        out.append(f"{name}: {len(tones)} signals, not {matched.TONES} different ones")
+    if any(set(t.get("at", {})) != {str(c) for c in CUTS} for t in tones):
+        out.append(f"{name}: a signal is not judged at both cuts")
+    if len(rec.get("complete", [])) != 6:
+        out.append(f"{name}: not six looks")
+    if versions is not None:
+        made = rec.get("versions")
+        if made is not None and made != versions:
+            out.append(f"{name}: made by another version of the search or the checks")
+        if made is None and not unchanged(rec.get("provenance", {}).get("git_commit")):
+            out.append(f"{name}: made before versions were recorded, by code that has changed since")
+    return out
 
 
 def lane(i, say=print):
@@ -123,10 +171,11 @@ def lane(i, say=print):
     import store
     choice = json.loads((OUT / "choice.json").read_text(encoding="utf-8"))
     db = store.connect_readonly()
+    versions = _versions_now()
     todo = [(c, int(k), v) for c in choice["cadences"] for k, v in c["blocks"].items()]
     for n, (c, k, info) in enumerate(todo):
         path = OUT / f"{c['target']}_{k:03d}.json"
-        if n % LANES != i or yoke.whole(path, lambda r: len(r.get("tones", [])) > 0):
+        if n % LANES != i or yoke.whole(path, lambda r, c=c, k=k, info=info: not record_problems(r, c, k, info, versions)):
             continue
         ctx = {"db": db, "target": check.target_of(db, c["session"]), "hits": check.session_hits(db, c["session"])}
         rec = one_block(c, k, info, ctx)
@@ -141,11 +190,26 @@ def run(say=print):
     import negative_controls as nc
     env = dict(os.environ, SSY_DATA=str(nc.CONTROLS), SSY_INJECTION_OUT=str(OUT))
     jobs = [subprocess.Popen([sys.executable, "-u", str(Path(__file__)), "lane", str(i)], env=env) for i in range(LANES)]
-    codes = [p.wait() for p in jobs]
+    codes = watch(jobs)
     if yoke.NETWORK_EXIT in codes:
         sys.exit(yoke.NETWORK_EXIT)
-    if any(codes):
-        raise yoke.Refusal("INTERNAL_ERROR", f"a lane stopped: {codes}")
+
+
+def watch(jobs, wait=5.0):
+    """Every lane watched at once: a lane that fails for any reason but the network stops the others and is
+    reported at once, whatever another lane is waiting for. Returns the exit codes when all have ended."""
+    import time
+    while True:
+        codes = [p.poll() for p in jobs]
+        broken = [(i, c) for i, c in enumerate(codes) if c not in (None, 0, yoke.NETWORK_EXIT)]
+        if broken:
+            for p in jobs:
+                if p.poll() is None:
+                    p.terminate()
+            raise yoke.Refusal("INTERNAL_ERROR", f"lane {broken[0][0]} stopped ({broken[0][1]}); the others were stopped")
+        if all(c is not None for c in codes):
+            return codes
+        time.sleep(wait)
 
 
 def stage_counts(tones, cut):
@@ -173,8 +237,37 @@ def _block_interval(records, cut, of="counted", seed=SEED, boot=2000):
         return None
     rng = np.random.default_rng(seed)
     picks = rng.integers(0, len(pairs), (boot, len(pairs)))
-    shares = pairs[picks, 0].sum(axis=1) / np.maximum(pairs[picks, 1].sum(axis=1), 1)
+    num, den = pairs[picks, 0].sum(axis=1), pairs[picks, 1].sum(axis=1)
+    # a draw with nothing to divide by has no share: it is left out, not counted as none kept
+    shares = num[den > 0] / den[den > 0]
+    if len(shares) < boot / 2:
+        return None
     return [round(float(v), 4) for v in np.percentile(shares, [2.5, 97.5])]
+
+
+def weighted(records, cut, w_capped, seed=SEED, boot=2000):
+    """The balanced sample reweighted to a population whose share of capped blocks is `w_capped`: each class's
+    rates combined by its share, with blocks drawn again within each class. Shares of counted signals left
+    unexplained, and unexplained among candidates."""
+    rng = np.random.default_rng([seed, 1])
+    by = {cls: np.array([[c["unexplained"], c["candidates"], c["counted"]] for c in
+                         (stage_counts(r["tones"], cut) for r in records if r["class"] == cls)], float)
+          for cls in ("complete", "capped")}
+    if any(not len(x) or not x[:, 2].sum() for x in by.values()):
+        return None
+    w = {"complete": 1 - w_capped, "capped": w_capped}
+
+    def est(sums):
+        u = sum(w[c] * sums[c][0] / sums[c][2] for c in w)
+        k = sum(w[c] * sums[c][1] / sums[c][2] for c in w)
+        return u, (u / k if k else np.nan)
+    point = est({c: x.sum(axis=0) for c, x in by.items()})
+    draws = np.array([est({c: x[rng.integers(0, len(x), len(x))].sum(axis=0) for c, x in by.items()})
+                      for _ in range(boot)])
+    good = draws[~np.isnan(draws[:, 1])]
+    return {"share_of_blocks_capped": round(w_capped, 4),
+            "share_unexplained": [round(point[0], 4)] + [round(float(v), 4) for v in np.percentile(draws[:, 0], [2.5, 97.5])],
+            "unexplained_of_candidates": [round(point[1], 4)] + [round(float(v), 4) for v in np.percentile(good[:, 1], [2.5, 97.5])]}
 
 
 def summarise(records):
@@ -206,24 +299,118 @@ def summarise(records):
     return out
 
 
-def tables(say=print):
-    choice = json.loads((OUT / "choice.json").read_text(encoding="utf-8"))
-    records, missing = [], []
+def choice_problems(choice, control):
+    """Why the choice record is not the protocol's draw from control B ([(cadence, sweep record)])."""
+    want = [{"target": c["target"], "session": c["session"], "urls": [x["url"] for x in c["looks"]],
+             "blocks": {str(k): {"class": v, "range": rec["blocks"][k]} for k, v in pick_blocks(rec["done"], n, SEED).items()}}
+            for n, (c, rec) in enumerate(control)]
+    if choice.get("seed") != SEED or choice.get("per_class") != PER_CLASS or choice.get("cadences") != want:
+        return ["the choice record is not the protocol's draw"]
+    if sum(len(c["blocks"]) for c in want) != 2 * PER_CLASS * len(want):
+        return ["not two classes of blocks in each cadence"]
+    return []
+
+
+def load_records(choice, versions):
+    """Every chosen block's record, refused unless each is whole by the protocol."""
+    records, problems = [], []
     for c in choice["cadences"]:
-        for k in c["blocks"]:
+        for k, info in c["blocks"].items():
             path = OUT / f"{c['target']}_{int(k):03d}.json"
-            if yoke.whole(path, lambda r: len(r.get("tones", [])) > 0):
-                records.append(json.loads(path.read_text(encoding="utf-8")))
-            else:
-                missing.append(f"{c['target']} {k}")
-    if missing:
-        raise yoke.Refusal("INVALID_REQUEST", f"Blocks not done: {missing}")
+            rec = json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+            got = record_problems(rec, c, int(k), info, versions)
+            problems += got
+            if not got:
+                records.append(rec)
+    if problems:
+        raise yoke.Refusal("INVALID_REQUEST", "; ".join(problems[:10]))
+    return records
+
+
+def tables(say=print):
+    import negative_controls as nc
+    choice = json.loads((OUT / "choice.json").read_text(encoding="utf-8"))
+    control = nc._whole_control()
+    problems = choice_problems(choice, control)
+    if problems:
+        raise yoke.Refusal("INVALID_REQUEST", problems[0])
+    records = load_records(choice, _versions_now())
+    capped = sum(d.get("complete") not in (1, True) for _, rec in control for d in rec["done"].values())
+    blocks = sum(len(rec["done"]) for _, rec in control)
     out = {"blocks": len(records), "signals": sum(len(r["tones"]) for r in records), "cuts": summarise(records),
+           "weighted_to_control_b": {"population": f"control B's {blocks} blocks, {capped} of them capped",
+                                     **{str(cut): weighted(records, cut, capped / blocks) for cut in CUTS}},
            "kind": "measured"}
     yoke.write(OUT.parent / "injection.json", out, indent=1, stamp=True)
     for cut, cell in out["cuts"].items():
         for g in ("all", "capped", "complete"):
             say(f"at {cut}, {g}: {json.dumps(cell[g])}")
+    return out
+
+
+def verdict_parts(verdict, reasons):
+    """The checks a verdict rests on: (shown, indicated). A verdict of interference names the shown ones; the rest
+    of its reasons are indicated."""
+    shown = set()
+    if verdict.startswith("interference (shown: "):
+        shown = set(verdict[len("interference (shown: "):-1].split("; "))
+    return shown, set(reasons) - shown
+
+
+def without(shown, indicated, check):
+    """The verdict's class with one check left out: interference, likely interference or unexplained."""
+    shown, indicated = shown - {check}, indicated - {check}
+    return "interference" if shown else "likely interference" if indicated else "unexplained"
+
+
+def leave_one_out(planted, control, cut):
+    """For each check: planted candidates that would be unexplained without it (by class of block), and control B
+    candidates that would. planted: [(class, verdict, reasons)]; control: [(snr, {check: strength})]."""
+    names = sorted({x for _, v, r in planted for x in r} | {x for _, s in control for x in s})
+    out = {}
+    for name in names:
+        rescued = Counter(cls for cls, v, r in planted
+                          if not v.startswith("unexplained") and without(*verdict_parts(v, r), name) == "unexplained")
+        released = sum(1 for snr, s in control if snr >= cut and without(
+            {x for x, g in s.items() if g == "shown"}, {x for x, g in s.items() if g == "indicated"}, name) == "unexplained")
+        out[name] = {"planted_kept_without_it": {"complete": rescued["complete"], "capped": rescued["capped"]},
+                     "control_b_unexplained_without_it": released}
+    return out
+
+
+def checks_left_out(say=print):
+    """Each check left out in turn, on the planted signals' verdicts and control B's: what each costs in planted
+    signals and what it removes of control B's candidates. From the records; nothing is run again."""
+    import sqlite3
+    import negative_controls as nc
+    import vetting
+    choice = json.loads((OUT / "choice.json").read_text(encoding="utf-8"))
+    records = load_records(choice, _versions_now())
+    db = sqlite3.connect(f"file:{(nc.CONTROLS / 'ssy.sqlite').as_posix()}?mode=ro", uri=True)
+    current = {e["event_id"]: e["snr"] for e in nc.candidate_verdicts(db, vetting.VERSION, vetting.N_CHECKS)}
+    strengths, bands = {}, Counter()
+    for event, name, result, strength in db.execute(
+            "SELECT event_id, name, result, strength FROM checks WHERE version=?", (vetting.VERSION,)):
+        if event in current:
+            short = name.split(". ", 1)[1]
+            if strength in ("shown", "indicated"):
+                strengths.setdefault(event, {})[short] = strength
+            if short == "known interference bands" and current[event] >= 30 and strength:
+                bands[result] += 1
+    db.close()
+    control = [(snr, strengths.get(e, {})) for e, snr in current.items()]
+    out = {"cuts": {}, "control_b_bands_at_30": dict(bands.most_common()),
+           "chosen_blocks_in_bands": {f"{c['target']} {k}": {"class": v["class"], "bands": [
+               name for lo, hi, name in vetting.BANDS if lo <= max(v["range"]) and hi >= min(v["range"])]}
+               for c in choice["cadences"] for k, v in c["blocks"].items()}, "kind": "measured"}
+    for cut in CUTS:
+        planted = [(r["class"], t["at"][str(cut)]["verdict"], t["at"][str(cut)].get("reasons", []))
+                   for r in records for t in r["tones"] if t["at"][str(cut)].get("verdict")]
+        out["cuts"][str(cut)] = leave_one_out(planted, control, cut)
+    yoke.write(OUT.parent / "injection_checks.json", out, indent=1, stamp=True)
+    for name, v in out["cuts"]["30"].items():
+        say(f"without {name}: planted kept {v['planted_kept_without_it']}, control B unexplained "
+            f"{v['control_b_unexplained_without_it']}")
     return out
 
 
@@ -237,6 +424,8 @@ def main():
         lane(int(sys.argv[2]))
     elif cmd == "tables":
         tables()
+    elif cmd == "checks-left-out":
+        checks_left_out()
     else:
         sys.exit(__doc__)
 

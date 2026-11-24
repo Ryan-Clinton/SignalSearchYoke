@@ -115,10 +115,9 @@ def select(say=print):
 def _choice():
     """The choice record, refused unless it holds exactly COUNT different sessions of COUNT different targets."""
     rec = json.loads((OUT / "choice.json").read_text(encoding="utf-8"))
-    chosen = rec["chosen"]
-    if len(chosen) != COUNT or len({c["session"] for c in chosen}) != COUNT or len({c["target"] for c in chosen}) != COUNT:
-        raise yoke.Refusal("INVALID_REQUEST", f"The choice must hold {COUNT} different sessions of {COUNT} different "
-                                              f"targets; it holds {len(chosen)} entries.")
+    problems = choice_problems(rec["chosen"])
+    if problems:
+        raise yoke.Refusal("INVALID_REQUEST", problems[0])
     return rec
 
 
@@ -155,11 +154,28 @@ def store_problems(db, c, rec):
     elif any(abs(held[int(k)][0] - d["from_mhz"]) > 1e-6 or abs(held[int(k)][1] - d["to_mhz"]) > 1e-6
              for k, d in done.items()):
         out.append(f"{name}: a block's boundaries differ between the store and the record")
-    count = dict(db.execute("SELECT block_idx, count(*) FROM events WHERE session=? AND label='candidate' AND "
-                            "superseded_run IS NULL GROUP BY block_idx", (name,)).fetchall())
-    if any(count.get(int(k), 0) != len(d["events"]) for k, d in done.items()):
+    held = {}
+    for b, event, f, drift, snr in db.execute(
+            "SELECT block_idx, event_id, f_start_mhz, drift_hz_s, snr FROM events WHERE session=? AND "
+            "label='candidate' AND superseded_run IS NULL", (name,)):
+        held.setdefault(b, set()).add(_candidate_key(event, f, drift, snr))
+    if any(held.get(int(k), set()) != {_candidate_key(e["event_id"], e["frequency_mhz"], e["drift_hz_s"], e["snr"])
+                                       for e in d["events"]} for k, d in done.items()):
         out.append(f"{name}: a block's candidates differ between the store and the record")
     return out
+
+
+def _candidate_key(event, f, drift, snr):
+    """A candidate as compared between the store and a sweep record: its id, frequency, drift and S/N."""
+    return int(event), round(float(f), 6), round(float(drift), 4), round(float(snr), 2)
+
+
+def choice_problems(chosen):
+    """Why a list of chosen cadences is not COUNT different sessions of COUNT different targets."""
+    if len(chosen) != COUNT or len({c["session"] for c in chosen}) != COUNT or len({c["target"] for c in chosen}) != COUNT:
+        return [f"the choice must hold {COUNT} different sessions of {COUNT} different targets; it holds "
+                f"{len(chosen)} entries"]
+    return []
 
 
 def _store():
@@ -193,11 +209,12 @@ def _whole_control():
 
 def candidate_verdicts(db, version, n_checks):
     """Every current candidate with its one whole evaluation by this version of the checks; refused if any has
-    none, or more than one."""
+    none, or more than one. Whole: exactly `n_checks` rows, each check once, one of them the final report."""
     evaluations = {}
     for event, verdict in db.execute(
             "SELECT event_id, max(CASE WHEN name='10. report' THEN result END) FROM checks WHERE version=?"
-            " GROUP BY event_id, lead, checked_utc HAVING count(DISTINCT name) >= ?", (version, n_checks)):
+            " GROUP BY event_id, lead, checked_utc HAVING count(*) = ? AND count(DISTINCT name) = ?"
+            " AND sum(name='10. report') = 1", (version, n_checks, n_checks)):
         evaluations.setdefault(event, []).append(verdict)
     events, none, many = [], 0, 0
     for event, session, block, snr, f, drift in db.execute(
@@ -478,15 +495,28 @@ def replay(folder=None, say=print):
     """The tables and summary made again from the package alone (not the store), and compared with those it holds."""
     folder = Path(folder) if folder else PACKAGE
     load = lambda p: json.loads((folder / p).read_text(encoding="utf-8"))  # noqa: E731
-    wrong = [n for n, sha in load("manifest.json")["files"].items() if _sha(folder / n) != sha]
+    manifest = load("manifest.json")
+    present = {p.relative_to(folder).as_posix() for p in folder.rglob("*.json") if p.name != "manifest.json"}
+    if present != set(manifest["files"]):
+        raise yoke.Refusal("INVALID_REQUEST", f"The package's files are not the manifest's: missing "
+                                              f"{sorted(set(manifest['files']) - present)}, unlisted {sorted(present - set(manifest['files']))}")
+    wrong = [n for n, sha in manifest["files"].items() if _sha(folder / n) != sha]
     if wrong:
         raise yoke.Refusal("INTERNAL_ERROR", f"Files differ from the manifest: {wrong}")
     chosen = load("choice.json")["chosen"]
-    if len(chosen) != COUNT or len({c["session"] for c in chosen}) != COUNT:
-        raise yoke.Refusal("INVALID_REQUEST", "The package does not hold four cadences.")
+    problems = choice_problems(chosen)
+    if problems:
+        raise yoke.Refusal("INVALID_REQUEST", problems[0])
+    want = {"choice.json", "tables.json", "summary.json", "verdicts.json"} | {
+        f"sweeps/{c['target']}-{c['session']}.json" for c in chosen}
+    if present != want:
+        raise yoke.Refusal("INVALID_REQUEST", f"The package holds {sorted(present ^ want)} it should not, or lacks them")
+    verdicts = load("verdicts.json")
+    if verdicts["checks_version"] != manifest["checks_version"]:
+        raise yoke.Refusal("INVALID_REQUEST", "The verdicts are not by the checks the manifest names.")
     records = [(c, load(f"sweeps/{c['target']}-{c['session']}.json")) for c in chosen]
-    problems = [p for c, rec in records for p in sweep_problems(c, rec)]
-    events = load("verdicts.json")["events"]
+    problems = [p for c, rec in records for p in sweep_problems(c, rec, manifest["search_version"])]
+    events = verdicts["events"]
     by_block = {}
     for e in events:
         by_block[(e["session"], e["block"])] = by_block.get((e["session"], e["block"]), 0) + 1
@@ -498,9 +528,12 @@ def replay(folder=None, say=print):
     same_summary = _unstamped(summary_rows(records, events)) == _unstamped(load("summary.json"))
     if not (same_tables and same_summary):
         raise yoke.Refusal("INTERNAL_ERROR", f"The replay differs: tables {same_tables}, summary {same_summary}.")
-    out = {"files_checked": len(load("manifest.json")["files"]), "candidates": len(events), "tables_same": True,
-           "summary_same": True, "is": "made again from the package on this computer by this code; not an independent "
-                                       "verification", "kind": "measured"}
+    out = {"files_checked": len(manifest["files"]), "candidates": len(events), "tables_same": True,
+           "summary_same": True,
+           "not_replayed": ["one_wrong_choice_on_the_project_sessions: made from the project sessions' block "
+                            "records, which are not in this package"],
+           "is": "made again from the package on this computer by this code; not an independent verification",
+           "kind": "measured"}
     if folder == PACKAGE:
         yoke.write(OUT / "package_replay.json", out, indent=1, stamp=True)
     say(f"replayed: tables and summary identical, {len(events)} verdicts")

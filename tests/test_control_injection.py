@@ -104,5 +104,108 @@ class Summary(unittest.TestCase):
         self.assertTrue(got["all"]["reading"].startswith("not shown"))      # half kept: its lower end is under 0.5
 
 
+class Records(unittest.TestCase):
+    """record_problems: a block record is the protocol's whole result, or it is refused."""
+    C = {"target": "A", "session": "S", "urls": []}
+    INFO = {"class": "capped", "range": [1, 2]}
+    V = {"search": "s", "checks": "c"}
+
+    def rec(self, n=matched.TONES, **change):
+        tones = [{"x0": float(i), "drift": 0.1 * i, "s_in": 30, "bin": 0, "at": {"30": at(), "10": at()}} for i in range(n)]
+        r = {"target": "A", "session": "S", "block": 7, "class": "capped", "versions": dict(self.V),
+             "complete": [True] * 6, "tones": tones, "provenance": {"git_commit": "abc"}}
+        r.update(change)
+        return r
+
+    def problems(self, rec, unchanged=lambda c: True):
+        return ci.record_problems(rec, self.C, 7, self.INFO, self.V, unchanged)
+
+    def test_a_whole_record_passes(self):
+        self.assertEqual(self.problems(self.rec()), [])
+
+    def test_one_signal_is_not_a_block(self):
+        self.assertTrue(self.problems(self.rec(n=1)))
+
+    def test_repeated_signals_are_refused(self):
+        r = self.rec()
+        r["tones"][5] = dict(r["tones"][4])
+        self.assertTrue(self.problems(r))
+
+    def test_a_missing_cut_is_refused(self):
+        r = self.rec()
+        del r["tones"][3]["at"]["10"]
+        self.assertTrue(self.problems(r))
+
+    def test_another_block_is_refused(self):
+        self.assertTrue(self.problems(self.rec(block=8)))
+        self.assertTrue(self.problems(self.rec(**{"class": "complete"})))
+
+    def test_another_version_is_refused(self):
+        self.assertTrue(self.problems(self.rec(versions={"search": "old", "checks": "c"})))
+
+    def test_no_versions_needs_unchanged_code(self):
+        r = self.rec()
+        del r["versions"]
+        self.assertEqual(self.problems(r, lambda c: True), [])
+        self.assertTrue(self.problems(r, lambda c: False))
+
+
+class Intervals(unittest.TestCase):
+    def test_a_draw_with_no_candidates_is_left_out_not_zero(self):
+        kept = {"target": "A", "class": "capped", "tones": [tone(at())] * 3}
+        none = {"target": "A", "class": "capped", "tones": [tone(at(looks=0, candidate=False))] * 3}
+        got = ci._block_interval([kept] + [none] * 4, 30, "candidates")
+        self.assertEqual(got, [1.0, 1.0])                      # every draw with candidates keeps them all
+
+    def test_weighting_moves_toward_the_population(self):
+        kept = {"target": "A", "class": "complete", "tones": [tone(at())] * 4}
+        lost = {"target": "A", "class": "capped", "tones": [tone(at(verdict="likely interference (indicated: x)"))] * 4}
+        recs = [kept] * 3 + [lost] * 3
+        self.assertAlmostEqual(ci.weighted(recs, 30, 0.5)["unexplained_of_candidates"][0], 0.5)
+        self.assertAlmostEqual(ci.weighted(recs, 30, 0.137)["unexplained_of_candidates"][0], 0.863)
+
+
+class Lanes(unittest.TestCase):
+    class P:
+        def __init__(self, code):
+            self.code, self.stopped = code, False
+
+        def poll(self):
+            return -15 if self.stopped else self.code
+
+        def terminate(self):
+            self.stopped = True
+
+    def test_a_fault_is_reported_while_another_lane_waits(self):
+        waiting, broken = self.P(None), self.P(1)
+        with self.assertRaises(yoke.Refusal):
+            ci.watch([waiting, broken], wait=0)
+        self.assertTrue(waiting.stopped)
+
+    def test_network_and_success_end_without_a_fault(self):
+        self.assertEqual(ci.watch([self.P(0), self.P(yoke.NETWORK_EXIT)], wait=0), [0, yoke.NETWORK_EXIT])
+
+
+class LeaveOneOut(unittest.TestCase):
+    def test_a_lone_check_is_what_it_costs(self):
+        planted = [("capped", "likely interference (indicated: known interference bands)", ["known interference bands"]),
+                   ("capped", "likely interference (indicated: known interference bands; crowding)",
+                    ["known interference bands", "crowding"]),
+                   ("complete", "interference (shown: recurrence at other targets and times)",
+                    ["recurrence at other targets and times", "known interference bands"]),
+                   ("complete", "unexplained, strong", [])]
+        control = [(40, {"known interference bands": "indicated"}), (12, {"known interference bands": "indicated"}),
+                   (40, {"crowding": "indicated", "known interference bands": "indicated"})]
+        got = ci.leave_one_out(planted, control, 30)
+        self.assertEqual(got["known interference bands"]["planted_kept_without_it"], {"complete": 0, "capped": 1})
+        self.assertEqual(got["known interference bands"]["control_b_unexplained_without_it"], 1)
+        self.assertEqual(got["recurrence at other targets and times"]["planted_kept_without_it"],
+                         {"complete": 0, "capped": 0})     # still indicated by the band: likely interference
+
+    def test_the_verdict_names_what_was_shown(self):
+        shown, indicated = ci.verdict_parts("interference (shown: a; b)", ["a", "b", "c"])
+        self.assertEqual((shown, indicated), ({"a", "b"}, {"c"}))
+
+
 if __name__ == "__main__":
     unittest.main()
