@@ -205,7 +205,7 @@ def injector_summary(ii):
               f"{d['interval'][0]:+.3f} to {d['interval'][1]:+.3f}).")
 
 
-def injector_section(ii):
+def injector_section(ii, first):
     L = []
     w = L.append
     w("## An independent injector")
@@ -215,7 +215,8 @@ def injector_section(ii):
       f"were planted by setigen 2.7.0 in {ii['blocks']} blocks of the 2017 session (half crowded, half clean, drawn "
       "by class alone), by a protocol fixed beforehand, and both pipelines were run and scored exactly as above. "
       "setigen sets each signal's strength from its own estimate of the noise, so absolute recovery can differ "
-      "between the two; the question is the gap between the pipelines.")
+      "between the two; the question is the gap between the pipelines. setigen plants with its Doppler smearing, "
+      "its model of a tone integrated over a spectrum; a first run without it is described after the tables.")
     w("")
     w("| planting | S/N | this search | turboSETI | of |")
     w("|---|---|---|---|---|")
@@ -239,6 +240,19 @@ def injector_section(ii):
     for b, x in c["by_drift_bin"].items():
         w(f"| {DRIFT_LABELS[int(b)]} | {n(x['own']['ours'])} and {n(x['own']['turboseti'])} | "
           f"{n(x['setigen']['ours'])} and {n(x['setigen']['turboseti'])} |")
+    w("")
+    f10 = first["cuts"]["10"]
+    fd, fast = f10["own_minus_setigen_advantage"], f10["by_drift_bin"]
+    w("A first run of the same 16 blocks used setigen's default, which puts each spectrum's tone where it is at the "
+      "spectrum's start rather than spreading it over the channels it crosses. Both pipelines are scored against "
+      "the middle of the spectrum, within 6 Hz, so setigen's fast signals sat outside the tolerance: from 1 to 4 "
+      f"Hz/s this search found {n(fast['3']['setigen']['ours'] + fast['4']['setigen']['ours'])} and turboSETI "
+      f"{n(fast['3']['setigen']['turboseti'] + fast['4']['setigen']['turboseti'])}, against "
+      f"{n(fast['3']['own']['ours'] + fast['4']['own']['ours'])} and "
+      f"{n(fast['3']['own']['turboseti'] + fast['4']['own']['turboseti'])} with this project's planting. That run gave "
+      f"a difference of {fd['difference']:+.3f} ({fd['interval'][0]:+.3f} to {fd['interval'][1]:+.3f}). The cause "
+      "was measured on synthetic data, the change and the first run's records are logged in the protocol "
+      "(docs/independent-injection.md), and nothing else was changed.")
     w("")
     return L
 
@@ -502,11 +516,14 @@ def main():
     if ctab["over_all"]["blocks"] != csum["groups"]["all four"]["at_30"]["blocks"]:
         refuse("control B's tables and summary count different blocks")
     later = {"cleft": nc / "injection_checks.json", "indep": DATA / "analysis" / "independent_injection" / "tables.json",
+             "indep_first": DATA / "analysis" / "independent_injection" / "unsmeared" / "tables.json",
              "mid": DATA / "analysis" / "midlook" / "tables.json"}
     for p in later.values():
         if not p.exists():
             refuse(f"version {VERSION} reports {p}, which is missing")
-    cleft, indep, mid = (json.loads(p.read_text(encoding="utf-8")) for p in later.values())
+    cleft, indep, indep_first, mid = (json.loads(p.read_text(encoding="utf-8")) for p in later.values())
+    if indep.get("smearing") is not True or indep_first.get("smearing") is not False:
+        refuse("the independent injector's tables are not the smeared run and the first run")
     if any(s["blocks"] != s["of"] for s in mid["sessions"].values()) or len(mid["sessions"]) != 3:
         refuse("the mid-look rescoring is not complete for all three sessions")
 
@@ -843,7 +860,7 @@ def main():
           "there: the step that hands BLISS each block expects a slice width these blocks do not have, and the "
           "frozen rule records that rather than adapting it.")
     w("")
-    L.extend(injector_section(indep))
+    L.extend(injector_section(indep, indep_first))
     L.extend(midlook_section(mid))
     L.extend(control_section(ctab, csum, cinj, creplay, crecheck, cleft))
     w("## What the code audits found that bears on these results")
@@ -926,6 +943,7 @@ def main():
                     ("data/analysis/negative_controls/injection.json", cinj),
                     ("data/analysis/negative_controls/injection_checks.json", cleft),
                     ("data/analysis/independent_injection/tables.json", indep),
+                    ("data/analysis/independent_injection/unsmeared/tables.json", indep_first),
                     ("data/analysis/midlook/tables.json", mid)):
         if r:
             pv = r.get("provenance", {})
