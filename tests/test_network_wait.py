@@ -120,5 +120,35 @@ class TablesNeedTheWholeControl(unittest.TestCase):
         self.assertEqual(got["over_all"]["blocks"], 4)
 
 
+class ControlSummary(unittest.TestCase):
+    """negative_controls.describe: the counts behind the control's write-up, on a small known case."""
+    BLOCKS = {("S", 0): True, ("S", 1): False, ("S", 2): False, ("S", 3): True}
+
+    def events(self):
+        e = lambda b, snr, v: {"session": "S", "block": b, "snr": snr, "verdict": v}  # noqa: E731
+        return [e(1, 40, "interference (shown: OFF looks below the threshold)"), e(1, 35, "likely interference (indicated: x)"),
+                e(1, 31, "unexplained, weak"), e(2, 50, "unexplained, strong"), e(0, 12, "unexplained, weak"),
+                e(3, 30, "likely interference (indicated: y)")]
+
+    def test_the_counts_at_each_cut(self):
+        d = negative_controls.describe(self.events(), self.BLOCKS, 30)
+        self.assertEqual((d["candidates"], d["rate"], d["unexplained"], d["blocks_with_any"]), (5, 1.25, 2, 3))
+        self.assertEqual(d["by_verdict"], {"interference": 1, "likely interference": 2, "unexplained, strong": 1,
+                                           "unexplained, weak": 1})
+        self.assertEqual((d["in_the_busiest_block"], d["in_the_three_busiest_blocks"]), (3, 5))
+        self.assertEqual((d["candidates_in_complete_blocks"], d["candidates_in_capped_blocks"]), (1, 4))
+        self.assertEqual(negative_controls.describe(self.events(), self.BLOCKS, 10)["candidates"], 6)
+
+    def test_a_flipped_block_moves_the_split(self):
+        blocks = dict(self.BLOCKS)
+        blocks[("S", 1)] = True
+        d = negative_controls.describe(self.events(), blocks, 30)
+        self.assertEqual((d["candidates_in_complete_blocks"], d["candidates_in_capped_blocks"]), (4, 1))
+
+    def test_a_verdict_not_known_is_refused(self):
+        with self.assertRaises(yoke.Refusal):
+            negative_controls.verdict_class("probably fine")
+
+
 if __name__ == "__main__":
     unittest.main()

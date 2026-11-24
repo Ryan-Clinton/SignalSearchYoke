@@ -8,6 +8,8 @@ wrong ON/OFF choices only stand in for. Supplementary: no verdict of steps
     python tools/negative_controls.py select        choose the sessions (archive listing and headers only)
     python tools/negative_controls.py run           sweep each chosen cadence whole (hours; resumes)
     python tools/negative_controls.py tables        the rates from the swept cadences
+    python tools/negative_controls.py checks        the checks on every candidate, in the controls' own store (resumes)
+    python tools/negative_controls.py summary       after the checks; where the candidates fall; beside one wrong choice
 
 The rule, fixed before any of its listings were read (20 November 2026):
 
@@ -186,6 +188,129 @@ def tables(say=print):
     return out
 
 
+def checks_here(say=print):
+    """Every current candidate through the checks as they are, kept in this process's store (SSY_DATA is the
+    controls' folder). No reports are written: docs/leads is for the project's own sessions."""
+    import check
+    import store
+    import vetting
+    db = store.connect()
+    done = store.checked_events(db, vetting.VERSION, vetting.N_CHECKS)
+    rows = [r for r in db.execute("SELECT * FROM events WHERE label='candidate' AND superseded_run IS NULL"
+                                  " ORDER BY session, block_idx, event_id").fetchall() if r["event_id"] not in done]
+    say(f"{len(done)} checked already, {len(rows)} to check")
+    hits, targets, at = {}, {}, None
+    for n, r in enumerate(rows, 1):
+        session = r["session"]
+        if session not in hits:
+            hits, targets = {session: check.session_hits(db, session)}, {session: check.target_of(db, session)}
+        if at != (session, r["block_idx"]):
+            at, (looks, where, _) = (session, r["block_idx"]), check._cadence(db, session, r["block_idx"])
+        e = check._event(db, r, where)
+        own = {x[0] for x in db.execute("SELECT hit_id FROM event_hits WHERE event_id=?", (r["event_id"],))}
+        lead = f"{check.lead_id(targets[session]['name'], session, e['frequency_mhz'])}-e{r['event_id']}"
+        result = check.vet_from_store(db, e, looks, session, targets[session], own, hits=hits[session])
+        store.save_checks(db, lead, result["checks"], vetting.VERSION, r["event_id"])
+        if n % 25 == 0 or n == len(rows):
+            say(f"  {n} of {len(rows)} checked")
+    db.close()
+
+
+def checks(say=print):
+    r = subprocess.run([sys.executable, "-u", str(Path(__file__)), "checks-here"], env=dict(os.environ, SSY_DATA=str(CONTROLS)))
+    if r.returncode:
+        raise yoke.Refusal("INTERNAL_ERROR", f"the checks stopped ({r.returncode})")
+
+
+def verdict_class(verdict):
+    for name in ("interference", "likely interference", "unexplained, strong", "unexplained, weak"):
+        if verdict == name or verdict.startswith(name + " "):
+            return name
+    raise yoke.Refusal("INTERNAL_ERROR", f"a verdict not known here: {verdict!r}")
+
+
+def describe(events, blocks, cut):
+    """Candidates at `cut` over `blocks` ({(session, block): complete}): `events` are dicts of session, block, snr
+    and verdict. How many, what the checks call them, how bunched they are, and in which blocks."""
+    from collections import Counter
+    at = [e for e in events if e["snr"] >= cut and (e["session"], e["block"]) in blocks]
+    n, classes = len(blocks), Counter(verdict_class(e["verdict"]) for e in at)
+    by_block = Counter((e["session"], e["block"]) for e in at)
+    top = [v for _, v in by_block.most_common()]
+    whole = sum(1 for c in blocks.values() if c)
+    in_whole = sum(1 for e in at if blocks[(e["session"], e["block"])])
+    unexplained = classes["unexplained, strong"] + classes["unexplained, weak"]
+    per_block = [by_block.get(b, 0) for b in blocks]
+    return {"blocks": n, "candidates": len(at), "rate": round(len(at) / n, 4) if n else None,
+            "by_verdict": {k: classes[k] for k in ("interference", "likely interference", "unexplained, strong",
+                                                  "unexplained, weak")},
+            "unexplained": unexplained, "unexplained_rate": round(unexplained / n, 4) if n else None,
+            "unexplained_interval": _poisson95(unexplained, n) if n else None,
+            "unexplained_bootstrap": _bootstrap95([sum(1 for e in at if (e["session"], e["block"]) == b and
+                                                       verdict_class(e["verdict"]).startswith("unexplained"))
+                                                   for b in blocks]) if unexplained else [0.0, 0.0],
+            "bootstrap": _bootstrap95(per_block),
+            "blocks_with_any": len(by_block), "in_the_busiest_block": top[0] if top else 0,
+            "in_the_three_busiest_blocks": sum(top[:3]),
+            "blocks_complete": whole, "candidates_in_complete_blocks": in_whole,
+            "blocks_capped": n - whole, "candidates_in_capped_blocks": len(at) - in_whole}
+
+
+def _one_wrong_choice():
+    """Beside the control: distinct candidates a block of one wrong choice on the three project sessions, this
+    search, each class weighted by its share of the session as the published rates are (F4-01's are as sampled)."""
+    import false_checks
+    import matched
+    import numpy as np
+    out = {}
+    for target, year in false_checks.SESSIONS:
+        _, recs, weights = false_checks._session(target)
+        out[year] = {"target": target}
+        for cut in (30, 10):
+            mean = {}
+            for cls in weights:
+                per = [x for r in recs if r["class"] == cls
+                       for x in false_checks.assignment_stats(r["ours"]["false"].get(matched.ck(cut), {}))[0]]
+                mean[cls] = float(np.mean(per)) if per else 0.0
+            out[year][f"rate_{cut}"] = round(sum(weights[c] * mean[c] for c in weights), 4)
+    return out
+
+
+def summary(say=print):
+    import sqlite3
+    db = sqlite3.connect(f"file:{(CONTROLS / 'ssy.sqlite').as_posix()}?mode=ro", uri=True)
+    events = [{"session": s, "block": b, "snr": snr, "verdict": v, "frequency_mhz": f} for s, b, snr, f, v in db.execute(
+        "SELECT e.session, e.block_idx, e.snr, e.f_start_mhz, c.result FROM events e LEFT JOIN checks c ON"
+        " c.event_id=e.event_id AND c.name='10. report' WHERE e.label='candidate' AND e.superseded_run IS NULL")]
+    db.close()
+    missing = sum(1 for e in events if e["verdict"] is None)
+    if missing:
+        raise yoke.Refusal("INVALID_REQUEST", f"{missing} candidates have not been through the checks")
+    blocks, sessions = {}, []
+    for c in _choice()["chosen"]:
+        rec = json.loads((CONTROLS / "sweeps" / f"{c['target']}-{c['session']}.json").read_text(encoding="utf-8"))
+        if len(rec["done"]) != len(rec["blocks"]):
+            raise yoke.Refusal("INVALID_REQUEST", f"{c['session']} is not swept whole")
+        here = {(c["session"], int(k)): d.get("complete") in (1, True) for k, d in rec["done"].items()}
+        blocks.update(here)
+        sessions.append({"target": c["target"], "session": c["session"], "band": "S" if rec["blocks"][0][0] > 1500 else "L",
+                         **{f"at_{cut}": describe(events, here, cut) for cut in (30, 10)}})
+    groups = {"all four": blocks}
+    for band in ("L", "S"):
+        names = {s["session"] for s in sessions if s["band"] == band}
+        groups[f"{band} band"] = {k: v for k, v in blocks.items() if k[0] in names}
+    out = {"sessions": sessions,
+           "groups": {g: {f"at_{cut}": describe(events, b, cut) for cut in (30, 10)} for g, b in groups.items()},
+           "one_wrong_choice_on_the_project_sessions": _one_wrong_choice(), "kind": "measured"}
+    yoke.write(OUT / "summary.json", out, indent=1, stamp=True)
+    for s in sessions:
+        say(f"{s['target']} ({s['band']}): {json.dumps(s['at_30'])}")
+    for g, v in out["groups"].items():
+        say(f"{g}: {json.dumps(v)}")
+    say(json.dumps(out["one_wrong_choice_on_the_project_sessions"]))
+    return out
+
+
 def main():
     cmd = sys.argv[1] if len(sys.argv) > 1 else ""
     if cmd == "select":
@@ -196,6 +321,12 @@ def main():
         sweep_one(sys.argv[2], sys.argv[3], sys.argv[4:10])
     elif cmd == "tables":
         tables()
+    elif cmd == "checks":
+        checks()
+    elif cmd == "checks-here":
+        checks_here()
+    elif cmd == "summary":
+        summary()
     else:
         sys.exit(__doc__)
 
