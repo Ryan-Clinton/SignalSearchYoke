@@ -12,7 +12,7 @@ Listen's published recordings over the web.
 ## What has been found
 
 The report, [Comparing radio-signal searches on Breakthrough Listen
-data](docs/report/report.md) (version 1.6; also on
+data](docs/report/report.md) (version 1.7; also on
 [ryanclinton.uk](https://ryanclinton.uk/astrophotography/signalsearch/comparing-searches/)
 with a PDF), has the method, tables and limits. In short:
 
@@ -42,6 +42,14 @@ with a PDF), has the method, tables and limits. In short:
   turboSETI's 247. The band was quiet (3 crowded blocks of 64), so this
   does not show the false-candidate test holding where 2016 failed.
   [The verdict](docs/results/NGC6946-AGBT19B_999_104-step12.md).
+- **Four real cadences of other targets** (control B, chosen by a rule
+  fixed first and searched whole): 0.029 to 0.31 false candidates a block
+  at SNR 30, 158 over 1,267 blocks, bunched in 18 blocks and nearly all
+  where a look reached the hit limit. The checks left none unexplained;
+  signals planted in the same cadences, by a protocol fixed first
+  ([docs/control-injection.md](docs/control-injection.md)), measure
+  whether they would have kept a real one. Four cadences are too few for
+  a general false-alarm rate.
 - **How big the difference is depends on the cut.** At SNR 30 each, this
   search finds about ten times as many of the planted signals; at the
   lowest cuts whose false rate is at most 0.1 in 2019 (8 against 5) about

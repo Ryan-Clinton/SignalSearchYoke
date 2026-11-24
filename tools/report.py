@@ -21,8 +21,8 @@ ROOT = Path(__file__).resolve().parents[1]
 DATA = Path(os.environ.get("SSY_DATA") or ROOT / "data")
 OUT = ROOT / "docs" / "report" / "report.md"
 
-VERSION = "1.6"
-DATE = "2026-11-20"
+VERSION = "1.7"
+DATE = "2026-11-24"
 REVISIONS = (("0.1", "2026-11-18", "first draft."),
              ("1.0", "2026-11-19", "first release: the signals BLISS finds and this search misses traced stage by "
                          "stage, and the detector's misses measured."),
@@ -38,10 +38,118 @@ REVISIONS = (("0.1", "2026-11-18", "first draft."),
                            "the matched cut by one rule throughout; the blocks of each session stated."),
              ("1.5", "2026-11-19", "checks of the planted signals: a tone in the voltages, finer sampling, the DC "
                                    "bin and a fixed flux, none of which moves recovery."),
-             ("1.6", DATE, "what the code audits found, stated where it bears on the results: the 2016 reads' DC "
-                           "bins, the false-candidate count and its intervals, turboSETI's zero drift and fast-"
-                           "drift reporting, how BLISS was run; the planted signals counted per session; the "
-                           "injection checks' small differences stated as such; references completed."))
+             ("1.6", "2026-11-20", "what the code audits found, stated where it bears on the results: the 2016 "
+                           "reads' DC bins, the false-candidate count and its intervals, turboSETI's zero drift and "
+                           "fast-drift reporting, how BLISS was run; the planted signals counted per session; the "
+                           "injection checks' small differences stated as such; references completed."),
+             ("1.7", DATE, "a false-candidate control on four real cadences of other targets, chosen by a rule fixed "
+                           "beforehand and searched whole, with the checks' verdicts on its candidates; and signals "
+                           "planted in those cadences, to show how many real-looking signals the checks keep."))
+
+
+def control_reading(inj):
+    """Where the planted signals show the checks keep a real signal: (kinds of block where they do, where not)."""
+    c = inj["cuts"]["30"]
+    kinds = (("complete blocks", c["complete"]), ("blocks at the hit limit", c["capped"]))
+    return ([k for k, x in kinds if x["reading"].startswith("the checks kept")],
+            [k for k, x in kinds if not x["reading"].startswith("the checks kept")])
+
+
+def control_summary(ctab, csum, inj):
+    """One paragraph for the report's summary."""
+    a30 = csum["groups"]["all four"]["at_30"]
+    kept, lost = control_reading(inj)
+    return (f"Four real cadences of other targets, chosen by a rule fixed beforehand and searched whole, gave "
+            f"{min(r['rate_30'] for r in ctab['sessions']):.2g} to {max(r['rate_30'] for r in ctab['sessions']):.2g} "
+            f"false candidates a block at S/N 30 ({a30['rate']:.3g} over all four, bunched in "
+            f"{a30['blocks_with_any']} of {n(a30['blocks'])} blocks), and the checks left none unexplained. "
+            "Signals planted in the same cadences show the checks "
+            + (f"keeping real-looking signals in {' and '.join(kept)}" if kept else "not shown to keep real-looking "
+               "signals in either complete blocks or blocks at the hit limit")
+            + (f", but not shown to in {' and '.join(lost)}" if kept and lost else "") + ".")
+
+
+def control_section(ctab, csum, inj, replay, recheck):
+    """The report's lines on control B and the signals planted in its cadences, from their records."""
+    L = []
+    w = L.append
+    groups, rows = csum["groups"], {s["target"]: s for s in csum["sessions"]}
+    a30, l30, s30 = groups["all four"]["at_30"], groups["L band"]["at_30"], groups["S band"]["at_30"]
+    wrong = csum["one_wrong_choice_on_the_project_sessions"]
+    w("## A false-candidate control on four real cadences")
+    w("")
+    w("The false-candidate counts above judge each block with the 19 wrong choices of three ON looks, which "
+      "stand in for cadences with no signal. To see what real cadences give, four cadences of other targets, "
+      "never read by this project, were chosen by a rule fixed before any of their data was read (the first "
+      "four Green Bank sessions, in the order of Breakthrough Listen's target list, in the layout the search was "
+      "validated on). Each was searched whole by the search as frozen, in its own time order. No candidate in "
+      "them is taken to be a signal, so what they give is a false-alarm count on real cadences.")
+    w("")
+    w("| cadence | band | blocks | candidates at S/N 30 | a block | at S/N 10 | left unexplained by the checks |")
+    w("|---|---|---|---|---|---|---|")
+    for r in ctab["sessions"]:
+        s = rows[r["target"]]
+        w(f"| {r['target']} | {s['band']} | {n(r['blocks'])} | {n(r['candidates_30'])} | {r['rate_30']:.3g} | "
+          f"{n(r['candidates_10'])} | {s['at_10']['unexplained']} |")
+    run16 = a30["bootstrap_consecutive_blocks"]["16"]
+    w(f"| all four | | {n(a30['blocks'])} | {n(a30['candidates'])} | {a30['rate']:.3g} | "
+      f"{n(groups['all four']['at_10']['candidates'])} | {groups['all four']['at_10']['unexplained']} |")
+    w("")
+    w(f"The rate depends on the cadence: at S/N 30, {min(r['rate_30'] for r in ctab['sessions']):.2g} to "
+      f"{max(r['rate_30'] for r in ctab['sessions']):.2g} a block. Over all four it is {a30['rate']:.3g}, and drawing "
+      f"runs of 16 consecutive blocks again within each cadence gives {iv(run16, 2)}; that describes these four "
+      "observations only, and four are too few to say how much the rate varies between sessions. The candidates "
+      f"are bunched: all {n(a30['candidates'])} at S/N 30 lie in {a30['blocks_with_any']} of the {n(a30['blocks'])} "
+      f"blocks, {a30['in_the_busiest_block']} of them in one. {a30['candidates_in_capped_blocks']} are in the "
+      f"{a30['blocks_capped']} blocks where a look reached the search's limit on hits, which are the crowded "
+      "ones; that the limit itself makes them is not shown.")
+    w("")
+    w(f"On the three L-band cadences the rate at S/N 30 is {l30['rate']:.2g} a block; one wrong choice of ON looks, "
+      f"weighted as the published rates are, gives {wrong['2016']['rate_30']:.3g} on the 2016 session and "
+      f"{wrong['2017']['rate_30']:.2g} on the 2017 one. So 2016's level of false candidates is not what these "
+      "L-band cadences give in their real order, but the stand-in is not a steady guide either; different "
+      "sessions are compared, so this cannot separate the method from the sessions' own interference. The "
+      f"S-band cadence gives {s30['rate']:.2g}.")
+    w("")
+    by = groups["all four"]["at_10"]["by_verdict"]
+    w(f"The checks called every one of the {n(groups['all four']['at_10']['candidates'])} candidates at S/N 10 and "
+      f"over interference ({n(by['interference'])} shown, {n(by['likely interference'])} likely), and left none "
+      "unexplained. Most of those verdicts rest on signs short of proof, chiefly zero or very low drift, "
+      "look-alikes in the cadence and crowding. The tables and verdict counts were made again from the "
+      f"packaged records alone ({'identical' if replay['tables_same'] and replay['summary_same'] else 'not identical'}), "
+      f"and the checks run again from nothing changed {recheck['verdicts_differing']} of "
+      f"{n(recheck['candidates'])} verdicts; both on the same computer, so not an independent verification.")
+    w("")
+    if inj:
+        c = inj["cuts"]["30"]
+        al, cp, co = c["all"], c["capped"], c["complete"]
+        w("**Would the checks keep a real signal?** A zero means little if they would also explain away a "
+          f"signal. Following a protocol fixed beforehand, {n(inj['signals'])} signals were planted in the ON "
+          f"looks of {inj['blocks']} blocks of these cadences, half the blocks at the hit limit and half complete, "
+          "drawn by their completeness alone, and put through the search, the cadence test and the checks as "
+          "they are:")
+        w("")
+        w("| blocks | signals counted | a hit in an ON look at S/N 30 | candidates | left unexplained | "
+          "unexplained among candidates (95% over blocks) |")
+        w("|---|---|---|---|---|---|")
+        for name, x in (("complete", co), ("at the hit limit", cp), ("all", al)):
+            share, ivc = x["unexplained_of_candidates"], x["unexplained_of_candidates_interval"]
+            shown = "—" if share is None else f"{share:.2f}" + (f" ({ivc[0]:.2f} to {ivc[1]:.2f})" if ivc else "")
+            w(f"| {name} | {n(x['counted'])} | {n(x['hit_in_any_on_look'])} | {n(x['candidates'])} | "
+              f"{n(x['unexplained'])} | {shown} |")
+        w("")
+        kept, lost = control_reading(inj)
+        w("By the reading fixed in the protocol (informative where the lower end of the interval for unexplained "
+          "among candidates is at least 0.5), "
+          + (f"the checks kept planted signals in {' and '.join(kept)}" if kept else "the checks were not shown to "
+             "keep planted signals in either kind of block")
+          + (f", and were not shown to keep them in {' and '.join(lost)}" if kept and lost else "")
+          + ". " + ("So control B's zero is informative in " + " and ".join(kept) + (
+              ", and says little in " + " and ".join(lost) if lost else "") + "." if kept else
+                    "So control B's zero says little about whether a real signal there would be kept.")
+          + " Planted tones are clean and do not behave like every real transmitter.")
+        w("")
+    return L
 
 
 def load(path):
@@ -264,6 +372,15 @@ def main():
     off_null = load("measurements/off_null.json")
     det_path = DATA / "analysis" / "bliss_only" / "detector_misses.json"
     det = json.loads(det_path.read_text(encoding="utf-8")) if det_path.exists() else None
+    nc = DATA / "analysis" / "negative_controls"
+    for p in ("tables.json", "summary.json", "package_replay.json", "package_recheck.json", "injection.json"):
+        if not (nc / p).exists():
+            refuse(f"version {VERSION} reports control B, and {nc / p} is missing")
+    ctab, csum, creplay, crecheck, cinj = (json.loads((nc / p).read_text(encoding="utf-8")) for p in
+                                           ("tables.json", "summary.json", "package_replay.json",
+                                            "package_recheck.json", "injection.json"))
+    if ctab["over_all"]["blocks"] != csum["groups"]["all four"]["at_30"]["blocks"]:
+        refuse("control B's tables and summary count different blocks")
 
     fc, tot = b["false_curves"], b["totals_matched"]
     at = {p: f"{float(c):g}" for p, c in b["matched_at"].items()}
@@ -331,6 +448,8 @@ def main():
           f"rates' intervals reaching {f12['ours']['interval'][1]:.2g}, above the limit.")
         w("")
         w("These are three sessions from one telescope. They do not show better sensitivity in general.")
+        w("")
+        w(control_summary(ctab, csum, cinj))
     else:
         w("These are two sessions from one telescope. They do not show better sensitivity in general.")
     w("")
@@ -583,6 +702,8 @@ def main():
     if not s12:
         w("- A third session, chosen by a rule fixed in advance, is still to be measured; until it is, nothing "
           "here is claimed beyond these two sessions.")
+    w("- The false-candidate control is four cadences: enough to show the rate varies between them, not to say how "
+      "much it varies between sessions in general. Its interval over blocks describes those four observations only.")
     w("- The frozen recovery criterion compares two Wilson intervals, which treat the planted signals as "
       "independent; signals share their block and their session. The paired difference with a bootstrap over "
       "blocks (above) is the better measure, and it is supplementary. All the blocks of a session come from "
@@ -592,6 +713,7 @@ def main():
           "there: the step that hands BLISS each block expects a slice width these blocks do not have, and the "
           "frozen rule records that rather than adapting it.")
     w("")
+    L.extend(control_section(ctab, csum, cinj, creplay, crecheck))
     w("## What the code audits found that bears on these results")
     w("")
     w("A line-by-line audit of the code (docs/audits.md in the repository) found the following. None changes "
@@ -664,7 +786,12 @@ def main():
                     *((f"data/analysis/injection_{k}.json", v) for k, v in inj.items()),
                     ("data/analysis/bliss_only/trace_summary.json", trace),
                     ("data/analysis/bliss_only/detector_misses.json", det),
-                    ("data/measurements/off_null.json", off_null)):
+                    ("data/measurements/off_null.json", off_null),
+                    ("data/analysis/negative_controls/tables.json", ctab),
+                    ("data/analysis/negative_controls/summary.json", csum),
+                    ("data/analysis/negative_controls/package_replay.json", creplay),
+                    ("data/analysis/negative_controls/package_recheck.json", crecheck),
+                    ("data/analysis/negative_controls/injection.json", cinj)):
         if r:
             pv = r.get("provenance", {})
             w(f"- {name}: written {pv.get('created_utc')}, commit {str(pv.get('git_commit', ''))[:7]}")
