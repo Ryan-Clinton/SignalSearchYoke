@@ -139,6 +139,13 @@ def control_section(ctab, csum, inj, replay, recheck):
               f"{n(x['unexplained'])} | {shown} |")
         w("")
         kept, lost = control_reading(inj)
+        cited = list(c["what_the_checks_cited_against_kept_signals"].items())
+        if cited:
+            w(f"Against the planted candidates they did not keep, the check cited most was {cited[0][0]} "
+              f"({n(cited[0][1])} times), then " + ", ".join(f"{k} ({n(v)})" for k, v in cited[1:4]) + ". A signal "
+              "in a listed interference band is marked likely interference whatever it is, and the crowded blocks "
+              "lie mostly in those bands; so there the checks cannot keep a real signal, by design.")
+            w("")
         w("By the reading fixed in the protocol (informative where the lower end of the interval for unexplained "
           "among candidates is at least 0.5), "
           + (f"the checks kept planted signals in {' and '.join(kept)}" if kept else "the checks were not shown to "

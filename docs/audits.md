@@ -415,6 +415,30 @@ control also tells whether that failure belongs to L-band cadences in
 their real order or to the wrong-choice stand-in. Nothing in steps 4, 10
 or 12 changes with the result.
 
+### 4, control B's checks against planted signals, 24 November 2026
+
+By the protocol committed first (`docs/control-injection.md`, one logged
+change to how the tables compute their interval), 3,520 signals were
+planted in the ON looks of 32 blocks of control B's cadences, four at the
+hit cap and four complete in each, drawn by completeness alone
+(`data/analysis/negative_controls/injection.json`). None matched a
+candidate already in its block.
+
+| Blocks | Counted | Hit in an ON look at 30 | Candidates at 30 | Unexplained | Unexplained among candidates (95% over blocks) | The protocol's reading |
+|---|---|---|---|---|---|---|
+| Complete | 1,760 | 646 | 605 | 447 | 0.74 (0.56 to 0.90) | the checks kept planted signals |
+| At the hit cap | 1,760 | 489 | 421 | 86 | 0.20 (0.05 to 0.38) | not shown that they keep real signals |
+| All | 3,520 | 1,135 | 1,026 | 533 | 0.52 (0.36 to 0.67) | not shown |
+
+At SNR 10: complete 0.75 (0.56 to 0.91), capped 0.18 (0.04 to 0.34).
+
+| Finding | Severity | Verdict |
+|---|---|---|
+| What control B's zero means | high | **measured: informative in complete blocks only.** Where a block is complete the checks leave about three in four planted candidates unexplained, so none of control B's candidates there being unexplained says something. In blocks at the hit cap they leave one in five, and the zero says little: the checks would have called most real signals there interference too. |
+| Why the capped blocks lose them | high | **measured.** The check cited most against planted candidates the checks did not keep is check 3, known interference bands (401 times at 30), then crowding (80), zero or very low drift (56) and recurrence (56). Crowded blocks lie mostly in listed bands, and check 3 marks anything there likely interference. Three complete blocks lie in bands too (HIP 169's 183, HIP 194's 145 and 223) and kept none. This is the checks working as designed, not a fault, and nothing is changed for it; a signal in a listed band cannot be told from interference by these checks. |
+| The cadences | — | **measured.** Unexplained of candidates at 30: HIP 2, 132 of 259; HIP 169, 100 of 274; HIP 171, 142 of 207; HIP 194, 159 of 286. |
+| Limits | — | 32 blocks of four cadences; clean planted tones; the project's own planting. The tables were made from records written at `c7dcf67`, with only the tables' interval code, docs and the report changed while the blocks ran. |
+
 ### 4, the time-order test, 21 November 2026
 
 F4-02's measurement (`tools/false_checks.py chronological`, 16 blocks):
@@ -461,6 +485,7 @@ over the blocks as sampled. Nothing in steps 4, 10 or 12 changes.
 | One current verdict each | **built and tested.** The summary reads only whole evaluations by the checks in force and refuses a candidate with none or more than one. Here: 1,187 candidates, one version-5 evaluation each, so no figure moved. |
 | The whole control | **built and tested.** The tables refuse anything but exactly four different sessions and targets, each block's exact number, boundaries and search version, the chosen cadence's target and files, and the store agreeing with the sweep records block by block. All four cadences pass. |
 | The evidence | **packaged and made again here.** `negative_controls.py package` holds the choice, sweep records, all verdicts and both results with their hashes. `replay` made the tables and summary again from the package alone, identical. `recheck` ran the checks again from nothing on a copy of the store: **0 of 1,187 verdicts differ.** Both ran on this computer with this code, so this is a reproduction and **not an independent verification**. |
+| Would the checks keep a real signal? | **measured** (below, "control B's checks against planted signals"). |
 | Long jobs and outages | **built and tested.** A queued job ended by a network error exits 75, which is run again without counting as a failure; any other failure counts, whatever the log holds. A wait states when a read last succeeded. It has no time limit, by the project owner's decision that an outage must not fail a job; stopping the job ends the wait, and it resumes from its last finished block. |
 
 ## 5. The 2016 interference failure: 20 November 2026
@@ -1285,3 +1310,4 @@ provenance. Results still running are not listed until they finish.
 | Control B: none unexplained after the checks; candidates bunched and in capped blocks; one wrong choice beside it | 4 | `data/analysis/negative_controls/summary.json` | `6a50490`, clean | `tools/negative_controls.py summary` |
 | Control B's tables and summary made again from its package alone | 4 | `data/analysis/negative_controls/package_replay.json` | `6a50490`, clean | `tools/negative_controls.py replay` |
 | Control B's checks run again from nothing: no verdict differs | 4 | `data/analysis/negative_controls/package_recheck.json` | `6a50490`, clean | `tools/negative_controls.py recheck` |
+| Planted signals in control B's cadences: the checks keep them in complete blocks, not in capped ones | 4 | `data/analysis/negative_controls/injection.json` | `a4bede0`, clean (its block records made at `c7dcf67`; the checkout changed while they ran, in the tables' interval code, docs and the report only) | `tools/control_injection.py tables` |

@@ -45,11 +45,13 @@ with a PDF), has the method, tables and limits. In short:
 - **Four real cadences of other targets** (control B, chosen by a rule
   fixed first and searched whole): 0.029 to 0.31 false candidates a block
   at SNR 30, 158 over 1,267 blocks, bunched in 18 blocks and nearly all
-  where a look reached the hit limit. The checks left none unexplained;
-  signals planted in the same cadences, by a protocol fixed first
-  ([docs/control-injection.md](docs/control-injection.md)), measure
-  whether they would have kept a real one. Four cadences are too few for
-  a general false-alarm rate.
+  where a look reached the hit limit. The checks left none unexplained.
+  Signals planted in the same cadences, by a protocol fixed first
+  ([docs/control-injection.md](docs/control-injection.md)), show what
+  that zero is worth: in complete blocks the checks leave about three in
+  four planted candidates unexplained, in blocks at the hit limit one in
+  five, mostly because those blocks lie in listed interference bands. Four
+  cadences are too few for a general false-alarm rate.
 - **How big the difference is depends on the cut.** At SNR 30 each, this
   search finds about ten times as many of the planted signals; at the
   lowest cuts whose false rate is at most 0.1 in 2019 (8 against 5) about
