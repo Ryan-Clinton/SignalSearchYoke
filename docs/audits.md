@@ -271,6 +271,49 @@ than 2 signals in 96 to 880, except turboSETI with two polarizations at SNR
 10 (12 of 880, 1.4%), and never one pipeline against the other. The
 results stand as a measure of recovery at a controlled signal-to-noise.
 
+### 2, an independent injector, 24 November 2026
+
+**The question.** Does the project's own planting, `measure.plant`, favour
+this search over turboSETI?
+
+**How it was tested.** The same 1,760 signals of the matched 2017 run were
+planted again by setigen 2.7.0, by a protocol fixed beforehand
+([docs/independent-injection.md](independent-injection.md)). They went into
+16 blocks, 8 crowded and 8 clean, drawn by class alone. Both pipelines were
+run and scored as in the matched run. The measure is this search's share
+found minus turboSETI's, with the project's planting less the same with
+setigen's, paired by block.
+
+| Planting | This search, S/N 10 / 30 | turboSETI, S/N 10 / 30 |
+|---|---|---|
+| This project's | 1,156 / 605 | 228 / 54 |
+| setigen's, with its Doppler smearing | 1,355 / 859 | 367 / 123 |
+
+The difference is −0.034 at S/N 10 (−0.049 to −0.020) and −0.105 at 30
+(−0.118 to −0.092). The reading fixed beforehand is therefore **not shown
+that the project's planting favours this search**. Both intervals lie below
+0, so this search's lead in share is wider under setigen's planting. Its
+lead as a ratio is smaller: 3.7 against 5.1 at S/N 10, because setigen's
+signals are found more often by both pipelines. Under both injectors, this
+search finds more at every drift range.
+
+**A first run was replaced, and its records are kept** (`unsmeared/`,
+logged in the protocol). setigen's default puts each spectrum's tone at
+where it is when the spectrum starts. Both pipelines are scored half a
+spectrum later, within 6 Hz. So setigen's signals faster than 1 Hz/s were
+nearly all scored as missed: this search found 10 and turboSETI 0, where
+the project's planting gave 297 and 6. The cause was measured on synthetic
+data. That run read +0.317 and would have said the project's planting
+favours this search. setigen's Doppler smearing, its own model of a tone
+integrated over a spectrum, mends this.
+
+**Limits.**
+
+- One session and 16 blocks.
+- setigen's S/N comes from its own noise estimate.
+- setigen's sinc² profile was used with its default truncation, as in
+  SI-03. That cuts the sidelobes, but both pipelines got the same spectra.
+
 ## 3. turboSETI comparison fairness: 20 November 2026
 
 **Verdict:** a fair comparison of two whole pipelines on the same data and
