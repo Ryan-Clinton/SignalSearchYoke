@@ -49,9 +49,12 @@ REVISIONS = (
                           "false-candidate count and its intervals are built and where they fall short, turboSETI's "
                           "zero drift and fast-drift reporting, how BLISS was run; the planted signals counted per "
                           "session.", True),
-    ("1.7", None, "A false-candidate control on four real cadences of other targets, chosen by a rule fixed "
-                  "beforehand, with the checks' verdicts on its candidates, and signals planted in those cadences "
-                  "to show how many real-looking signals the checks keep.", True),
+    ("1.7", "2026-11-24", "A false-candidate control on four real cadences of other targets, chosen by a rule "
+                          "fixed beforehand, with the checks' verdicts on its candidates, and signals planted in "
+                          "those cadences to show how many real-looking signals the checks keep.", True),
+    ("1.8", None, "The same signals planted by an independent injector (setigen); this search's recovery scored at "
+                  "the middle of the look; what each check costs, the band check's cost stated as a hypothesis "
+                  "under test.", True),
 )
 CHROME = (Path("C:/Program Files/Google/Chrome/Application/chrome.exe"),
           Path("C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"))

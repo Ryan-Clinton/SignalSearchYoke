@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DATA = Path(os.environ.get("SSY_DATA") or ROOT / "data")
 OUT = ROOT / "docs" / "report" / "report.md"
 
-VERSION = "1.7"
+VERSION = "1.8"
 DATE = "2026-11-24"
 REVISIONS = (("0.1", "2026-11-18", "first draft."),
              ("1.0", "2026-11-19", "first release: the signals BLISS finds and this search misses traced stage by "
@@ -42,9 +42,12 @@ REVISIONS = (("0.1", "2026-11-18", "first draft."),
                            "reads' DC bins, the false-candidate count and its intervals, turboSETI's zero drift and "
                            "fast-drift reporting, how BLISS was run; the planted signals counted per session; the "
                            "injection checks' small differences stated as such; references completed."),
-             ("1.7", DATE, "a false-candidate control on four real cadences of other targets, chosen by a rule fixed "
-                           "beforehand and searched whole, with the checks' verdicts on its candidates; and signals "
-                           "planted in those cadences, to show how many real-looking signals the checks keep."))
+             ("1.7", "2026-11-24", "a false-candidate control on four real cadences of other targets, chosen by a "
+                           "rule fixed beforehand and searched whole, with the checks' verdicts on its candidates; and "
+                           "signals planted in those cadences, to show how many real-looking signals the checks keep."),
+             ("1.8", DATE, "the same signals planted by an independent injector (setigen); this search's recovery "
+                           "scored at the middle of the look; what each check costs, with the band check's cost "
+                           "stated as a hypothesis under test."))
 
 
 def control_reading(inj):
@@ -70,7 +73,7 @@ def control_summary(ctab, csum, inj):
                else "") + ".")
 
 
-def control_section(ctab, csum, inj, replay, recheck):
+def control_section(ctab, csum, inj, replay, recheck, checks_left_out=None):
     """The report's lines on control B and the signals planted in its cadences, from their records."""
     L = []
     w = L.append
@@ -156,6 +159,115 @@ def control_section(ctab, csum, inj, replay, recheck):
               ", and says little in " + " and ".join(lost) if lost else "") + "." if kept else
                     "So control B's zero says little about whether a real signal there would be kept.")
           + " Planted tones are clean and do not behave like every real transmitter.")
+        w("")
+        wt = inj.get("weighted_to_control_b", {}).get("30")
+        if wt:
+            u = wt["unexplained_of_candidates"]
+            w(f"The sample takes as many capped blocks as complete ones; control B's own blocks are "
+              f"{100 * wt['share_of_blocks_capped']:.0f}% capped. Reweighted to that mix, the checks leave "
+              f"{u[0]:.2f} ({u[1]:.2f} to {u[2]:.2f}) of planted candidates unexplained at S/N 30.")
+            w("")
+    if checks_left_out:
+        lo = checks_left_out["cuts"]["30"]
+        band = lo.get("known interference bands")
+        if band:
+            kept = band["planted_kept_without_it"]
+            others = sorted(((k, v) for k, v in lo.items() if k != "known interference bands"),
+                            key=lambda kv: -sum(kv[1]["planted_kept_without_it"].values()))
+            w("**What each check costs.** Each check was left out in turn, from the verdicts already recorded. At "
+              f"S/N 30, the known-band check is the only check standing against {n(sum(kept.values()))} of the "
+              f"planted candidates the checks did not keep ({n(kept['complete'])} in complete blocks, "
+              f"{n(kept['capped'])} capped), and the only one against {band['control_b_unexplained_without_it']} "
+              f"of control B's {n(groups['all four']['at_30']['candidates'])} candidates. The next most costly is "
+              f"{others[0][0]} ({n(sum(others[0][1]['planted_kept_without_it'].values()))}). So on these blocks the "
+              "band check loses the most real-looking signals and removes almost nothing the other checks do not. "
+              "This was found on control B, so it is a hypothesis here, not a result: a version of the checks "
+              "with a band as context rather than a sign was fixed beforehand and is being tested on four new "
+              "cadences (docs/control-c.md in the repository). The checks in force are unchanged.")
+            w("")
+    return L
+
+
+DRIFT_LABELS = ("0 to 0.15", "0.15 to 0.5", "0.5 to 1", "1 to 2", "2 to 4")
+
+
+def injector_summary(ii):
+    """One sentence for the summary on the independent injector."""
+    c = ii["cuts"]["10"]
+    d = c["own_minus_setigen_advantage"]
+    return (f"Planted instead by setigen, an injector this project did not write, the same {n(ii['signals'])} signals "
+            f"in {ii['blocks']} blocks of the 2017 session were found {n(c['setigen']['ours'])} times by this search and "
+            f"{n(c['setigen']['turboseti'])} by turboSETI at S/N 10, against {n(c['own']['ours'])} and "
+            f"{n(c['own']['turboseti'])} with this project's planting: "
+            + ("this project's planting favours this search" if c["reading"].startswith("the project") else
+               "not shown to favour this search")
+            + f" (the difference in the gap between them, {d['difference']:+.3f} of the signals, "
+              f"{d['interval'][0]:+.3f} to {d['interval'][1]:+.3f}).")
+
+
+def injector_section(ii):
+    L = []
+    w = L.append
+    w("## An independent injector")
+    w("")
+    w("Every recovery figure above comes from signals planted by this project's own method. To see whether that "
+      "method suits this search better than turboSETI, the same signals (the same places, drifts and strengths) "
+      f"were planted by setigen 2.7.0 in {ii['blocks']} blocks of the 2017 session (half crowded, half clean, drawn "
+      "by class alone), by a protocol fixed beforehand, and both pipelines were run and scored exactly as above. "
+      "setigen sets each signal's strength from its own estimate of the noise, so absolute recovery can differ "
+      "between the two; the question is the gap between the pipelines.")
+    w("")
+    w("| planting | S/N | this search | turboSETI | of |")
+    w("|---|---|---|---|---|")
+    for c in ("10", "30"):
+        for how, name in (("own", "this project's"), ("setigen", "setigen's")):
+            x = ii["cuts"][c][how]
+            w(f"| {name} | {c} | {n(x['ours'])} | {n(x['turboseti'])} | {n(x['signals'])} |")
+    w("")
+    c = ii["cuts"]["10"]
+    d = c["own_minus_setigen_advantage"]
+    w(f"At S/N 10, this search's share found minus turboSETI's is {d['difference']:+.3f} larger with this project's "
+      f"planting than with setigen's ({d['interval'][0]:+.3f} to {d['interval'][1]:+.3f}, blocks resampled). By the "
+      "reading fixed beforehand, "
+      + ("**this project's planting favours this search**, and the recovery comparison above overstates its lead "
+         "by about that much on these blocks." if c["reading"].startswith("the project") else
+         "it is not shown that this project's planting favours this search.")
+      + " By drift range (S/N 10; this search and turboSETI, this project's planting then setigen's):")
+    w("")
+    w("| drift (Hz/s) | this project's planting | setigen's |")
+    w("|---|---|---|")
+    for b, x in c["by_drift_bin"].items():
+        w(f"| {DRIFT_LABELS[int(b)]} | {n(x['own']['ours'])} and {n(x['own']['turboseti'])} | "
+          f"{n(x['setigen']['ours'])} and {n(x['setigen']['turboseti'])} |")
+    w("")
+    return L
+
+
+def midlook_section(ml):
+    L = []
+    w = L.append
+    w("## Scoring at the middle of the look")
+    w("")
+    w("A fast drifting signal's frequency is measured where the search's track fits it best, near the middle of a "
+      "look, so a small error in drift moves the frequency at the look's start by that error times half the look. "
+      "The published scoring compares at the start, and counts some detected signals as missed. The matched blocks "
+      "were read and planted again with the same signals; a block counts only if it reproduces its published "
+      "result exactly. This search's recovery at S/N 10, three ON looks:")
+    w("")
+    w("| session | blocks | as published | at mid-look | at mid-look, tolerances growing with drift |")
+    w("|---|---|---|---|---|")
+    for t, s in ml["sessions"].items():
+        a = s["at_10"]["all"]
+        w(f"| {t} | {s['blocks'] - len(s['not_reproduced'])} of {s['of']} | {n(a['published'])} | {n(a['mid'])} | "
+          f"{n(a['mid_scaled'])} |")
+    w("")
+    fast = {t: s["at_10"]["by_drift_bin"].get("4") for t, s in ml["sessions"].items()}
+    parts = [f"{t} {n(x['published'])} to {n(x['mid_scaled'])} of {n(x['signals'])}" for t, x in fast.items() if x]
+    if parts:
+        w("Most of the difference is at 2 to 4 Hz/s (" + "; ".join(parts) + "). The growing tolerances are "
+          "±max(6 Hz, 10 s × drift) and ±max(0.05, 0.08 × drift) Hz/s. This is a scoring version for this search "
+          "alone: turboSETI's recovery was not rescored this way, so the pipelines are compared only under the "
+          "published scoring above, and no frozen verdict uses this one.")
         w("")
     return L
 
@@ -389,6 +501,14 @@ def main():
                                             "package_recheck.json", "injection.json"))
     if ctab["over_all"]["blocks"] != csum["groups"]["all four"]["at_30"]["blocks"]:
         refuse("control B's tables and summary count different blocks")
+    later = {"cleft": nc / "injection_checks.json", "indep": DATA / "analysis" / "independent_injection" / "tables.json",
+             "mid": DATA / "analysis" / "midlook" / "tables.json"}
+    for p in later.values():
+        if not p.exists():
+            refuse(f"version {VERSION} reports {p}, which is missing")
+    cleft, indep, mid = (json.loads(p.read_text(encoding="utf-8")) for p in later.values())
+    if any(s["blocks"] != s["of"] for s in mid["sessions"].values()) or len(mid["sessions"]) != 3:
+        refuse("the mid-look rescoring is not complete for all three sessions")
 
     fc, tot = b["false_curves"], b["totals_matched"]
     at = {p: f"{float(c):g}" for p, c in b["matched_at"].items()}
@@ -456,6 +576,8 @@ def main():
           f"rates' intervals reaching {f12['ours']['interval'][1]:.2g}, above the limit.")
         w("")
         w("These are three sessions from one telescope. They do not show better sensitivity in general.")
+        w("")
+        w(injector_summary(indep))
         w("")
         w(control_summary(ctab, csum, cinj))
     else:
@@ -721,7 +843,9 @@ def main():
           "there: the step that hands BLISS each block expects a slice width these blocks do not have, and the "
           "frozen rule records that rather than adapting it.")
     w("")
-    L.extend(control_section(ctab, csum, cinj, creplay, crecheck))
+    L.extend(injector_section(indep))
+    L.extend(midlook_section(mid))
+    L.extend(control_section(ctab, csum, cinj, creplay, crecheck, cleft))
     w("## What the code audits found that bears on these results")
     w("")
     w("A line-by-line audit of the code (docs/audits.md in the repository) found the following. None changes "
@@ -799,7 +923,10 @@ def main():
                     ("data/analysis/negative_controls/summary.json", csum),
                     ("data/analysis/negative_controls/package_replay.json", creplay),
                     ("data/analysis/negative_controls/package_recheck.json", crecheck),
-                    ("data/analysis/negative_controls/injection.json", cinj)):
+                    ("data/analysis/negative_controls/injection.json", cinj),
+                    ("data/analysis/negative_controls/injection_checks.json", cleft),
+                    ("data/analysis/independent_injection/tables.json", indep),
+                    ("data/analysis/midlook/tables.json", mid)):
         if r:
             pv = r.get("provenance", {})
             w(f"- {name}: written {pv.get('created_utc')}, commit {str(pv.get('git_commit', ''))[:7]}")
