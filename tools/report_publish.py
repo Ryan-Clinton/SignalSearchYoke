@@ -135,7 +135,8 @@ def _chrome():
 
 
 def pdf(md_full, figures, out_pdf):
-    with tempfile.TemporaryDirectory() as tmp:
+    # Chrome's own process can still hold its profile when the print is done: leave what it holds to the system
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         tmp = Path(tmp)
         for f in figures:
             shutil.copy2(f, tmp / f.name)
