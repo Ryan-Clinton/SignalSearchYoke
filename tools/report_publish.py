@@ -188,6 +188,8 @@ def main():
     if report.VERSION != REVISIONS[-1][0]:
         raise SystemExit(f"report_publish.py: report.py is at {report.VERSION}, the revisions end at "
                          f"{REVISIONS[-1][0]}")
+    if [r[0] for r in REVISIONS] != [r[0] for r in report.REVISIONS]:
+        raise SystemExit("report_publish.py: the page's revisions are not the report's own, version by version")
     dirty = subprocess.run(["git", "status", "--porcelain", "--", "tools", "docs/report", "*.py"], cwd=ROOT,
                            capture_output=True, text=True).stdout.strip()
     if dirty:

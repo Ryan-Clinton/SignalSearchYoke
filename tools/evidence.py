@@ -4,7 +4,8 @@ deposit beside the report (docs/reproducing-results.md).
     python tools/evidence.py list              what goes in, by folder, with sizes
     python tools/evidence.py build [OUT_DIR]   write ssy-evidence-COMMIT.zip and its manifest
     python tools/evidence.py check ZIP         the zip against the manifest inside it
-    python tools/evidence.py reproduce ZIP     the tables made again from the zip alone, compared
+    python tools/evidence.py reproduce ZIP     the tables made again from the zip alone, compared, and
+                                               the result kept in data/analysis/reproduction.json
 
 In: the summary records (data/measurements, steps 10 and 12's choices, deviations and step 12's saved
 archive replies,
@@ -102,7 +103,11 @@ EXPECTED = {
     ("tools/report.py",): ("docs/report/recovery.svg", "docs/report/report.md"),
 }
 STAMP_KEYS = {"written_utc"}
-GENERATED = {"git_commit", "uncommitted_changes", "uncommitted_diff_sha256", "created_utc", "python", "libraries"}
+GENERATED = {"git_commit", "uncommitted_changes", "uncommitted_diff_sha256", "created_utc", "python", "libraries",
+             "script_sha256"}    # the script's hash names the code that made it, as the commit does
+# Provenance fields records have carried only since 3cf9d43 (20 Nov 2026): compared where the earlier record has
+# one, and not a difference where it was made before they existed.
+LATER_PROVENANCE = {"command"}
 STAMP_TIME = re.compile(r"\b\d{4}-\d\d-\d\dT\d\d:\d\d(:\d\d)?Z")
 STAMP_WRITTEN = re.compile(r"\b(written|finished) \d{4}-\d\d-\d\dT\d\d:\d\d(:\d\d)?Z, commit (?:[0-9a-f]{7}|None)")
 
@@ -360,6 +365,9 @@ def same(before, after, suffix):
     if suffix == ".json":
         try:
             a, b = _strip(json.loads(before)), _strip(json.loads(after))
+            if isinstance(a, dict) and isinstance(b, dict) and isinstance(a.get("provenance"), dict) and                     isinstance(b.get("provenance"), dict):
+                b["provenance"] = {k: v for k, v in b["provenance"].items()
+                                   if k not in LATER_PROVENANCE or k in a["provenance"]}
             if a == b:
                 return True, []
             return False, list(difflib.unified_diff(json.dumps(a, indent=1, sort_keys=True).splitlines(),
@@ -398,9 +406,24 @@ def _snapshot(*folders):
     return {p: p.read_bytes() for f in folders if f.exists() for p in f.rglob("*") if p.is_file()}
 
 
-def reproduce(path, keep=None, say=print):
+REPRODUCTION = yoke.DATA / "analysis" / "reproduction.json"
+
+
+def _keep_result(record, path, commit, ran, passed, **found):
+    """The reproduction's result kept as a record: the package and its SHA-256, the commit its code came from,
+    each table command and whether it ran, what compared the same and what did not."""
+    if record is None:
+        return
+    yoke.write(record, {"package": Path(path).name, "sha256": hashlib.sha256(Path(path).read_bytes()).hexdigest(),
+                        "package_commit": commit, "code": "git archive of the package's commit; data from the "
+                        "package alone", "commands": ran, **found, "passed": passed, "kind": "measured"},
+               indent=1, stamp=True)
+
+
+def reproduce(path, keep=None, say=print, record=None):
     """The tables made again from the package, with the code of the commit
-    it was built at; False on any missing, new or changed output."""
+    it was built at; False on any missing, new or changed output. With
+    record, the result is kept there, passed or not."""
     if not check(path, say):
         return False
     with zipfile.ZipFile(path) as z:
@@ -433,12 +456,14 @@ def reproduce(path, keep=None, say=print):
     # the record checks (tools/records.py) read the code's history from this clone, as of the package's commit
     env = dict(os.environ, SSY_DATA=str(data), PYTHONDONTWRITEBYTECODE="1", SSY_HISTORY=str(ROOT),
                SSY_HISTORY_HEAD=commit)
-    touched, seen = {}, set()
+    touched, seen, ran = {}, set(), []
     for cmd in TABLES:
         r = subprocess.run([sys.executable, *cmd], cwd=tree, env=env, capture_output=True, text=True)
         say(f"  {' '.join(cmd)}: {'ran' if r.returncode == 0 else f'failed ({r.returncode})'}")
+        ran.append({"command": " ".join(cmd), "exit": r.returncode})
         if r.returncode:
             say("    " + "\n    ".join((r.stderr or r.stdout).strip().splitlines()[-8:]))
+            _keep_result(record, path, commit, ran, False, failed=(r.stderr or r.stdout).strip().splitlines()[-8:])
             return False
         now = {p for f in watched if f.exists() for p in f.rglob("*") if p.is_file() and p.stat().st_mtime > OLD + 1}
         touched[cmd] = sorted(now - seen)
@@ -468,6 +493,9 @@ def reproduce(path, keep=None, say=print):
     for e in sorted(res["environment"]):
         say(f"  note, made with another environment ({e}); the results compared the same")
     ok = not (res["changed"] or res["missing"] or res["new"] or missed)
+    _keep_result(record, path, commit, ran, ok, same=res["same"], changed=[rel(q) for q, _ in res["changed"]],
+                 missing=[rel(q) for q in res["missing"]], new=[rel(q) for q in res["new"]], not_made_again=missed,
+                 environment_notes=sorted(res["environment"]))
     if ok and not keep:                     # a failure keeps its tree to look into; a pass leaves nothing
         yoke.remove_tree(tmp)
     return ok
@@ -493,7 +521,7 @@ def main(argv):
     elif what == "check" and len(argv) > 1:
         sys.exit(0 if check(argv[1]) else 1)
     elif what == "reproduce" and len(argv) > 1:
-        sys.exit(0 if reproduce(argv[1], argv[2] if len(argv) > 2 else None) else 1)
+        sys.exit(0 if reproduce(argv[1], argv[2] if len(argv) > 2 else None, record=REPRODUCTION) else 1)
     else:
         print(__doc__)
         sys.exit(2)

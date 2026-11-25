@@ -60,8 +60,8 @@ class Records(unittest.TestCase):
                           "at": {c: {h: dict(v) for h, v in cell.items()} for c in ii.CUTS}} for w in want["tones"]]}
         return rec, want
 
-    def problems(self, rec, want, smearing=True, code=None):
-        return ii.record_problems(rec, 7, "clean", want, smearing, code or self.NONE)
+    def problems(self, rec, want, smearing=True, code=None, places=False):
+        return ii.record_problems(rec, 7, "clean", want, smearing, code or self.NONE, places=places)
 
     def test_a_whole_record_passes(self):
         self.assertEqual(self.problems(*self.pair()), [])
@@ -96,6 +96,14 @@ class Records(unittest.TestCase):
         for t in rec["tones"]:
             del t["x0"]
         self.assertEqual(self.problems(rec, want), [])
+
+    def test_from_the_third_draw_a_record_without_places_is_refused(self):
+        rec, want = self.pair()
+        self.assertEqual(self.problems(rec, want, places=True), [])
+        del rec["tones"][4]["x0"]
+        self.assertTrue(self.problems(rec, want, places=True))
+        self.assertEqual(self.problems(rec, want), [])
+        self.assertEqual(ii.PLACES_FROM, 3)
 
     def test_the_project_planting_results_must_be_the_matched_records(self):
         rec, want = self.pair()

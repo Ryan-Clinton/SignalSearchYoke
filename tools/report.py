@@ -47,7 +47,13 @@ REVISIONS = (("0.1", "2026-11-18", "first draft."),
                            "signals planted in those cadences, to show how many real-looking signals the checks keep."),
              ("1.8", DATE, "the same signals planted by an independent injector (setigen); this search's recovery "
                            "scored at the middle of the look; what each check costs, with the band check's cost "
-                           "stated as a hypothesis under test."))
+                           "stated as a hypothesis under test."),
+             ("1.9", DATE, "a second draw of blocks for the independent injector, fixed before it ran; turboSETI's "
+                           "recovery scored at the middle of the look beside this search's, with paired intervals by "
+                           "session; the test for chance matches under each scoring."),
+             ("1.10", DATE, "a third draw for the independent injector, from the 2016 session, fixed before it ran "
+                            "and given beside the two 2017 draws at both cuts; the same-hit control on BLISS's "
+                            "hits described for all ten of its blocks."))
 
 
 def control_reading(inj):
@@ -242,6 +248,7 @@ def rescoring_problems(mid, tt, ac):
     return out
 
 
+BLISS_CROWDED = (35, 129)     # the same-hit control's first two blocks, chosen for their false candidates
 DRIFT_LABELS = ("0 to 0.15", "0.15 to 0.5", "0.5 to 1", "1 to 2", "2 to 4")
 
 
@@ -341,22 +348,23 @@ def injector_section(ii, first, second, third):
       "before it ran, and planted with the same setting. Both draws come from one observation, the 2017 session: they "
       f"are separate blocks, not separate observations. So a third draw, of {third['blocks']} blocks of the 2016 "
       "session (HIP 17147), whose band is crowded with satellite signals, was also fixed in the protocol before it "
-      "ran, with the same setting. The three draws at S/N 10, side by side and not pooled:")
+      "ran, with the same setting. The three draws, side by side and not pooled:")
     w("")
-    w("| draw | blocks | planting | this search | turboSETI | of | difference (95% interval) |")
-    w("|---|---|---|---|---|---|---|")
-    for name, t in (("first, 2017", ii), ("second, 2017", second), ("third, 2016", third)):
-        c10 = t["cuts"]["10"]
-        dd = c10["own_minus_setigen_advantage"]
-        for how, label in (("own", "this project's"), ("setigen", "setigen's")):
-            x = c10[how]
-            last = (f"{dd['difference']:+.3f} ({dd['interval'][0]:+.3f} to {dd['interval'][1]:+.3f})"
-                    if how == "own" else "")
-            w(f"| {name} | {t['blocks']} | {label} | {n(x['ours'])} | {n(x['turboseti'])} | {n(x['signals'])} | "
-              f"{last} |")
+    w("| S/N | draw | blocks | planting | this search | turboSETI | of | difference (95% interval) |")
+    w("|---|---|---|---|---|---|---|---|")
+    for cut in CUTS_REPORTED:
+        for name, t in (("first, 2017", ii), ("second, 2017", second), ("third, 2016", third)):
+            cc = t["cuts"][cut]
+            dd = cc["own_minus_setigen_advantage"]
+            for how, label in (("own", "this project's"), ("setigen", "setigen's")):
+                x = cc[how]
+                last = (f"{dd['difference']:+.3f} ({dd['interval'][0]:+.3f} to {dd['interval'][1]:+.3f})"
+                        if how == "own" else "")
+                w(f"| {cut} | {name} | {t['blocks']} | {label} | {n(x['ours'])} | {n(x['turboseti'])} | "
+                  f"{n(x['signals'])} | {last} |")
     w("")
     d3 = third["cuts"]["10"]["own_minus_setigen_advantage"]
-    w("By the same reading, the second draw "
+    w("By the same reading at S/N 10, the second draw "
       + ("shows that **this project's planting favours this search**"
          if second["cuts"]["10"]["reading"].startswith("the project") else
          "does not show that this project's planting favours this search"
@@ -366,8 +374,9 @@ def injector_section(ii, first, second, third):
          if third["cuts"]["10"]["reading"].startswith("the project") else
          "does not show it either"
          + (", and its gap is also wider with setigen's planting." if d3["interval"][1] < 0 else "."))
-      + f" At S/N 30 their differences are {second['cuts']['30']['own_minus_setigen_advantage']['difference']:+.3f} "
-      f"and {third['cuts']['30']['own_minus_setigen_advantage']['difference']:+.3f}.")
+      + (" At S/N 30 every draw's interval also lies below 0." if all(
+          t["cuts"]["30"]["own_minus_setigen_advantage"]["interval"][1] < 0 for t in (ii, second, third)) else
+         " At S/N 30 not every draw's interval lies below 0."))
     w("")
     return L
 
@@ -494,7 +503,7 @@ def iv(x, digits=3):
     return f"{x[0]:.{digits}g} to {x[1]:.{digits}g}"
 
 
-WORDS = {5: "five", 11: "eleven"}
+WORDS = {5: "five", 8: "eight", 11: "eleven"}
 
 
 def n(x):
@@ -647,6 +656,8 @@ def record_problems(b, s10, s12, ops):
 
 
 def main():
+    if REVISIONS[-1][0] != VERSION:
+        refuse(f"version {VERSION}, and the report's revisions end at {REVISIONS[-1][0]}")
     b = load("measurements/matched-bliss.json")
     s10 = load("measurements/step10.json")
     s12_path = DATA / "measurements" / "step12.json"
@@ -878,8 +889,13 @@ def main():
       f"{rate} (the table above).*")
     w("")
     if control:
-        w("**Why BLISS's own pipeline has no matched cut.** On the two blocks that carry most of its false "
-          "candidates, one list of BLISS's hits at S/N 30 was given to each ON/OFF logic in the same run:")
+        if not set(BLISS_CROWDED) <= {c["block"] for c in control}:
+            refuse(f"the same-hit control lacks blocks {BLISS_CROWDED}, the two chosen for their false candidates")
+        rest = [c for c in control if c["block"] not in BLISS_CROWDED]
+        w("**Why BLISS's own pipeline has no matched cut.** One list of BLISS's hits at S/N 30 was given to each "
+          "ON/OFF logic in the same run, first on the two blocks that carry most of its false candidates "
+          f"({' and '.join(str(k) for k in BLISS_CROWDED)}, chosen for that after the main result was seen), then "
+          f"on {WORDS.get(len(rest), len(rest))} more chosen beforehand by seed, crowded and clean:")
         w("")
         cols = (("BLISS's event stage", "BLISS's event stage, same hits"),
                 ("this search's test", "hits at 30, no shadow hits"),
@@ -892,9 +908,13 @@ def main():
         for c in control:
             w(f"| {c['block']} | " + " | ".join(n(c["false_distinct"][k]) for _, k in cols) + " |")
         w("")
-        w("With the hits the same, this search's test removes most of them: BLISS's event stage is the "
-          "larger cause. The rest come from BLISS grouping its hits at the higher cut; grouped at S/N 5 and "
-          "cut afterwards, almost none are left. These are two blocks, run after the main result was seen.")
+        tot = {k: sum(c["false_distinct"][k] for c in rest) for _, k in cols}
+        w(f"On blocks {' and '.join(str(k) for k in BLISS_CROWDED)}, with the hits the same, this search's test "
+          "removes most of them: there BLISS's event stage is the larger cause. The rest come from BLISS grouping "
+          "its hits at the higher cut; grouped at S/N 5 and cut afterwards, almost none are left. On the "
+          f"{WORDS.get(len(rest), len(rest))} blocks chosen beforehand neither logic gives many (BLISS's event "
+          f"stage {n(tot[cols[0][1]])}, this search's test {n(tot[cols[1][1]])}, and {n(tot[cols[3][1]])} on the "
+          "hits grouped at S/N 5), so the event stage's large share is confined to the most crowded blocks.")
         w("")
     w(f"## Results: the 2016 session, fixed in advance ({s10['target']}, {s10['session']})")
     w("")

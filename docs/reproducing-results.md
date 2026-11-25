@@ -135,8 +135,16 @@ versions.
   commands below there and compares every page and summary record they
   write with what was there before (that commit's pages, the packaged
   records). It fails on an output missing, new, or changed in anything but
-  a record's top-level `provenance` and `written_utc`, a page's UTC times,
-  and the commits the report names beside its records' times.
+  when, where and by which code a record was written (its `written_utc`,
+  and in its top-level `provenance` the commit, local changes, time,
+  Python, libraries and script hash), a page's UTC times, and the commits
+  the report names beside its records' times. The rest of the provenance
+  is compared. A record made before provenance carried its `command`
+  (3cf9d43, 20 November 2026) is not failed for lacking one; where it has
+  one, it must be the same. The result, passed or not, is kept in
+  `data/analysis/reproduction.json`: the package and its SHA-256, the
+  commit, each command and its exit, and what compared the same and what
+  did not.
 
 Each record's provenance says whether any tracked file (code, config,
 patch or environment list) differed from its commit, and keeps a SHA-256
@@ -153,6 +161,9 @@ the core environment only:
 | Step 4, the matched comparison | `python matched.py tables KIC8462852` | `data/measurements/matched.json`, `docs/results/KIC8462852-AGBT17A_999_68-matched.md` |
 | Step 11, BLISS | `python matched_tables.py bliss KIC8462852` | `data/measurements/matched-bliss.json`, `docs/results/KIC8462852-AGBT17A_999_68-bliss.md` |
 | Step 9, the curved pass | `python curved_pass.py tables KIC8462852` (and `orbit-tables`, `vet-tables`, `turboseti-tables`) | `data/measurements/curved-*.json` |
+| Recovery at every operating point | `python tools/operating_points.py` | `data/analysis/operating_points.json` |
+| The independent injector, three draws and the first run | `python tools/independent_injection.py tables` (and `tables --draw 2`, `tables --draw 3`, `tables-first`) | `data/analysis/independent_injection/tables.json`, `second/`, `hip17147/`, `unsmeared/` |
+| Scoring at the middle of the look | `python tools/midlook.py tables` (and `checks`, `turbo-tables`) | `data/analysis/midlook/tables.json`, `association_checks.json`, `turbo_tables.json` |
 | The report | `python tools/report.py` | `docs/report/report.md` |
 
 The pages are written into the checkout's `docs/`, so `git diff` shows at

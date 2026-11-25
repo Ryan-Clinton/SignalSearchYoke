@@ -149,6 +149,18 @@ class Compare(unittest.TestCase):
         c = self.rec(provenance={"git_commit": "def", "python": "3.13.0", "input_sha256": "bb"})
         self.assertEqual(len(evidence.compare({"m.json": a}, {"m.json": c})["changed"]), 1)
 
+    def test_the_script_hash_and_a_command_older_records_lack_are_not_differences(self):
+        old = self.rec(provenance={"git_commit": "abc", "input_sha256": "aa"})
+        new = self.rec(provenance={"git_commit": "def", "input_sha256": "aa", "command": ["t.py", "tables"],
+                                   "script_sha256": "11"})
+        self.assertEqual(evidence.compare({"m.json": old}, {"m.json": new})["same"], 1)
+        had = self.rec(provenance={"git_commit": "abc", "input_sha256": "aa", "command": ["t.py", "tables"], "script_sha256": "22"})
+        self.assertEqual(evidence.compare({"m.json": had}, {"m.json": new})["same"], 1)
+        other = self.rec(provenance={"git_commit": "def", "input_sha256": "aa", "command": ["t.py", "other"], "script_sha256": "11"})
+        self.assertEqual(len(evidence.compare({"m.json": had}, {"m.json": other})["changed"]), 1)
+        gone = self.rec(provenance={"git_commit": "def", "input_sha256": "aa", "script_sha256": "11"})
+        self.assertEqual(len(evidence.compare({"m.json": had}, {"m.json": gone})["changed"]), 1)
+
     def test_a_command_that_writes_nothing_fails(self):
         cmd = ("matched.py", "tables", "KIC8462852")
         page = b"# t\n\nWritten by `matched.py tables KIC8462852` from runs.\n"

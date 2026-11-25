@@ -427,6 +427,21 @@ second observation, with very different interference, as well as on two
 sets of blocks from the first. The three draws are reported side by
 side, not pooled.
 
+### 2, 6 and 7, the report's revisions, the BLISS control, places and reproduction, 25 November 2026
+
+Report 1.10 reviewed at `e0f6bb1`. Each point, checked against the code
+and records first:
+
+| Finding | Severity | Verdict and what changed |
+|---|---|---|
+| SS-37: the report's revisions end at 1.8 | low | **correct.** `tools/report.py` keeps its own list, apart from the page's in `tools/report_publish.py`, and 1.9 was missing from it as well as 1.10. Both are added. The report now refuses unless its revisions end at its version, and `report_publish.py` refuses unless the two lists name the same versions. |
+| SS-38: the BLISS control is described as two blocks, and its table has ten | low | **correct.** The prose now names blocks 35 and 129, chosen for their false candidates after the main result was seen, and the eight chosen beforehand by seed 12 (BL-06). It gives the eight's totals (BLISS's event stage 13, this search's test 18, 10 on the hits grouped at S/N 5), and says the event stage's large share is confined to the most crowded blocks, as the section on the eight blocks already found. The report refuses if blocks 35 and 129 are missing. |
+| SS-39: a signal's place is checked only where a record carries it | medium | **correct.** `independent_injection.record_problems` takes `places`, and from the third draw on (`PLACES_FROM`) a record without any signal's place is refused, in `run` and `tables` alike. The first two draws' records carry none and stay exempt, as the protocol says. All 16 third-draw records carry every place. Tested. |
+| SS-40: the draws at S/N 30 are given as one difference | medium | **correct.** The table of draws now gives both cuts: the counts for each planting and pipeline, and the difference with its interval, for all three draws. At S/N 30 every interval lies below 0. |
+| SS-41: the evidence reproduction is not shown to pass | medium | **correct; no package had been built since 19 November.** Run on the package at `dabc085`, every value compared the same, but 9 records differed in their provenance alone. Their script hash names the code that made them, as the commit does: `midlook.py` changed at `dda5abb`, a change that moves no result (`NEUTRAL`). The records made before provenance carried a `command` (3cf9d43) lack one. The script hash is now treated like the commit, and a `command` is compared wherever the earlier record has one (tested). The build was also refused, because the fresh replay's record names the base Python under AppData. That is now allowed only directly under a home folder written `~`, and refused anywhere else (tested). `reproduce` now keeps its result in `data/analysis/reproduction.json`, which has an evidence row. It takes its code from `git archive` of the package's commit and its data from the package alone. A clone from GitHub with new environments is `tools/fresh_replay.py` (16), which replays step 10's blocks, not the tables. |
+| A DOI deposit, and inviting the turboSETI and BLISS developers | | **for a decision.** Both reach outside the project. The package is built and reproduced, ready to deposit. |
+| Control C before further injector draws | | **agreed; no change.** Control C runs under its frozen protocol, and its outcome is reported whatever it is. No further draw is planned. |
+
 ## 3. turboSETI comparison fairness: 20 November 2026
 
 **Verdict:** a fair comparison of two whole pipelines on the same data and

@@ -128,9 +128,10 @@ def own_status(w, c):
             "turboseti": w["turboseti"][c]["three_looks"] == "recovered" and w["turboseti_on_hits"][c] == 3}
 
 
-def record_problems(rec, k, cls, matched_rec, smearing, code=records.code_problems):
+def record_problems(rec, k, cls, matched_rec, smearing, code=records.code_problems, places=False):
     """Why a block record is not this block's whole result under the protocol: its block and class, every signal
-    the matched record's in order (its place too, where the record carries it: from the third draw on), both cuts with
+    the matched record's in order (its place too: required with places, from the third draw on; the first two
+    draws' records carry none, and their places were checked against the seed when they ran), both cuts with
     both injectors and pipelines, the project's planting's results equal to the matched record's, the smearing it was
     planted with (the first run's records carry no field: off), and the code it was made by."""
     import matched
@@ -148,6 +149,8 @@ def record_problems(rec, k, cls, matched_rec, smearing, code=records.code_proble
     elif any((round(t.get("drift", 0), 6), t.get("s_in"), t.get("bin")) != (round(w["drift"], 6), w["s_in"], w["bin"])
              for t, w in zip(tones, want)):
         out.append(f"{name}: the signals are not the matched record's")
+    elif places and any("x0" not in t for t in tones):
+        out.append(f"{name}: a signal's place is not in the record")
     elif any("x0" in t and round(t["x0"], 6) != round(w["x0"], 6) for t, w in zip(tones, want)):
         out.append(f"{name}: a signal is not at the matched record's place")
     cell = {"own": {"ours", "turboseti"}, "setigen": {"ours", "turboseti"}}
@@ -188,8 +191,11 @@ def chosen_for(classes, draw):
     return choose(classes, SEED_SECOND, exclude=set(first) | {TRIAL_BLOCK}), SECOND
 
 
-def _whole_block(k, cls, matched_rec, smearing):
-    return lambda r: not record_problems(r, k, cls, matched_rec, smearing)
+PLACES_FROM = 3    # the draw from which a record must carry each signal's place
+
+
+def _whole_block(k, cls, matched_rec, smearing, draw=1):
+    return lambda r: not record_problems(r, k, cls, matched_rec, smearing, places=draw >= PLACES_FROM)
 
 
 def run(say=print, draw=1, from_end=False):
@@ -212,13 +218,14 @@ def run(say=print, draw=1, from_end=False):
     for k, cls in (list(chosen.items())[::-1] if from_end else chosen.items()):
         out = folder / f"block_{k:03d}.json"
         rec = json.loads((base / f"block_{k:03d}.json").read_text(encoding="utf-8"))
-        if out.exists() and not yoke.whole(out, _whole_block(k, cls, rec, SMEAR)):
-            got = record_problems(json.loads(out.read_text(encoding="utf-8")), k, cls, rec, SMEAR)
+        if out.exists() and not yoke.whole(out, _whole_block(k, cls, rec, SMEAR, draw)):
+            got = record_problems(json.loads(out.read_text(encoding="utf-8")), k, cls, rec, SMEAR,
+                                  places=draw >= PLACES_FROM)
             raise yoke.Refusal("INVALID_REQUEST", f"{out.name} is not this run's whole result ({'; '.join(got)}): "
                                                   "move it aside")
         # another lane may work the same draw: a block is claimed before it is read, and skipped once whole
         with records.claim(out) as mine:
-            if not mine or yoke.whole(out, _whole_block(k, cls, rec, SMEAR)):
+            if not mine or yoke.whole(out, _whole_block(k, cls, rec, SMEAR, draw)):
                 continue
             work = folder / f"work_{os.getpid()}"
             try:
@@ -263,8 +270,9 @@ def tables(say=print, folder=None, smearing=SMEAR, draw=1):
     for k, cls in chosen.items():
         p = folder / f"block_{k:03d}.json"
         rec = json.loads((base / f"block_{k:03d}.json").read_text(encoding="utf-8"))
-        if not yoke.whole(p, _whole_block(k, cls, rec, smearing)):
-            got = record_problems(json.loads(p.read_text(encoding="utf-8")), k, cls, rec, smearing) if p.exists() else []
+        if not yoke.whole(p, _whole_block(k, cls, rec, smearing, draw)):
+            got = (record_problems(json.loads(p.read_text(encoding="utf-8")), k, cls, rec, smearing,
+                                   places=draw >= PLACES_FROM) if p.exists() else [])
             raise yoke.Refusal("INVALID_REQUEST", f"block {k} not done or not whole (smearing {smearing})"
                                                   + (f": {'; '.join(got)}" if got else ""))
         blocks.append(json.loads(p.read_text(encoding="utf-8")))

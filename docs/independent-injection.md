@@ -162,7 +162,9 @@ bands, and both pipelines failed its false-candidate limit.
 
 The 16 blocks ran unchanged at `177861f`, and their records pass
 `record_problems`, including the check against the matched records'
-results and places. The tables (`independent_injection.py tables
+results and places. From this draw on, a record without each signal's
+place is refused (`PLACES_FROM`); the first two draws' records carry
+none, and their places were checked against the seed when they ran. The tables (`independent_injection.py tables
 --draw 3`, `hip17147/tables.json`) were made at `96ec09d`, from a clean
 tree.
 

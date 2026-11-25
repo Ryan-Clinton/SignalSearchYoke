@@ -48,7 +48,7 @@ At its tested cut, each matched pipeline's measured false rate is at or below 0.
 
 *Figure 1. Share of the planted signals found in all three ON looks at each pipeline's matched cut, against signal strength (the eleven steps of the grid, evenly spaced), one panel per drift range (242 signals at each point). At each pipeline's cut its measured false rate is at or below 0.1 a block; the rates differ, and their 95% intervals reach above 0.1 (the table above).*
 
-**Why BLISS's own pipeline has no matched cut.** On the two blocks that carry most of its false candidates, one list of BLISS's hits at S/N 30 was given to each ON/OFF logic in the same run:
+**Why BLISS's own pipeline has no matched cut.** One list of BLISS's hits at S/N 30 was given to each ON/OFF logic in the same run, first on the two blocks that carry most of its false candidates (35 and 129, chosen for that after the main result was seen), then on eight more chosen beforehand by seed, crowded and clean:
 
 False candidates at S/N 30 (distinct, over the 19 wrong choices):
 
@@ -65,7 +65,7 @@ False candidates at S/N 30 (distinct, over the 19 wrong choices):
 | 221 | 1 | 0 | 0 | 0 |
 | 231 | 0 | 0 | 0 | 0 |
 
-With the hits the same, this search's test removes most of them: BLISS's event stage is the larger cause. The rest come from BLISS grouping its hits at the higher cut; grouped at S/N 5 and cut afterwards, almost none are left. These are two blocks, run after the main result was seen.
+On blocks 35 and 129, with the hits the same, this search's test removes most of them: there BLISS's event stage is the larger cause. The rest come from BLISS grouping its hits at the higher cut; grouped at S/N 5 and cut afterwards, almost none are left. On the eight blocks chosen beforehand neither logic gives many (BLISS's event stage 13, this search's test 18, and 10 on the hits grouped at S/N 5), so the event stage's large share is confined to the most crowded blocks.
 
 ## Results: the 2016 session, fixed in advance (HIP17147, AGBT16A_999_192)
 
@@ -156,18 +156,24 @@ At S/N 10, this search's share found minus turboSETI's, with this project's plan
 
 A first run of the same 16 blocks used setigen's default, which puts each spectrum's tone where it is at the spectrum's start rather than spreading it over the channels it crosses. Both pipelines are scored against the middle of the spectrum, within 6 Hz, so setigen's fast signals sat outside the tolerance: from 1 to 4 Hz/s this search found 10 and turboSETI 0, against 297 and 6 with this project's planting. That run gave a difference of +0.317 (+0.304 to +0.332). The cause was measured on synthetic data, the change and the first run's records are logged in the protocol (docs/independent-injection.md), and nothing else was changed.
 
-Because that change was made after the first run had been seen, a second draw of 16 other blocks (again half crowded, half clean, none of the first draw's) was fixed in the protocol, with its seed, before it ran, and planted with the same setting. Both draws come from one observation, the 2017 session: they are separate blocks, not separate observations. So a third draw, of 16 blocks of the 2016 session (HIP 17147), whose band is crowded with satellite signals, was also fixed in the protocol before it ran, with the same setting. The three draws at S/N 10, side by side and not pooled:
+Because that change was made after the first run had been seen, a second draw of 16 other blocks (again half crowded, half clean, none of the first draw's) was fixed in the protocol, with its seed, before it ran, and planted with the same setting. Both draws come from one observation, the 2017 session: they are separate blocks, not separate observations. So a third draw, of 16 blocks of the 2016 session (HIP 17147), whose band is crowded with satellite signals, was also fixed in the protocol before it ran, with the same setting. The three draws, side by side and not pooled:
 
-| draw | blocks | planting | this search | turboSETI | of | difference (95% interval) |
-|---|---|---|---|---|---|---|
-| first, 2017 | 16 | this project's | 1,156 | 228 | 1,760 | -0.034 (-0.049 to -0.020) |
-| first, 2017 | 16 | setigen's | 1,355 | 367 | 1,760 |  |
-| second, 2017 | 16 | this project's | 1,180 | 217 | 1,760 | -0.035 (-0.054 to -0.013) |
-| second, 2017 | 16 | setigen's | 1,385 | 361 | 1,760 |  |
-| third, 2016 | 16 | this project's | 1,105 | 221 | 1,760 | -0.055 (-0.081 to -0.030) |
-| third, 2016 | 16 | setigen's | 1,331 | 351 | 1,760 |  |
+| S/N | draw | blocks | planting | this search | turboSETI | of | difference (95% interval) |
+|---|---|---|---|---|---|---|---|
+| 10 | first, 2017 | 16 | this project's | 1,156 | 228 | 1,760 | -0.034 (-0.049 to -0.020) |
+| 10 | first, 2017 | 16 | setigen's | 1,355 | 367 | 1,760 |  |
+| 10 | second, 2017 | 16 | this project's | 1,180 | 217 | 1,760 | -0.035 (-0.054 to -0.013) |
+| 10 | second, 2017 | 16 | setigen's | 1,385 | 361 | 1,760 |  |
+| 10 | third, 2016 | 16 | this project's | 1,105 | 221 | 1,760 | -0.055 (-0.081 to -0.030) |
+| 10 | third, 2016 | 16 | setigen's | 1,331 | 351 | 1,760 |  |
+| 30 | first, 2017 | 16 | this project's | 605 | 54 | 1,760 | -0.105 (-0.118 to -0.092) |
+| 30 | first, 2017 | 16 | setigen's | 859 | 123 | 1,760 |  |
+| 30 | second, 2017 | 16 | this project's | 599 | 53 | 1,760 | -0.136 (-0.177 to -0.105) |
+| 30 | second, 2017 | 16 | setigen's | 903 | 117 | 1,760 |  |
+| 30 | third, 2016 | 16 | this project's | 584 | 61 | 1,760 | -0.122 (-0.144 to -0.101) |
+| 30 | third, 2016 | 16 | setigen's | 853 | 115 | 1,760 |  |
 
-By the same reading, the second draw does not show that this project's planting favours this search, and the gap is again wider with setigen's planting; the third draw does not show it either, and its gap is also wider with setigen's planting. At S/N 30 their differences are -0.136 and -0.122.
+By the same reading at S/N 10, the second draw does not show that this project's planting favours this search, and the gap is again wider with setigen's planting; the third draw does not show it either, and its gap is also wider with setigen's planting. At S/N 30 every draw's interval also lies below 0.
 
 ## Scoring at the middle of the look
 
@@ -271,6 +277,8 @@ The observations are from the Breakthrough Listen Open Data Archive (Lebofsky et
 - 1.6 (2026-11-20): what the code audits found, stated where it bears on the results: the 2016 reads' DC bins, the false-candidate count and its intervals, turboSETI's zero drift and fast-drift reporting, how BLISS was run; the planted signals counted per session; the injection checks' small differences stated as such; references completed.
 - 1.7 (2026-11-24): a false-candidate control on four real cadences of other targets, chosen by a rule fixed beforehand and searched whole, with the checks' verdicts on its candidates; and signals planted in those cadences, to show how many real-looking signals the checks keep.
 - 1.8 (2026-11-25): the same signals planted by an independent injector (setigen); this search's recovery scored at the middle of the look; what each check costs, with the band check's cost stated as a hypothesis under test.
+- 1.9 (2026-11-25): a second draw of blocks for the independent injector, fixed before it ran; turboSETI's recovery scored at the middle of the look beside this search's, with paired intervals by session; the test for chance matches under each scoring.
+- 1.10 (2026-11-25): a third draw for the independent injector, from the 2016 session, fixed before it ran and given beside the two 2017 draws at both cuts; the same-hit control on BLISS's hits described for all ten of its blocks.
 
 ## Records this version was written from
 
