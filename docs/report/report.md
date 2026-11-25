@@ -1,6 +1,6 @@
 # Comparing radio-signal searches on Breakthrough Listen data
 
-Ryan Clinton. Version 1.7, 2026-11-24.
+Ryan Clinton. Version 1.8, 2026-11-25.
 
 ## Summary
 
@@ -13,6 +13,8 @@ On a second session, fixed in advance (HIP17147, 2016), this search again found 
 On a third session, chosen by a rule from the archive's metadata and fixed in advance (NGC6946, a galaxy, at C band in 2019), every criterion fixed beforehand was met at its point estimate: this search found 2,404 of 7,040 signals against turboSETI's 247, and neither raised a false candidate. That band was quiet (3 of 64 blocks crowded), and 64 blocks leave the rates' intervals reaching 0.12, above the limit.
 
 These are three sessions from one telescope. They do not show better sensitivity in general.
+
+Planted instead by setigen, an injector this project did not write, the same 1,760 signals in 16 blocks of the 2017 session were found 1,355 times by this search and 367 by turboSETI at S/N 10, against 1,156 and 228 with this project's planting. The gap between them in share found was 0.034 wider with setigen's planting (0.020 to 0.049), so it is not shown that this project's planting favours this search.
 
 Four real cadences of other targets, chosen by a rule fixed beforehand and searched whole, gave 0.029 to 0.31 false candidates a block at S/N 30 (0.125 over all four, bunched in 18 of 1,267 blocks), and the checks left none unexplained. Signals planted in the same cadences show the checks keeping most real-looking signals in complete blocks, but not in blocks at the hit limit, which lie mostly in listed interference bands.
 
@@ -131,6 +133,41 @@ At the lower cuts the ratio falls (about ten times as many found at 30 each, abo
 - The frozen recovery criterion compares two Wilson intervals, which treat the planted signals as independent; signals share their block and their session. The paired difference with a bootstrap over blocks (above) is the better measure, and it is supplementary. All the blocks of a session come from one observation, so none of these intervals speaks for other sessions.
 - BLISS's hits through this search's test, supplementary in the third session, could not be run there: the step that hands BLISS each block expects a slice width these blocks do not have, and the frozen rule records that rather than adapting it.
 
+## An independent injector
+
+Every recovery figure above comes from signals planted by this project's own method. To see whether that method suits this search better than turboSETI, the same signals (the same places, drifts and strengths) were planted by setigen 2.7.0 in 16 blocks of the 2017 session (half crowded, half clean, drawn by class alone), by a protocol fixed beforehand, and both pipelines were run and scored exactly as above. setigen sets each signal's strength from its own estimate of the noise, so absolute recovery can differ between the two; the question is the gap between the pipelines. setigen plants with its Doppler smearing, its model of a tone integrated over a spectrum; a first run without it is described after the tables.
+
+| planting | S/N | this search | turboSETI | of |
+|---|---|---|---|---|
+| this project's | 10 | 1,156 | 228 | 1,760 |
+| setigen's | 10 | 1,355 | 367 | 1,760 |
+| this project's | 30 | 605 | 54 | 1,760 |
+| setigen's | 30 | 859 | 123 | 1,760 |
+
+At S/N 10, this search's share found minus turboSETI's, with this project's planting less the same with setigen's, is -0.034 (-0.049 to -0.020, blocks resampled). By the reading fixed beforehand, it is not shown that this project's planting favours this search. The gap is wider with setigen's planting, though the ratio is smaller (3.69 against 5.07): setigen's signals were found more often by both pipelines, which is expected, since its S/N is set from its own estimate of the noise. By drift range (S/N 10; this search and turboSETI, this project's planting then setigen's):
+
+| drift (Hz/s) | this project's planting | setigen's |
+|---|---|---|
+| 0 to 0.15 | 316 and 108 | 351 and 174 |
+| 0.15 to 0.5 | 289 and 79 | 329 and 131 |
+| 0.5 to 1 | 254 and 35 | 304 and 56 |
+| 1 to 2 | 202 and 6 | 242 and 5 |
+| 2 to 4 | 95 and 0 | 129 and 1 |
+
+A first run of the same 16 blocks used setigen's default, which puts each spectrum's tone where it is at the spectrum's start rather than spreading it over the channels it crosses. Both pipelines are scored against the middle of the spectrum, within 6 Hz, so setigen's fast signals sat outside the tolerance: from 1 to 4 Hz/s this search found 10 and turboSETI 0, against 297 and 6 with this project's planting. That run gave a difference of +0.317 (+0.304 to +0.332). The cause was measured on synthetic data, the change and the first run's records are logged in the protocol (docs/independent-injection.md), and nothing else was changed.
+
+## Scoring at the middle of the look
+
+A fast drifting signal's frequency is measured where the search's track fits it best, near the middle of a look, so a small error in drift moves the frequency at the look's start by that error times half the look. The published scoring compares at the start, and counts some detected signals as missed. The matched blocks were read and planted again with the same signals; a block counts only if it reproduces its published result exactly. This search's recovery at S/N 10, three ON looks:
+
+| session | blocks | as published | at mid-look | at mid-look, tolerances growing with drift |
+|---|---|---|---|---|
+| KIC8462852 | 121 of 121 | 8,706 | 9,115 | 9,775 |
+| HIP17147 | 121 of 121 | 8,258 | 8,649 | 9,230 |
+| NGC6946 | 64 of 64 | 4,702 | 4,923 | 5,264 |
+
+Most of the difference is at 2 to 4 Hz/s (KIC8462852 786 to 1,515 of 2,662; HIP17147 751 to 1,404 of 2,662; NGC6946 438 to 815 of 1,408). The growing tolerances are ±max(6 Hz, 10 s × drift) and ±max(0.05, 0.08 × drift) Hz/s. This is a scoring version for this search alone: turboSETI's recovery was not rescored this way, so the pipelines are compared only under the published scoring above, and no frozen verdict uses this one.
+
 ## A false-candidate control on four real cadences
 
 The false-candidate counts above judge each block with the 19 wrong choices of three ON looks, which stand in for cadences with no signal. To see what real cadences give, four cadences of other targets, never read by this project, were chosen by a rule fixed before any of their data was read (the first four Green Bank sessions, in the order of Breakthrough Listen's target list, in the layout the search was validated on). Each was searched whole by the search as frozen, in its own time order. No candidate in them is taken to be a signal, so what they give is a false-alarm count on real cadences.
@@ -160,6 +197,10 @@ The checks called every one of the 1,187 candidates at S/N 10 and over interfere
 Against the planted candidates they did not keep, the check cited most was known interference bands (401 times), then crowding (80), zero or very low drift (56), recurrence at other targets and times (56). A signal in a listed interference band is marked likely interference whatever it is, and the crowded blocks lie mostly in those bands; so there the checks cannot keep a real signal, by design.
 
 By the reading fixed in the protocol (informative where the lower end of the interval for unexplained among candidates is at least 0.5), the checks kept planted signals in complete blocks, and were not shown to keep them in blocks at the hit limit. So control B's zero is informative in complete blocks, and says little in blocks at the hit limit. Planted tones are clean and do not behave like every real transmitter.
+
+The sample takes as many capped blocks as complete ones; control B's own blocks are 14% capped. Reweighted to that mix, the checks leave 0.69 (0.52 to 0.83) of planted candidates unexplained at S/N 30.
+
+**What each check costs.** Each check was left out in turn, from the verdicts already recorded. At S/N 30, the known-band check is the only check standing against 298 of the planted candidates the checks did not keep (101 in complete blocks, 197 capped), and the only one against 0 of control B's 158 candidates. The next most costly is crowding (27). So on these blocks the band check loses the most real-looking signals and removes almost nothing the other checks do not. This was found on control B, so it is a hypothesis here, not a result: a version of the checks with a band as context rather than a sign was fixed beforehand and is being tested on four new cadences (docs/control-c.md in the repository). The checks in force are unchanged.
 
 ## What the code audits found that bears on these results
 
@@ -196,6 +237,7 @@ The observations are from the Breakthrough Listen Open Data Archive (Lebofsky et
 - 1.5 (2026-11-19): checks of the planted signals: a tone in the voltages, finer sampling, the DC bin and a fixed flux, none of which moves recovery.
 - 1.6 (2026-11-20): what the code audits found, stated where it bears on the results: the 2016 reads' DC bins, the false-candidate count and its intervals, turboSETI's zero drift and fast-drift reporting, how BLISS was run; the planted signals counted per session; the injection checks' small differences stated as such; references completed.
 - 1.7 (2026-11-24): a false-candidate control on four real cadences of other targets, chosen by a rule fixed beforehand and searched whole, with the checks' verdicts on its candidates; and signals planted in those cadences, to show how many real-looking signals the checks keep.
+- 1.8 (2026-11-25): the same signals planted by an independent injector (setigen); this search's recovery scored at the middle of the look; what each check costs, with the band check's cost stated as a hypothesis under test.
 
 ## Records this version was written from
 
@@ -220,8 +262,12 @@ The observations are from the Breakthrough Listen Open Data Archive (Lebofsky et
 - data/analysis/bliss_only/trace_summary.json: written 2026-11-19T00:54:45Z, commit 2b1b22b
 - data/analysis/bliss_only/detector_misses.json: written 2026-11-19T02:28:46Z, commit 3fd7837
 - data/measurements/off_null.json: written 2026-11-11T02:41:54Z, commit e5f6c77
-- data/analysis/negative_controls/tables.json: written 2026-11-24T02:56:15Z, commit 6a50490
-- data/analysis/negative_controls/summary.json: written 2026-11-24T02:56:28Z, commit 6a50490
-- data/analysis/negative_controls/package_replay.json: written 2026-11-24T02:56:34Z, commit 6a50490
+- data/analysis/negative_controls/tables.json: written 2026-11-24T09:45:23Z, commit ac59d3c
+- data/analysis/negative_controls/summary.json: written 2026-11-24T09:45:40Z, commit ac59d3c
+- data/analysis/negative_controls/package_replay.json: written 2026-11-24T09:45:47Z, commit ac59d3c
 - data/analysis/negative_controls/package_recheck.json: written 2026-11-24T03:24:25Z, commit 6a50490
-- data/analysis/negative_controls/injection.json: written 2026-11-24T08:29:51Z, commit a4bede0
+- data/analysis/negative_controls/injection.json: written 2026-11-24T09:45:54Z, commit ac59d3c
+- data/analysis/negative_controls/injection_checks.json: written 2026-11-24T09:45:59Z, commit ac59d3c
+- data/analysis/independent_injection/tables.json: written 2026-11-24T20:21:13Z, commit 0259e41
+- data/analysis/independent_injection/unsmeared/tables.json: written 2026-11-24T20:23:56Z, commit 5b4ebe1
+- data/analysis/midlook/tables.json: written 2026-11-25T02:05:18Z, commit 58def5c
