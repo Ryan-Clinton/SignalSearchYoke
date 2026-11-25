@@ -165,7 +165,7 @@ Because that change was made after the first run had been seen, a second draw of
 | second | 16 | this project's | 1,180 | 217 | 1,760 | -0.035 (-0.054 to -0.013) |
 | second | 16 | setigen's | 1,385 | 361 | 1,760 |  |
 
-By the same reading, the second draw does not show that this project's planting favours this search, and the gap is again wider with setigen's planting. At S/N 30 its difference is -0.136.
+By the same reading, the second draw does not show that this project's planting favours this search, and the gap is again wider with setigen's planting. At S/N 30 its difference is -0.136. Both draws come from one observation, the 2017 session: they are separate blocks, not separate observations. A third draw, of 16 blocks of the 2016 session, whose band is crowded with satellite signals, was fixed in the protocol before it ran and is running.
 
 ## Scoring at the middle of the look
 
@@ -179,6 +179,8 @@ A fast drifting signal's frequency is measured where the search's track fits it 
 
 Most of the difference is at 2 to 4 Hz/s (KIC8462852 786 to 1,515 of 2,662; HIP17147 751 to 1,404 of 2,662; NGC6946 438 to 815 of 1,408). The growing tolerances are ±max(6 Hz, 10 s × drift) and ±max(0.05, 0.08 × drift) Hz/s. No frozen verdict uses these scorings.
 
+Wider tolerances could credit a signal with an event that was there anyway. Each signal's place was tested against the unplanted block's own events, under all three scorings at S/N 10 and 30, at the signal and at eight places shifted by 1.5 to 12 kHz (the signals are about 26 kHz apart): 0 matches in 201,960 tests at the signals and 0 in 1,615,680 shifted. No two signals of a block lie within twice the widest tolerances of each other, so no event can be credited to two. The test does find a match where there is one: a signal placed on an unplanted event matched it in 150 of 243 cases, the rest being events whose looks disagree in drift by more than the tolerance. Its limits: it is of this search's events, not turboSETI's; it tests the unplanted background, not an event a planted signal itself creates beside the true one; and its reach is these 306 blocks (docs/audits.md in the repository has the errors behind it).
+
 turboSETI's hits on the same blocks were scored the same three ways. It reports each hit's frequency at the start of its look, so half a look's drift is added to compare at the middle. Recovery at S/N 10, this search then turboSETI:
 
 | session | blocks | of | as published | at mid-look | at mid-look, tolerances growing with drift |
@@ -187,7 +189,15 @@ turboSETI's hits on the same blocks were scored the same three ways. It reports 
 | HIP17147 | 121 | 13,310 | 8,258 and 1,550 | 8,649 and 1,577 | 9,230 and 1,605 |
 | NGC6946 | 64 | 7,040 | 4,702 and 952 | 4,923 and 965 | 5,264 and 986 |
 
-Over the three sessions this search found 5.15 times as many signals as turboSETI under the published scoring, 5.29 times at mid-look and 5.57 times with the growing tolerances. Scoring at the middle of the look does not narrow the gap between the pipelines: it gains this search more than turboSETI.
+Paired by block, this search's share found minus turboSETI's, and how far that moved from the published scoring (95% intervals from the session's blocks drawn again):
+
+| session | as published | at mid-look | change | mid-look, growing tolerances | change |
+|---|---|---|---|---|---|
+| KIC8462852 | +0.526 (+0.514 to +0.536) | +0.553 (+0.542 to +0.563) | +0.028 (+0.025 to +0.031) | +0.602 (+0.590 to +0.612) | +0.076 (+0.072 to +0.080) |
+| HIP17147 | +0.504 (+0.485 to +0.521) | +0.531 (+0.511 to +0.550) | +0.027 (+0.024 to +0.030) | +0.573 (+0.551 to +0.593) | +0.069 (+0.064 to +0.074) |
+| NGC6946 | +0.533 (+0.524 to +0.540) | +0.562 (+0.555 to +0.569) | +0.029 (+0.026 to +0.034) | +0.608 (+0.602 to +0.614) | +0.075 (+0.069 to +0.081) |
+
+Over the three sessions this search found 5.15 times as many signals as turboSETI under the published scoring, 5.29 times at mid-look and 5.57 times with the growing tolerances. These are counts of planted signals recovered under these conditions, not sensitivities: 5.57 times as many found does not mean signals 5.57 times weaker are found. Scoring at the middle of the look does not narrow the gap between the pipelines: it gains this search more than turboSETI.
 
 ## A false-candidate control on four real cadences
 
@@ -289,8 +299,9 @@ The observations are from the Breakthrough Listen Open Data Archive (Lebofsky et
 - data/analysis/negative_controls/package_recheck.json: written 2026-11-24T03:24:25Z, commit 6a50490
 - data/analysis/negative_controls/injection.json: written 2026-11-24T09:45:54Z, commit ac59d3c
 - data/analysis/negative_controls/injection_checks.json: written 2026-11-24T09:45:59Z, commit ac59d3c
-- data/analysis/independent_injection/tables.json: written 2026-11-25T02:42:21Z, commit f2e53ea
-- data/analysis/independent_injection/unsmeared/tables.json: written 2026-11-25T02:42:22Z, commit f2e53ea
-- data/analysis/independent_injection/second/tables.json: written 2026-11-25T03:58:15Z, commit ce0096e
+- data/analysis/independent_injection/tables.json: written 2026-11-25T09:44:41Z, commit baf7f5a
+- data/analysis/independent_injection/unsmeared/tables.json: written 2026-11-25T09:44:46Z, commit baf7f5a
+- data/analysis/independent_injection/second/tables.json: written 2026-11-25T09:44:44Z, commit baf7f5a
 - data/analysis/midlook/tables.json: written 2026-11-25T02:41:59Z, commit f2e53ea
-- data/analysis/midlook/turbo_tables.json: written 2026-11-25T06:26:47Z, commit 97287a7
+- data/analysis/midlook/turbo_tables.json: written 2026-11-25T09:44:02Z, commit baf7f5a
+- data/analysis/midlook/association_checks.json: written 2026-11-25T02:42:19Z, commit f2e53ea

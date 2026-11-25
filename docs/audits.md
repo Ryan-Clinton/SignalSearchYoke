@@ -385,10 +385,30 @@ chosen before it ran.
 
   of 33,660 signals. turboSETI gains 3% from the rescoring, this search
   12%, so the published comparison does not overstate the gap between the
-  pipelines; it understates it slightly. A Windows resource error
+  pipelines; it understates it slightly. Paired by block, the difference
+  in share between them moves by +0.069 to +0.076 with the scaled
+  tolerances, and every session's 95% interval lies above zero (the
+  report's table). A Windows resource error
   (WinError 1450) stopped one lane after 34 of NGC 6946's 64 blocks; the
   other 30 were run again from the same code and every record was checked
   before the tables were written.
+
+### 2 and 6, the report's checks of its rescoring, a third draw from another session, 25 November 2026
+
+Report 1.9 reviewed at `ea8735d`. Each point, checked against the code
+and records first:
+
+| Finding | Severity | Verdict and what changed |
+|---|---|---|
+| SS-31: setigen's tests were not shown to run | medium | **partly right.** CI has no setigen environment and skips them. Here they run in setigen's own: all 7 pass (`tests/test_setigen_plant.py`). |
+| SS-32: the report checked the rescoring's block counts only | medium | **built.** `tools/report.py` `rescoring_problems` refuses unless the mid-look tables, turboSETI's and the chance-match test cover exactly the three sessions and all their blocks, 110 signals a block. Each pipeline's published totals at S/N 10 and 30 must equal those counted from the matched records (`published_totals`; they do, for example 4,520 and 442 for the 2017 session at 30), and this search's totals must agree between the two tables. Each setigen table must be 16 blocks of 1,760 signals. |
+| SS-33: the chance-match test was not in the report | medium | **built.** The report gives the test, its result and its limits: it covers this search's events only, the unplanted background rather than an event a planted signal makes beside itself, and these 306 blocks. |
+| SS-34: both setigen draws are from one session | medium | **correct; running.** The report now says the draws are separate blocks, not separate observations. A third draw of 16 blocks of the 2016 session, crowded with satellite bands, was fixed in the protocol (`docs/independent-injection.md`) and committed at `177861f` before it ran. It is run on three lanes by block claim (`independent_injection.py run --draw 3`). |
+| SS-35: no interval on the rescored comparison | medium | **built.** `midlook.py turbo-tables` adds, by session and cut, the paired difference in share under each scoring and its change from the published scoring, with a block bootstrap (`paired`, tested). The change with scaled tolerances is +0.069 to +0.076 by session, every interval above zero. |
+| SS-36: the injector's records were not checked against the matched records' results or places | low | **built.** `record_problems` now requires the project's own planting's results in a record to equal the matched record's (`own_status`, the rule that writes them), and each signal's place where the record carries it. Records from the third draw on carry it. The first two draws' places were checked against the seed when they ran. All 48 records pass, and the tables are rebuilt under the check, with no number changed. |
+| SS-26: setigen's strengths need independent checking | low | **taste.** No change asked for. The report says setigen sets S/N from its own noise estimate, the measure is the gap between the pipelines, and a drifting setigen tone carries about 91% of its nominal power. |
+| Recovery, not sensitivity | medium | **correct.** The report says outright that 5.57 times as many found is a count under these conditions, not signals 5.57 times weaker. |
+| An evidence package for deposit | medium | **partly right.** `tools/evidence.py` already builds, checks and reproduces one. Its reproduction did not remake the newer tables; it now remakes the setigen tables, the mid-look tables, turboSETI's and the chance-match test. The record checks read the code's history from the clone, as of the package's commit, since a tree from `git archive` has none (`SSY_HISTORY`, tested). Depositing it waits for a decision. |
 
 ## 3. turboSETI comparison fairness: 20 November 2026
 
@@ -1476,9 +1496,9 @@ provenance. Results still running are not listed until they finish.
 | Control B's checks run again from nothing: no verdict differs | 4 | `data/analysis/negative_controls/package_recheck.json` | `6a50490`, clean | `tools/negative_controls.py recheck` |
 | Planted signals in control B's cadences: the checks keep them in complete blocks, not in capped ones | 4 | `data/analysis/negative_controls/injection.json` | `ac59d3c`, clean (its block records made at `c7dcf67`; the checkout changed while they ran, in the tables' interval code, docs and the report only) | `tools/control_injection.py tables` |
 | The known-band check stands alone against 298 planted candidates and none of control B's at 30 | 4 | `data/analysis/negative_controls/injection_checks.json` | `ac59d3c`, clean | `tools/control_injection.py checks-left-out` |
-| Planted by setigen with its Doppler smearing: not shown that the project's planting favours this search | 2 | `data/analysis/independent_injection/tables.json` | `f2e53ea`, clean (its block records made at `0259e41`) | `tools/independent_injection.py tables` |
+| Planted by setigen with its Doppler smearing: not shown that the project's planting favours this search | 2 | `data/analysis/independent_injection/tables.json` | `baf7f5a`, clean (its block records made at `0259e41`) | `tools/independent_injection.py tables` |
 | Mid-look scoring on all 306 matched blocks, each reproducing its published statuses | 6 | `data/analysis/midlook/tables.json` | `f2e53ea`, clean (its block records made at `5d50dfd`, `42f9b04` and `58def5c`, clean, and NGC 6946's at `8678e6e` with local changes to setigen's planting and its protocol, which it does not use; `midlook.py` changed between them only in the order it takes blocks) | `tools/midlook.py tables` |
 | No chance match under any scoring, at the signals or shifted, and no two signals within each other's tolerances, over 306 blocks | 6 | `data/analysis/midlook/association_checks.json` | `f2e53ea`, clean | `tools/midlook.py checks` |
-| The second setigen draw, on 16 untouched blocks: the same reading as the first | 2 | `data/analysis/independent_injection/second/tables.json` | `ce0096e`, clean (its block records made at `f2e53ea`) | `tools/independent_injection.py tables --draw 2` |
-| turboSETI scored at mid-look on all 306 blocks, each reproducing its published statuses: the gap between the pipelines widens, 5.15 to 5.57 times | 6 | `data/analysis/midlook/turbo_tables.json` | `97287a7`, clean (its block records made at `f2e53ea`, `ce0096e` and `97287a7`, clean) | `tools/midlook.py turbo-tables` |
-| The first setigen run, without smearing: its fast signals planted outside the scoring's tolerance | 2 | `data/analysis/independent_injection/unsmeared/tables.json` | `f2e53ea`, clean (its block records made at `170e531`) | `tools/independent_injection.py tables-first` |
+| The second setigen draw, on 16 untouched blocks: the same reading as the first | 2 | `data/analysis/independent_injection/second/tables.json` | `baf7f5a`, clean (its block records made at `f2e53ea`) | `tools/independent_injection.py tables --draw 2` |
+| turboSETI scored at mid-look on all 306 blocks, each reproducing its published statuses: the gap between the pipelines widens, 5.15 to 5.57 times | 6 | `data/analysis/midlook/turbo_tables.json` | `baf7f5a`, clean (its block records made at `f2e53ea`, `ce0096e` and `97287a7`, clean) | `tools/midlook.py turbo-tables` |
+| The first setigen run, without smearing: its fast signals planted outside the scoring's tolerance | 2 | `data/analysis/independent_injection/unsmeared/tables.json` | `baf7f5a`, clean (its block records made at `170e531`) | `tools/independent_injection.py tables-first` |
