@@ -58,6 +58,14 @@ with a PDF), has the method, tables and limits. In short:
   three times as many, though the gap in share is then wider (+0.47 of the
   signals against +0.31). No single ratio describes it; the report gives
   every tested cut.
+- **The planting does not favour this search.** The same 1,760 signals
+  were planted in 16 blocks of the 2017 session by setigen, an injector
+  this project did not write, by a protocol fixed first
+  ([docs/independent-injection.md](docs/independent-injection.md)). Under
+  it, this search's lead over turboSETI in share found was wider, though
+  as a ratio it fell (at SNR 30, about 7 times as many against 11). A
+  first run planted setigen's fast signals half a spectrum early; that
+  run, and why it was replaced, is in the report.
 - **No signal from another world.** The 2017 sweep's 11 candidates were
   all marked interference or likely interference by the checks
   ([docs/leads/](docs/leads/)); "unexplained" there would mean the end of
