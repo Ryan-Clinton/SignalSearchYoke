@@ -631,8 +631,37 @@ within each spectrum, so its drift is measured coarsely.
 
 | Finding | Severity | Verdict |
 |---|---|---|
-| A6-08: fast strong signals counted lost were detected | high | **measured.** The recovery tables count these 59 as missed; they are detected and measured imprecisely. Recovery at 2 to 4 Hz/s is a lower bound for detection. A scoring that compares at the middle of the look, with tolerances that grow with drift (A6-05), is **planned** as a new version beside the published tables, with a planted-fault test. No frozen verdict uses this scoring. |
+| A6-08: fast strong signals counted lost were detected | high | **measured.** The recovery tables count these 59 as missed; they are detected and measured imprecisely. Recovery at 2 to 4 Hz/s is a lower bound for detection. A scoring that compares at the middle of the look, with tolerances that grow with drift (A6-05), is **measured** as a new version beside the published tables (below, "scoring at the middle of the look"): all 306 blocks reproduce; it adds about 5%, or 12% with scaled tolerances, mostly at 2 to 4 Hz/s. No frozen verdict uses this scoring. |
 | A6-07: shadow refresh | medium | **measured: no effect that counts.** On four crowded 2016 blocks (59, 150, 210, 221), refreshing the scores after shadow picks changes up to 1,142 hits in a block but the false candidates at 30 by one (733 to 732 in block 59) and the planted signals found by none. |
+
+### 6, scoring at the middle of the look, 25 November 2026
+
+**What was run.** The A6-08 scoring was run as a new version beside the
+published tables (`tools/midlook.py`). Every matched block of all three
+sessions was read again, and the same signals planted again; 306 blocks in
+all. A block counted only if it reproduced its published statuses exactly,
+and **all 306 did**. Two scorings were set beside the published one:
+
+- **mid-look:** frequencies compared at the middle of the look, with the
+  published tolerances;
+- **mid-look, scaled:** the same, with tolerances of ±max(6 Hz, 10 s ×
+  drift) and ±max(0.05, 0.08 × drift) Hz/s.
+
+This search, all three ON looks, with "published / mid-look / scaled":
+
+| Session | Signals | At 10 | At 30 |
+|---|---|---|---|
+| KIC 8462852 (2017) | 13,310 | 8,706 / 9,115 / 9,775 | 4,520 / 4,653 / 4,867 |
+| HIP 17147 (2016) | 13,310 | 8,258 / 8,649 / 9,230 | 4,337 / 4,480 / 4,665 |
+| NGC 6946 (2019) | 7,040 | 4,702 / 4,923 / 5,264 | 2,404 / 2,484 / 2,611 |
+
+**Where the gain is.** It is mostly at 2 to 4 Hz/s. At 10 in 2017, 786 of
+2,662 signals there are recovered as published, 986 at mid-look and 1,515
+scaled. Across all signals, mid-look adds about 5% and scaled about 12%.
+
+**What it does not change.** turboSETI was not rescored this way, so the
+pipelines are compared only under the published scoring. No frozen verdict
+uses this scoring.
 
 ## 7. BLISS comparison: 20 November 2026
 
@@ -1372,4 +1401,5 @@ provenance. Results still running are not listed until they finish.
 | Planted signals in control B's cadences: the checks keep them in complete blocks, not in capped ones | 4 | `data/analysis/negative_controls/injection.json` | `ac59d3c`, clean (its block records made at `c7dcf67`; the checkout changed while they ran, in the tables' interval code, docs and the report only) | `tools/control_injection.py tables` |
 | The known-band check stands alone against 298 planted candidates and none of control B's at 30 | 4 | `data/analysis/negative_controls/injection_checks.json` | `ac59d3c`, clean | `tools/control_injection.py checks-left-out` |
 | Planted by setigen with its Doppler smearing: not shown that the project's planting favours this search | 2 | `data/analysis/independent_injection/tables.json` | `0259e41`, clean | `tools/independent_injection.py tables` |
+| Mid-look scoring on all 306 matched blocks, each reproducing its published statuses | 6 | `data/analysis/midlook/tables.json` | `58def5c`, clean (its block records made at `5d50dfd`, `42f9b04` and `58def5c`, clean, and NGC 6946's at `8678e6e` with local changes to setigen's planting and its protocol, which it does not use; `midlook.py` changed between them only in the order it takes blocks) | `tools/midlook.py tables` |
 | The first setigen run, without smearing: its fast signals planted outside the scoring's tolerance | 2 | `data/analysis/independent_injection/unsmeared/tables.json` | `5b4ebe1`, clean (its block records made at `170e531`) | `tools/independent_injection.py tables-first` |
