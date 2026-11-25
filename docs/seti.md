@@ -114,8 +114,13 @@ channels, 2.93 MHz), so a block is read in the fewest pieces. Tabby's
   store kept hits are carried in it as `before_hit_store`.
 - **The next block is fetched while this one is searched**, and the six
   looks are searched side by side. Each block's bytes, fetch and search
-  seconds, CPU time and peak memory go to `data/logs/sweep.log`. A lock
-  file (`data/sweep.lock`) stops two sweeps running at once.
+  seconds, CPU time and peak memory go to `data/logs/sweep-TARGET.log`. A
+  lock file for each target (`data/sweep-TARGET.lock`) stops two sweeps of
+  one target running at once; sweeps of different targets may run side by
+  side, each writing only its own cadence's blocks to the store, which
+  takes one writer at a time. Before 25 November 2026 one lock
+  (`data/sweep.lock`) and one log (`data/logs/sweep.log`) served every
+  target.
 - **The search sums in float32, a tile of the band at a time**: on the
   reference block (below) its hits and cadence labels are the same as the
   old np.roll search's, to the last figure kept, at about 4 s a look

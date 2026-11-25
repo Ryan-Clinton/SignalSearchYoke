@@ -255,9 +255,10 @@ def candidate_verdicts(db, version, n_checks):
 
 def sweep_one(target, session, urls):
     """One chosen cadence swept whole, in the controls' own data folder (run as its own process, whose
-    SSY_DATA is that folder: the choice is passed in, not read)."""
+    SSY_DATA is that folder: the choice is passed in, not read). A cadence another lane is sweeping is waited
+    for, then resumed, which finds it done."""
     import seti
-    return seti.sweep(target, count=10 ** 6, files=(session, list(urls)))
+    return seti.sweep(target, count=10 ** 6, files=(session, list(urls)), wait=True)
 
 
 def run(say=print):

@@ -444,14 +444,23 @@ def sweep_store(target, session):
     return yoke.DATA / "sweeps" / f"{target}-{session}.json"
 
 
-class _Lock:
-    """One sweep at a time: an OS lock on data/sweep.lock, let go when the
-    process ends however it ends."""
+def _lock_name(target):
+    return re.sub(r"[^A-Za-z0-9_.+-]", "_", str(target))
 
-    def __enter__(self):
-        path = yoke.DATA / "sweep.lock"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        self.f = open(path, "a+")
+
+class _Lock:
+    """One sweep of a target at a time: an OS lock on data/sweep-TARGET.lock,
+    let go when the process ends however it ends. Sweeps of different
+    targets may run at once: each writes only its own cadence's blocks, and
+    the store takes one writer at a time (WAL, a 60 s wait). With wait, a
+    held lock is waited for instead of refused."""
+
+    def __init__(self, target, wait=False, say=print, every=60):
+        self.path = yoke.DATA / f"sweep-{_lock_name(target)}.lock"
+        self.wait, self.say, self.every = wait, say, every
+
+    def _take(self):
+        self.f = open(self.path, "a+")
         try:
             if os.name == "nt":
                 import msvcrt
@@ -460,9 +469,22 @@ class _Lock:
             else:
                 import fcntl
                 fcntl.flock(self.f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return True
         except OSError:
             self.f.close()
-            raise yoke.Refusal("INVALID_REQUEST", "Another sweep is running (data/sweep.lock is held).")
+            return False
+
+    def __enter__(self):
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        told = False
+        while not self._take():
+            if not self.wait:
+                raise yoke.Refusal("INVALID_REQUEST", f"Another sweep of this target is running "
+                                                      f"(data/{self.path.name} is held).")
+            if not told:
+                self.say(f"waiting for the other sweep of this target to finish (data/{self.path.name})")
+                told = True
+            time.sleep(self.every)
         return self
 
     def __exit__(self, *_):
@@ -476,11 +498,14 @@ class _Lock:
         self.f.close()
 
 
-def _log():
-    log = logging.getLogger("ssy.sweep")
+def _log(target):
+    # a log of each target's own: sweeps of different targets may run at once, and one rotating file
+    # cannot be shared between processes (its rollover renames a file another has open)
+    log = logging.getLogger(f"ssy.sweep.{_lock_name(target)}")
     if not log.handlers:
         (yoke.DATA / "logs").mkdir(parents=True, exist_ok=True)
-        handler = logging.handlers.RotatingFileHandler(yoke.DATA / "logs" / "sweep.log", maxBytes=1 << 20,
+        handler = logging.handlers.RotatingFileHandler(yoke.DATA / "logs" / f"sweep-{_lock_name(target)}.log",
+                                                       maxBytes=1 << 20,
                                                        backupCount=5, encoding="utf-8")
         handler.setFormatter(logging.Formatter("%(asctime)s %(message)s", "%Y-%m-%dT%H:%M:%S"))
         log.addHandler(handler)
@@ -609,13 +634,14 @@ def export(db, target, session, block_list):
     return record
 
 
-def sweep(target, count=1, say=print, get=requests.get, files=None):
+def sweep(target, count=1, say=print, get=requests.get, files=None, wait=False):
     """Search the target's first whole cadence `count` blocks further than
     the runs before got, keeping every hit of every look and every cadence
     result in the hit store, so the whole band is covered over many runs:
     what is done, and every candidate found so far. The next block is
-    fetched while this one is searched."""
-    with _Lock():
+    fetched while this one is searched. With wait, another sweep of the
+    target is waited for rather than refused."""
+    with _Lock(target, wait, say):
         db = store.connect()
         session, urls, scans = _cadence_files(db, target, get, say, files)
         indexes = reading.prepare(urls)
@@ -636,7 +662,7 @@ def sweep(target, count=1, say=print, get=requests.get, files=None):
         todo = (older + [k for k in range(len(block_list)) if k not in done and k not in older])[:count]
         run_id = store.start_run(db, f"sweep {target} --blocks {count} --threads {reading.threads()}", search_params(),
                                  SEARCH_VERSION)
-        log = _log()
+        log = _log(target)
 
         def fetch(k):
             started = time.monotonic()

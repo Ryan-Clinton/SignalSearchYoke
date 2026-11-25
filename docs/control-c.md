@@ -100,3 +100,11 @@ that result is reported as descriptive only.
     given.
 
   The rule's criteria and limits are unchanged.
+- 25 November 2026, after the first cadence's sweep, with none of the
+  sweep's tables, checks or planted signals made: the remaining three
+  cadences are swept side by side on lanes, not one after another. The
+  sweep's lock is now one a target, not one a data folder, and the queue's
+  `run` waits for a cadence another lane is sweeping rather than failing.
+  The search, its parameters, the cadences, the store and every rule above
+  are unchanged; each block is searched and kept exactly as before. Only
+  the wall time changes.
