@@ -39,6 +39,11 @@ NEUTRAL = {
     "7b9317e": "record checks, block claims and turboSETI's mid-look scoring added beside the tools' block work, which "
                "is unchanged; setigen_plant.py checks the frame's axis more strictly, refusing only, not planting "
                "differently",
+    "177861f": "independent_injection.py: a third draw, of another session, and block claims, beside the first two "
+               "draws' block work; the project's planting's results written by own_status, the rule they were written "
+               "by before; records carry each signal's place from now on",
+    "dda5abb": "midlook.py: turbo-tables adds paired intervals from the same block records; each block's work "
+               "unchanged",
 }
 
 # Records made with local changes, and what those changes were.
