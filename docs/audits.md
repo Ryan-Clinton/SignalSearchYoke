@@ -328,6 +328,21 @@ integrated over a spectrum, mends this.
 | SS-30: two workers could take the same block | medium | **built.** `records.claim` takes a block with an exclusive create. A claim whose process has ended is taken over. Writes were already whole or nothing (`yoke.write`), so only time was at stake. |
 | SS-31: the tests did not run the real injector | medium | **built.** `tests/test_setigen_plant.py` runs in setigen's environment and is skipped where it is absent. It covers both frequency orders, drift sign, placement with and without smearing, power, signal order, signals alone and together, bounding, and the axis check. It found that a drifting tone carries about 91% of a still one's power, from setigen's truncated profile; this is written into the protocol as a limit. |
 
+**The second draw** (`independent_injection.py tables --draw 2`, run after
+its blocks were fixed in the protocol): 16 untouched blocks, setigen with
+its Doppler smearing.
+
+| Planting | This search, S/N 10 / 30 | turboSETI, S/N 10 / 30 |
+|---|---|---|
+| This project's | 1,180 / 599 | 217 / 53 |
+| setigen's | 1,385 / 903 | 361 / 117 |
+
+The difference is −0.035 at S/N 10 (−0.054 to −0.013) and −0.136 at 30
+(−0.177 to −0.105). **The same reading as the first draw**: it is not shown
+that the project's planting favours this search, and this search's lead in
+share is wider under setigen's. The corrected protocol now holds on blocks
+chosen before it ran.
+
 **Chance matches under each scoring** (`midlook.py checks`,
 `data/analysis/midlook/association_checks.json`; from the records alone):
 
@@ -1450,4 +1465,5 @@ provenance. Results still running are not listed until they finish.
 | Planted by setigen with its Doppler smearing: not shown that the project's planting favours this search | 2 | `data/analysis/independent_injection/tables.json` | `f2e53ea`, clean (its block records made at `0259e41`) | `tools/independent_injection.py tables` |
 | Mid-look scoring on all 306 matched blocks, each reproducing its published statuses | 6 | `data/analysis/midlook/tables.json` | `f2e53ea`, clean (its block records made at `5d50dfd`, `42f9b04` and `58def5c`, clean, and NGC 6946's at `8678e6e` with local changes to setigen's planting and its protocol, which it does not use; `midlook.py` changed between them only in the order it takes blocks) | `tools/midlook.py tables` |
 | No chance match under any scoring, at the signals or shifted, and no two signals within each other's tolerances, over 306 blocks | 6 | `data/analysis/midlook/association_checks.json` | `f2e53ea`, clean | `tools/midlook.py checks` |
+| The second setigen draw, on 16 untouched blocks: the same reading as the first | 2 | `data/analysis/independent_injection/second/tables.json` | `ce0096e`, clean (its block records made at `f2e53ea`) | `tools/independent_injection.py tables --draw 2` |
 | The first setigen run, without smearing: its fast signals planted outside the scoring's tolerance | 2 | `data/analysis/independent_injection/unsmeared/tables.json` | `f2e53ea`, clean (its block records made at `170e531`) | `tools/independent_injection.py tables-first` |
