@@ -268,6 +268,6 @@ The observations are from the Breakthrough Listen Open Data Archive (Lebofsky et
 - data/analysis/negative_controls/package_recheck.json: written 2026-11-24T03:24:25Z, commit 6a50490
 - data/analysis/negative_controls/injection.json: written 2026-11-24T09:45:54Z, commit ac59d3c
 - data/analysis/negative_controls/injection_checks.json: written 2026-11-24T09:45:59Z, commit ac59d3c
-- data/analysis/independent_injection/tables.json: written 2026-11-24T20:21:13Z, commit 0259e41
-- data/analysis/independent_injection/unsmeared/tables.json: written 2026-11-24T20:23:56Z, commit 5b4ebe1
-- data/analysis/midlook/tables.json: written 2026-11-25T02:05:18Z, commit 58def5c
+- data/analysis/independent_injection/tables.json: written 2026-11-25T02:42:21Z, commit f2e53ea
+- data/analysis/independent_injection/unsmeared/tables.json: written 2026-11-25T02:42:22Z, commit f2e53ea
+- data/analysis/midlook/tables.json: written 2026-11-25T02:41:59Z, commit f2e53ea
