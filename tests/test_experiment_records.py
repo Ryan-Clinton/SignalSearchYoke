@@ -39,6 +39,20 @@ class Code(unittest.TestCase):
         self.assertTrue(records.code_problems({"git_commit": before}, neutral={}))
         self.assertEqual(records.code_problems({"git_commit": before}, neutral={last: "listed"}), [])
 
+    def test_history_read_as_of_a_named_commit_sees_no_later_change(self):
+        # tools/evidence.py's reproduce: a package's tree has no history, so the clone and its commit are named
+        last = _git("log", "-1", "--format=%h", "--abbrev=7", "--", *records.SCIENCE)
+        before = _git("rev-parse", f"{last}^")
+        keep = records.HISTORY_HEAD
+        try:
+            records.HISTORY_HEAD = before
+            records._changed_since.cache_clear()
+            self.assertEqual(records.code_problems({"git_commit": before}, neutral={}), [])
+        finally:
+            records.HISTORY_HEAD = keep
+            records._changed_since.cache_clear()
+        self.assertTrue(records.code_problems({"git_commit": before}, neutral={}))
+
     def test_every_listed_commit_exists(self):
         for c in list(records.NEUTRAL) + list(records.DIRTY_OK):
             self.assertTrue(_git("rev-parse", "--verify", "--quiet", f"{c}^{{commit}}"), c)

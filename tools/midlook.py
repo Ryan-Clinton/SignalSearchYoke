@@ -12,7 +12,9 @@ this search; no frozen verdict uses it.
                                            unplanted blocks' events, close pairs of signals, and the frequency and
                                            drift errors apart (association_checks.json)
     python tools/midlook.py turbo TARGET [--from-end]   turboSETI on the same blocks, scored the same three ways
-    python tools/midlook.py turbo-tables   both pipelines under the three scorings (turbo_tables.json)
+    python tools/midlook.py turbo-tables   both pipelines under the three scorings (turbo_tables.json), with each
+                                           session's paired difference in share and its change from the published
+                                           scoring, a bootstrap over blocks
 
 Each block plants the same signals as the matched run (the same seed), and the published scoring is recomputed
 from the new search: a block counts only if it reproduces the record's published statuses exactly.
@@ -346,6 +348,30 @@ def turbo_run(target, say=print, from_end=False):
             f"{n('mid_scaled')}; reproduced {got['published_reproduced']}", flush=True)
 
 
+BOOT, BOOT_SEED = 4000, 20261125
+
+
+def paired(rows, boot=BOOT, seed=BOOT_SEED):
+    """rows: per block, {key: [this search found, turboSETI found]} with the block's signal count under "signals".
+    For each scoring key, this search's share found minus turboSETI's over the blocks, and for each key but the
+    published one, how far that difference moved from the published scoring's; each with a 95% interval from the
+    same blocks drawn again (signals in a block share its noise and interference)."""
+    import numpy as np
+    n = np.array([r["signals"] for r in rows], float)
+    d = {k: np.array([r[k][0] - r[k][1] for r in rows], float) for k in KEYS}
+    rng = np.random.default_rng(seed)
+    idx = [rng.integers(0, len(rows), len(rows)) for _ in range(boot)]
+
+    def cell(v):
+        got = [v[i].sum() / n[i].sum() for i in idx]
+        lo, hi = np.percentile(got, [2.5, 97.5])
+        return {"difference": round(float(v.sum() / n.sum()), 4), "interval": [round(float(lo), 4), round(float(hi), 4)]}
+    out = {k: cell(d[k]) for k in KEYS}
+    out["change_from_published"] = {k: cell(d[k] - d["published"]) for k in KEYS if k != "published"}
+    out["how"] = f"block bootstrap, {boot} draws, seed {seed}"
+    return out
+
+
 def turbo_tables(say=print):
     """Both pipelines' recovery under the three scorings, over the blocks whose records are whole for both."""
     out = {"sessions": {}, "kind": "measured"}
@@ -354,6 +380,7 @@ def turbo_tables(say=print):
                 for p in sorted(_base(target).glob("block_*.json"))}
         cell = {"of": len(want), "blocks": 0}
         by = {c: {} for c in CUTS}
+        per_block = {c: [] for c in CUTS}
         problems = []
         for k, m in want.items():
             tp, op = TURBO / target / f"block_{k:03d}.json", OUT / target / f"block_{k:03d}.json"
@@ -366,6 +393,9 @@ def turbo_tables(say=print):
                 continue
             cell["blocks"] += 1
             for c in CUTS:
+                per_block[c].append({"signals": len(tr["tones"]), **{key: [
+                    sum(o["at"][c][key] == "recovered" for o in orec["tones"]),
+                    sum(t["at"][c][key] == "recovered" for t in tr["tones"])] for key in KEYS}})
                 for t, o in zip(tr["tones"], orec["tones"]):
                     b = by[c].setdefault(str(t["bin"]), {"signals": 0, **{f"{who}_{key}": 0 for who in
                                                                           ("ours", "turboseti") for key in KEYS}})
@@ -378,7 +408,8 @@ def turbo_tables(say=print):
         for c in CUTS:
             rows = dict(sorted(by[c].items()))
             keys = next(iter(rows.values()), {}).keys()
-            cell[f"at_{c}"] = {"by_drift_bin": rows, "all": {key: sum(v[key] for v in rows.values()) for key in keys}}
+            cell[f"at_{c}"] = {"by_drift_bin": rows, "all": {key: sum(v[key] for v in rows.values()) for key in keys},
+                               "paired": paired(per_block[c]) if per_block[c] else None}
         out["sessions"][target] = cell
         say(f"{target}: {cell['blocks']} of {cell['of']} blocks; at 10 {cell['at_10']['all']}")
     yoke.write(OUT / "turbo_tables.json", out, indent=1, stamp=True)

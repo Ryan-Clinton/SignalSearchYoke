@@ -126,3 +126,29 @@ class TurboScoring(unittest.TestCase):
                                   ([self.event()], [], self.hits(snr=5.0)), ([self.event()], [], self.hits(9.0))):
             self.assertEqual(ml.turbo_status(self.T_F, 0.5, kept, plain, hits, "10", 0.0, tol),
                              self.published(kept, plain, hits))
+
+
+class Paired(unittest.TestCase):
+    """paired: each session's difference in share between the pipelines, and its change from the published
+    scoring, by block."""
+
+    def rows(self):
+        # 20 blocks of 10 signals: this search finds 6, 7, 8 under the three scorings, turboSETI 2, 2, 3
+        return [{"signals": 10, "published": [6, 2], "mid": [7, 2], "mid_scaled": [8, 3]} for _ in range(20)]
+
+    def test_the_differences_and_changes_are_the_shares(self):
+        got = ml.paired(self.rows(), boot=200)
+        self.assertEqual([got[k]["difference"] for k in ml.KEYS], [0.4, 0.5, 0.5])
+        self.assertEqual(got["change_from_published"]["mid"]["difference"], 0.1)
+        self.assertEqual(got["change_from_published"]["mid_scaled"]["difference"], 0.1)
+        self.assertEqual(got["mid"]["interval"], [0.5, 0.5])          # every block alike: no spread
+
+    def test_blocks_that_differ_give_an_interval_around_the_difference(self):
+        rows = self.rows()
+        for i in range(0, 20, 2):
+            rows[i] = dict(rows[i], mid=[6, 2])                            # half the blocks gain nothing
+        got = ml.paired(rows, boot=500)["change_from_published"]["mid"]
+        self.assertAlmostEqual(got["difference"], 0.05)
+        self.assertLess(got["interval"][0], 0.05)
+        self.assertGreater(got["interval"][1], 0.05)
+        self.assertGreaterEqual(got["interval"][0], 0.0)

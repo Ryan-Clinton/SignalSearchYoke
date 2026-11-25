@@ -48,10 +48,16 @@ DIRTY_OK = {
 }
 
 
+# Where the code's history is read. A tree unpacked from git archive has none: tools/evidence.py's reproduce names
+# the clone it came from (SSY_HISTORY) and the commit it holds (SSY_HISTORY_HEAD), which stands for HEAD.
+HISTORY = os.environ.get("SSY_HISTORY") or str(ROOT)
+HISTORY_HEAD = os.environ.get("SSY_HISTORY_HEAD") or "HEAD"
+
+
 @functools.lru_cache(maxsize=None)
 def _changed_since(commit, files):
-    got = subprocess.run(["git", "-C", str(ROOT), "log", "--format=%h", "--abbrev=7", f"{commit}..HEAD", "--", *files],
-                         capture_output=True, text=True)
+    got = subprocess.run(["git", "-C", HISTORY, "log", "--format=%h", "--abbrev=7", f"{commit}..{HISTORY_HEAD}", "--",
+                          *files], capture_output=True, text=True)
     if got.returncode:
         return None
     return tuple(c[:7] for c in got.stdout.split())

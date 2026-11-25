@@ -188,6 +188,60 @@ def control_section(ctab, csum, inj, replay, recheck, checks_left_out=None):
     return L
 
 
+CUTS_REPORTED = ("10", "30")
+KEYS = ("published", "mid", "mid_scaled")
+SESSIONS = ("KIC8462852", "HIP17147", "NGC6946")
+SIGNALS_A_BLOCK = 110
+
+
+def published_totals(target):
+    """Each cut's planted signals found by both pipelines in the matched records, counted as the matched tables
+    count them: this search in all three ON looks, turboSETI in all three and three ON hits."""
+    folder = next(f for f in (DATA / "matched").glob(f"{target}-*") if f.is_dir())
+    got = {c: {"signals": 0, "ours": 0, "turboseti": 0} for c in CUTS_REPORTED}
+    for p in folder.glob("block_*.json"):
+        for w_ in json.loads(p.read_text(encoding="utf-8"))["tones"]:
+            for c in CUTS_REPORTED:
+                got[c]["signals"] += 1
+                got[c]["ours"] += w_["ours"][c]["three_looks"] == "recovered"
+                got[c]["turboseti"] += (w_["turboseti"][c]["three_looks"] == "recovered"
+                                        and w_["turboseti_on_hits"][c] == 3)
+    return got
+
+
+def rescoring_problems(mid, tt, ac):
+    """Why the mid-look tables cannot be reported: the sessions, the blocks, the signals, each pipeline's published
+    totals against the matched records', and this search's totals the same in both tables."""
+    out = []
+    for name, d in (("mid-look", mid), ("turboSETI's mid-look", tt), ("chance matches", ac)):
+        if tuple(sorted(d["sessions"])) != tuple(sorted(SESSIONS)):
+            out.append(f"{name}: sessions {sorted(d['sessions'])}")
+    if out:
+        return out
+    for t in SESSIONS:
+        m, x = mid["sessions"][t], tt["sessions"][t]
+        if m["blocks"] != m["of"] or m["not_reproduced"] or x["blocks"] != x["of"] or x["blocks"] != m["blocks"]:
+            out.append(f"{t}: blocks {m['blocks']} of {m['of']}, turboSETI's {x['blocks']} of {x['of']}")
+            continue
+        pub = published_totals(t)
+        for c in CUTS_REPORTED:
+            a, b = m[f"at_{c}"]["all"], x[f"at_{c}"]["all"]
+            if not a["signals"] == b["signals"] == pub[c]["signals"] == SIGNALS_A_BLOCK * m["blocks"]:
+                out.append(f"{t} at {c}: signals {a['signals']}, {b['signals']}, matched {pub[c]['signals']}")
+            if (a["published"], b["ours_published"], b["turboseti_published"]) != (
+                    pub[c]["ours"], pub[c]["ours"], pub[c]["turboseti"]):
+                out.append(f"{t} at {c}: published totals differ from the matched records'")
+            if any(a[k] != b[f"ours_{k}"] for k in KEYS):
+                out.append(f"{t} at {c}: this search's totals differ between the two tables")
+            if not x[f"at_{c}"].get("paired"):
+                out.append(f"{t} at {c}: no paired intervals")
+            for k in KEYS:
+                if ac["sessions"][t][c][k]["at_signal"][1] != pub[c]["signals"]:
+                    out.append(f"{t} at {c}: the chance-match test covers {ac['sessions'][t][c][k]['at_signal'][1]} "
+                               "signals")
+    return out
+
+
 DRIFT_LABELS = ("0 to 0.15", "0.15 to 0.5", "0.5 to 1", "1 to 2", "2 to 4")
 
 
@@ -293,12 +347,15 @@ def injector_section(ii, first, second):
          if second["cuts"]["10"]["reading"].startswith("the project") else
          "does not show that this project's planting favours this search"
          + (", and the gap is again wider with setigen's planting." if d2["interval"][1] < 0 else "."))
-      + f" At S/N 30 its difference is {second['cuts']['30']['own_minus_setigen_advantage']['difference']:+.3f}.")
+      + f" At S/N 30 its difference is {second['cuts']['30']['own_minus_setigen_advantage']['difference']:+.3f}. "
+      "Both draws come from one observation, the 2017 session: they are separate blocks, not separate observations. "
+      "A third draw, of 16 blocks of the 2016 session, whose band is crowded with satellite signals, was fixed in the "
+      "protocol before it ran and is running.")
     w("")
     return L
 
 
-def midlook_section(ml, tt):
+def midlook_section(ml, tt, ac):
     L = []
     w = L.append
     w("## Scoring at the middle of the look")
@@ -322,6 +379,22 @@ def midlook_section(ml, tt):
         w("Most of the difference is at 2 to 4 Hz/s (" + "; ".join(parts) + "). The growing tolerances are "
           "±max(6 Hz, 10 s × drift) and ±max(0.05, 0.08 × drift) Hz/s. No frozen verdict uses these scorings.")
         w("")
+    at_sig = [sum(ac["sessions"][t][c][k]["at_signal"][i] for t in ac["sessions"] for c in CUTS_REPORTED for k in KEYS)
+              for i in (0, 1)]
+    shifted = [sum(ac["sessions"][t][c][k]["shifted"][i] for t in ac["sessions"] for c in CUTS_REPORTED for k in KEYS)
+               for i in (0, 1)]
+    pairs = sum(ac["sessions"][t][c][k]["close_pairs"] for t in ac["sessions"] for c in CUTS_REPORTED for k in KEYS)
+    w("Wider tolerances could credit a signal with an event that was there anyway. Each signal's place was tested "
+      "against the unplanted block's own events, under all three scorings at S/N 10 and 30, at the signal and at "
+      "eight places shifted by 1.5 to 12 kHz (the signals are about 26 kHz apart): "
+      f"{n(at_sig[0])} matches in {n(at_sig[1])} tests at the signals and {n(shifted[0])} in {n(shifted[1])} shifted. "
+      f"{'No' if pairs == 0 else n(pairs)} two signals of a block lie within twice the widest tolerances of each "
+      "other, so no event can be credited to two. The test does find a match where there is one: a signal placed on "
+      "an unplanted event matched it in 150 of 243 cases, the rest being events whose looks disagree in drift by more "
+      "than the tolerance. Its limits: it is of this search's events, not turboSETI's; it tests the unplanted "
+      "background, not an event a planted signal itself creates beside the true one; and its reach is these 306 "
+      "blocks (docs/audits.md in the repository has the errors behind it).")
+    w("")
     w("turboSETI's hits on the same blocks were scored the same three ways. It reports each hit's frequency at the "
       "start of its look, so half a look's drift is added to compare at the middle. Recovery at S/N 10, this search "
       "then turboSETI:")
@@ -337,9 +410,23 @@ def midlook_section(ml, tt):
     tot = {f"{who}_{k}": sum(s["at_10"]["all"][f"{who}_{k}"] for s in tt["sessions"].values())
            for who in ("ours", "turboseti") for k in keys}
     ratio = {k: tot[f"ours_{k}"] / max(tot[f"turboseti_{k}"], 1) for k in keys}
+    w("Paired by block, this search's share found minus turboSETI's, and how far that moved from the published "
+      "scoring (95% intervals from the session's blocks drawn again):")
+    w("")
+    w("| session | as published | at mid-look | change | mid-look, growing tolerances | change |")
+    w("|---|---|---|---|---|---|")
+    for t, s in tt["sessions"].items():
+        pr = s["at_10"]["paired"]
+        ch = pr["change_from_published"]
+        cell = lambda x: f"{x['difference']:+.3f} ({x['interval'][0]:+.3f} to {x['interval'][1]:+.3f})"  # noqa: E731
+        w(f"| {t} | {cell(pr['published'])} | {cell(pr['mid'])} | {cell(ch['mid'])} | {cell(pr['mid_scaled'])} | "
+          f"{cell(ch['mid_scaled'])} |")
+    w("")
     w(f"Over the three sessions this search found {ratio['published']:.2f} times as many signals as turboSETI under "
       f"the published scoring, {ratio['mid']:.2f} times at mid-look and {ratio['mid_scaled']:.2f} times with the "
-      "growing tolerances. "
+      "growing tolerances. These are counts of planted signals recovered under these conditions, not sensitivities: "
+      f"{ratio['mid_scaled']:.2f} times as many found does not mean signals {ratio['mid_scaled']:.2f} times weaker "
+      "are found. "
       + ("Scoring at the middle of the look does not narrow the gap between the pipelines: it gains this search "
          "more than turboSETI." if ratio["mid_scaled"] >= ratio["published"] else
          "Scoring at the middle of the look narrows the gap between the pipelines, so the published comparison "
@@ -581,19 +668,23 @@ def main():
              "indep_first": DATA / "analysis" / "independent_injection" / "unsmeared" / "tables.json",
              "indep_second": DATA / "analysis" / "independent_injection" / "second" / "tables.json",
              "mid": DATA / "analysis" / "midlook" / "tables.json",
-             "turbo_mid": DATA / "analysis" / "midlook" / "turbo_tables.json"}
+             "turbo_mid": DATA / "analysis" / "midlook" / "turbo_tables.json",
+             "assoc": DATA / "analysis" / "midlook" / "association_checks.json"}
     for p in later.values():
         if not p.exists():
             refuse(f"version {VERSION} reports {p}, which is missing")
-    cleft, indep, indep_first, indep_second, mid, turbo_mid = (json.loads(p.read_text(encoding="utf-8")) for p in later.values())
+    cleft, indep, indep_first, indep_second, mid, turbo_mid, assoc = (json.loads(p.read_text(encoding="utf-8")) for p in later.values())
     if indep.get("smearing") is not True or indep_first.get("smearing") is not False:
         refuse("the independent injector's tables are not the smeared run and the first run")
     if indep_second.get("smearing") is not True or indep_second.get("draw") != 2:
         refuse("the independent injector's second tables are not the second draw, smeared")
-    if set(turbo_mid["sessions"]) != set(mid["sessions"]) or any(
-            s["blocks"] != s["of"] or s["blocks"] != mid["sessions"][t]["blocks"]
-            for t, s in turbo_mid["sessions"].items()):
-        refuse("turboSETI's mid-look rescoring does not cover every block")
+    for name, t in (("first", indep_first), ("smeared", indep), ("second", indep_second)):
+        if (t["blocks"], t["signals"]) != (16, 16 * SIGNALS_A_BLOCK) or any(
+                t["cuts"][c][h]["signals"] != t["signals"] for c in CUTS_REPORTED for h in ("own", "setigen")):
+            refuse(f"the independent injector's {name} tables are not 16 blocks of {SIGNALS_A_BLOCK} signals")
+    bad = rescoring_problems(mid, turbo_mid, assoc)
+    if bad:
+        refuse("; ".join(bad[:5]))
     if any(s["blocks"] != s["of"] for s in mid["sessions"].values()) or len(mid["sessions"]) != 3:
         refuse("the mid-look rescoring is not complete for all three sessions")
 
@@ -931,7 +1022,7 @@ def main():
           "frozen rule records that rather than adapting it.")
     w("")
     L.extend(injector_section(indep, indep_first, indep_second))
-    L.extend(midlook_section(mid, turbo_mid))
+    L.extend(midlook_section(mid, turbo_mid, assoc))
     L.extend(control_section(ctab, csum, cinj, creplay, crecheck, cleft))
     w("## What the code audits found that bears on these results")
     w("")
@@ -1016,7 +1107,8 @@ def main():
                     ("data/analysis/independent_injection/unsmeared/tables.json", indep_first),
                     ("data/analysis/independent_injection/second/tables.json", indep_second),
                     ("data/analysis/midlook/tables.json", mid),
-                    ("data/analysis/midlook/turbo_tables.json", turbo_mid)):
+                    ("data/analysis/midlook/turbo_tables.json", turbo_mid),
+                    ("data/analysis/midlook/association_checks.json", assoc)):
         if r:
             pv = r.get("provenance", {})
             w(f"- {name}: written {pv.get('created_utc')}, commit {str(pv.get('git_commit', ''))[:7]}")

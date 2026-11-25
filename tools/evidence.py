@@ -69,7 +69,10 @@ STORE = "ssy.sqlite"
 TABLES = (("matched.py", "tables", "KIC8462852"), ("matched_tables.py", "bliss", "KIC8462852"),
           ("curved_pass.py", "tables", "KIC8462852"), ("curved_pass.py", "orbit-tables", "KIC8462852"),
           ("curved_pass.py", "vet-tables", "KIC8462852"), ("curved_pass.py", "turboseti-tables", "KIC8462852"),
-          ("tools/operating_points.py", ), ("tools/report.py",))
+          ("tools/operating_points.py", ),
+          ("tools/independent_injection.py", "tables"), ("tools/independent_injection.py", "tables", "--draw", "2"),
+          ("tools/independent_injection.py", "tables-first"), ("tools/midlook.py", "tables"),
+          ("tools/midlook.py", "checks"), ("tools/midlook.py", "turbo-tables"), ("tools/report.py",))
 # What may differ when a table is made again, and nothing else: when it was written, by which commit, and
 # the machine's Python and libraries (a record's written_utc, and in its provenance GENERATED); in a page,
 # the UTC time on its "written by" line and the time and commit after "written" or "finished" in the
@@ -86,6 +89,12 @@ EXPECTED = {
     ("curved_pass.py", "vet-tables", "KIC8462852"): ("data/measurements/curved-pass-vetting.json",),
     ("curved_pass.py", "turboseti-tables", "KIC8462852"): ("data/measurements/curved-turboseti-blocks.json",),
     ("tools/operating_points.py",): ("data/analysis/operating_points.json",),
+    ("tools/independent_injection.py", "tables"): ("data/analysis/independent_injection/tables.json",),
+    ("tools/independent_injection.py", "tables", "--draw", "2"): ("data/analysis/independent_injection/second/tables.json",),
+    ("tools/independent_injection.py", "tables-first"): ("data/analysis/independent_injection/unsmeared/tables.json",),
+    ("tools/midlook.py", "tables"): ("data/analysis/midlook/tables.json",),
+    ("tools/midlook.py", "checks"): ("data/analysis/midlook/association_checks.json",),
+    ("tools/midlook.py", "turbo-tables"): ("data/analysis/midlook/turbo_tables.json",),
     ("tools/report.py",): ("docs/report/recovery.svg", "docs/report/report.md"),
 }
 STAMP_KEYS = {"written_utc"}
@@ -417,7 +426,9 @@ def reproduce(path, keep=None, say=print):
     before = _snapshot(*watched)
     for p in before:                       # every output old, so what the tables write shows
         os.utime(p, (OLD, OLD))
-    env = dict(os.environ, SSY_DATA=str(data), PYTHONDONTWRITEBYTECODE="1")
+    # the record checks (tools/records.py) read the code's history from this clone, as of the package's commit
+    env = dict(os.environ, SSY_DATA=str(data), PYTHONDONTWRITEBYTECODE="1", SSY_HISTORY=str(ROOT),
+               SSY_HISTORY_HEAD=commit)
     touched, seen = {}, set()
     for cmd in TABLES:
         r = subprocess.run([sys.executable, *cmd], cwd=tree, env=env, capture_output=True, text=True)
