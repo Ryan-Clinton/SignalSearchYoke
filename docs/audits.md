@@ -370,11 +370,25 @@ chosen before it ran.
   So the scaled tolerances (40 Hz and 0.32 Hz/s at 4 Hz/s) are far wider
   than these errors. The closest hit is the best of a signal's looks, not
   its worst, and the failures that mid-look mends lie in the worst look.
-- **turboSETI scored the same way** (`midlook.py turbo`, queued): the same
-  306 blocks planted again and searched by turboSETI. Each block counts
-  only if it reproduces turboSETI's published statuses exactly. The
-  pipelines are compared under mid-look only once that is done. Until
-  then, mid-look stays a scoring version for this search alone.
+- **turboSETI scored the same way** (`midlook.py turbo` and
+  `turbo-tables`, `data/analysis/midlook/turbo_tables.json`): the same
+  306 blocks planted again and searched by turboSETI, its frequency moved
+  from the start of its look to the middle by half a look's drift. All 306
+  reproduce turboSETI's published statuses exactly. At S/N 10, over the
+  three sessions:
+
+  | scoring | this search | turboSETI | ratio |
+  |---|---|---|---|
+  | as published | 21,666 | 4,211 | 5.15 |
+  | at mid-look | 22,687 | 4,290 | 5.29 |
+  | mid-look, scaled tolerances | 24,269 | 4,356 | 5.57 |
+
+  of 33,660 signals. turboSETI gains 3% from the rescoring, this search
+  12%, so the published comparison does not overstate the gap between the
+  pipelines; it understates it slightly. A Windows resource error
+  (WinError 1450) stopped one lane after 34 of NGC 6946's 64 blocks; the
+  other 30 were run again from the same code and every record was checked
+  before the tables were written.
 
 ## 3. turboSETI comparison fairness: 20 November 2026
 
@@ -1466,4 +1480,5 @@ provenance. Results still running are not listed until they finish.
 | Mid-look scoring on all 306 matched blocks, each reproducing its published statuses | 6 | `data/analysis/midlook/tables.json` | `f2e53ea`, clean (its block records made at `5d50dfd`, `42f9b04` and `58def5c`, clean, and NGC 6946's at `8678e6e` with local changes to setigen's planting and its protocol, which it does not use; `midlook.py` changed between them only in the order it takes blocks) | `tools/midlook.py tables` |
 | No chance match under any scoring, at the signals or shifted, and no two signals within each other's tolerances, over 306 blocks | 6 | `data/analysis/midlook/association_checks.json` | `f2e53ea`, clean | `tools/midlook.py checks` |
 | The second setigen draw, on 16 untouched blocks: the same reading as the first | 2 | `data/analysis/independent_injection/second/tables.json` | `ce0096e`, clean (its block records made at `f2e53ea`) | `tools/independent_injection.py tables --draw 2` |
+| turboSETI scored at mid-look on all 306 blocks, each reproducing its published statuses: the gap between the pipelines widens, 5.15 to 5.57 times | 6 | `data/analysis/midlook/turbo_tables.json` | `97287a7`, clean (its block records made at `f2e53ea`, `ce0096e` and `97287a7`, clean) | `tools/midlook.py turbo-tables` |
 | The first setigen run, without smearing: its fast signals planted outside the scoring's tolerance | 2 | `data/analysis/independent_injection/unsmeared/tables.json` | `f2e53ea`, clean (its block records made at `170e531`) | `tools/independent_injection.py tables-first` |

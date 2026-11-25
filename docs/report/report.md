@@ -1,6 +1,6 @@
 # Comparing radio-signal searches on Breakthrough Listen data
 
-Ryan Clinton. Version 1.8, 2026-11-25.
+Ryan Clinton. Version 1.9, 2026-11-25.
 
 ## Summary
 
@@ -14,7 +14,7 @@ On a third session, chosen by a rule from the archive's metadata and fixed in ad
 
 These are three sessions from one telescope. They do not show better sensitivity in general.
 
-Planted instead by setigen, an injector this project did not write, the same 1,760 signals in 16 blocks of the 2017 session were found 1,355 times by this search and 367 by turboSETI at S/N 10, against 1,156 and 228 with this project's planting. The gap between them in share found was 0.034 wider with setigen's planting (0.020 to 0.049), so it is not shown that this project's planting favours this search.
+Planted instead by setigen, an injector this project did not write, the same 1,760 signals in 16 blocks of the 2017 session were found 1,355 times by this search and 367 by turboSETI at S/N 10, against 1,156 and 228 with this project's planting. The gap between them in share found was 0.034 wider with setigen's planting (0.020 to 0.049), so it is not shown that this project's planting favours this search. A second draw of 16 other blocks, fixed before it ran, gave a gap 0.035 wider (0.013 to 0.054).
 
 Four real cadences of other targets, chosen by a rule fixed beforehand and searched whole, gave 0.029 to 0.31 false candidates a block at S/N 30 (0.125 over all four, bunched in 18 of 1,267 blocks), and the checks left none unexplained. Signals planted in the same cadences show the checks keeping most real-looking signals in complete blocks, but not in blocks at the hit limit, which lie mostly in listed interference bands.
 
@@ -156,6 +156,17 @@ At S/N 10, this search's share found minus turboSETI's, with this project's plan
 
 A first run of the same 16 blocks used setigen's default, which puts each spectrum's tone where it is at the spectrum's start rather than spreading it over the channels it crosses. Both pipelines are scored against the middle of the spectrum, within 6 Hz, so setigen's fast signals sat outside the tolerance: from 1 to 4 Hz/s this search found 10 and turboSETI 0, against 297 and 6 with this project's planting. That run gave a difference of +0.317 (+0.304 to +0.332). The cause was measured on synthetic data, the change and the first run's records are logged in the protocol (docs/independent-injection.md), and nothing else was changed.
 
+Because that change was made after the first run had been seen, a second draw of 16 other blocks (again half crowded, half clean, none of the first draw's) was fixed in the protocol, with its seed, before it ran, and planted with the same setting. Both draws at S/N 10:
+
+| draw | blocks | planting | this search | turboSETI | of | difference (95% interval) |
+|---|---|---|---|---|---|---|
+| first | 16 | this project's | 1,156 | 228 | 1,760 | -0.034 (-0.049 to -0.020) |
+| first | 16 | setigen's | 1,355 | 367 | 1,760 |  |
+| second | 16 | this project's | 1,180 | 217 | 1,760 | -0.035 (-0.054 to -0.013) |
+| second | 16 | setigen's | 1,385 | 361 | 1,760 |  |
+
+By the same reading, the second draw does not show that this project's planting favours this search, and the gap is again wider with setigen's planting. At S/N 30 its difference is -0.136.
+
 ## Scoring at the middle of the look
 
 A fast drifting signal's frequency is measured where the search's track fits it best, near the middle of a look, so a small error in drift moves the frequency at the look's start by that error times half the look. The published scoring compares at the start, and counts some detected signals as missed. The matched blocks were read and planted again with the same signals; a block counts only if it reproduces its published result exactly. This search's recovery at S/N 10, three ON looks:
@@ -166,7 +177,17 @@ A fast drifting signal's frequency is measured where the search's track fits it 
 | HIP17147 | 121 of 121 | 8,258 | 8,649 | 9,230 |
 | NGC6946 | 64 of 64 | 4,702 | 4,923 | 5,264 |
 
-Most of the difference is at 2 to 4 Hz/s (KIC8462852 786 to 1,515 of 2,662; HIP17147 751 to 1,404 of 2,662; NGC6946 438 to 815 of 1,408). The growing tolerances are ±max(6 Hz, 10 s × drift) and ±max(0.05, 0.08 × drift) Hz/s. This is a scoring version for this search alone: turboSETI's recovery was not rescored this way, so the pipelines are compared only under the published scoring above, and no frozen verdict uses this one.
+Most of the difference is at 2 to 4 Hz/s (KIC8462852 786 to 1,515 of 2,662; HIP17147 751 to 1,404 of 2,662; NGC6946 438 to 815 of 1,408). The growing tolerances are ±max(6 Hz, 10 s × drift) and ±max(0.05, 0.08 × drift) Hz/s. No frozen verdict uses these scorings.
+
+turboSETI's hits on the same blocks were scored the same three ways. It reports each hit's frequency at the start of its look, so half a look's drift is added to compare at the middle. Recovery at S/N 10, this search then turboSETI:
+
+| session | blocks | of | as published | at mid-look | at mid-look, tolerances growing with drift |
+|---|---|---|---|---|---|
+| KIC8462852 | 121 | 13,310 | 8,706 and 1,709 | 9,115 and 1,748 | 9,775 and 1,765 |
+| HIP17147 | 121 | 13,310 | 8,258 and 1,550 | 8,649 and 1,577 | 9,230 and 1,605 |
+| NGC6946 | 64 | 7,040 | 4,702 and 952 | 4,923 and 965 | 5,264 and 986 |
+
+Over the three sessions this search found 5.15 times as many signals as turboSETI under the published scoring, 5.29 times at mid-look and 5.57 times with the growing tolerances. Scoring at the middle of the look does not narrow the gap between the pipelines: it gains this search more than turboSETI.
 
 ## A false-candidate control on four real cadences
 
@@ -270,4 +291,6 @@ The observations are from the Breakthrough Listen Open Data Archive (Lebofsky et
 - data/analysis/negative_controls/injection_checks.json: written 2026-11-24T09:45:59Z, commit ac59d3c
 - data/analysis/independent_injection/tables.json: written 2026-11-25T02:42:21Z, commit f2e53ea
 - data/analysis/independent_injection/unsmeared/tables.json: written 2026-11-25T02:42:22Z, commit f2e53ea
+- data/analysis/independent_injection/second/tables.json: written 2026-11-25T03:58:15Z, commit ce0096e
 - data/analysis/midlook/tables.json: written 2026-11-25T02:41:59Z, commit f2e53ea
+- data/analysis/midlook/turbo_tables.json: written 2026-11-25T06:26:47Z, commit 97287a7

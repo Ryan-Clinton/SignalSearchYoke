@@ -12,7 +12,7 @@ Listen's published recordings over the web.
 ## What has been found
 
 The report, [Comparing radio-signal searches on Breakthrough Listen
-data](docs/report/report.md) (version 1.8; also on
+data](docs/report/report.md) (version 1.9; also on
 [ryanclinton.uk](https://ryanclinton.uk/astrophotography/signalsearch/comparing-searches/)
 with a PDF), has the method, tables and limits. In short:
 
@@ -65,7 +65,12 @@ with a PDF), has the method, tables and limits. In short:
   it, this search's lead over turboSETI in share found was wider, though
   as a ratio it fell (at SNR 30, about 7 times as many against 11). A
   first run planted setigen's fast signals half a spectrum early; that
-  run, and why it was replaced, is in the report.
+  run, and why it was replaced, is in the report. A second draw of 16
+  other blocks, fixed before it ran, read the same way.
+- **Scoring at the middle of the look widens the gap.** Rescored on all
+  306 matched blocks, each reproducing its published result, this search
+  gains 12% and turboSETI 3%: about 5.2 times as many signals found as
+  published, 5.6 with tolerances that grow with drift.
 - **No signal from another world.** The 2017 sweep's 11 candidates were
   all marked interference or likely interference by the checks
   ([docs/leads/](docs/leads/)); "unexplained" there would mean the end of
