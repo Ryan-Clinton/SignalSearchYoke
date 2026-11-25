@@ -132,6 +132,32 @@ under it.
   the two readings differ, both are given. The second is the one not
   chosen after a result.
 
+## A third draw, from another session, fixed before it ran (25 November 2026)
+
+Both draws above come from one observation, the 2017 session. They are
+separate blocks, not separate observations. So the same protocol is run
+once more on the 2016 session (HIP 17147, AGBT16A_999_192, L band),
+whose interference is very different: it is crowded with satellite
+bands, and both pipelines failed its false-candidate limit.
+
+- **The blocks:** 16 blocks of the 2016 matched run, 8 crowded and 8
+  clean, drawn with seed 20261127 by class alone
+  (`independent_injection.py run --draw 3`).
+  - Crowded: 41, 63, 66, 70, 119, 172, 183 and 189.
+  - Clean: 107, 109, 163, 164, 216, 230, 251 and 260.
+- **What stays the same:** the signals (the matched run's, the same seed
+  for each block), setigen with its Doppler smearing and bounding, the
+  scoring, the measure, and the reading fixed above. The blocks are read
+  under the DC rule the 2016 matched records were made with, as their
+  mid-look rescoring was. The records go in `hip17147/`.
+- **What is added:** each record carries each signal's place (`x0`), and
+  the project's own planting's results in it must equal the matched
+  record's (`record_problems`, tested). Several lanes may work the draw
+  at once, one block each, by claim.
+- **How it is reported:** beside the two 2017 draws, not pooled with
+  them. If its reading differs from theirs, all are given, and the
+  difference is a finding about the session, not a reason to choose.
+
 ## Checks of the planting (25 November 2026)
 
 `tests/test_setigen_plant.py` runs `setigen_plant.py` in setigen's own

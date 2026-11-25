@@ -6,6 +6,8 @@ planting (measure.plant) favour this search over turboSETI?
     python tools/independent_injection.py tables
     python tools/independent_injection.py tables-first   the first run's, without Doppler smearing
     python tools/independent_injection.py run --draw 2   the second draw: 16 untouched blocks (and tables --draw 2)
+    python tools/independent_injection.py run --draw 3   the third: 16 blocks of the 2016 session (--from-end for a
+                                                         second lane; and tables --draw 3)
 
 Each chosen block of the matched run is read again and the same signals (the same seed) are planted by setigen in the
 three ON looks; this search and turboSETI are run on them and scored exactly as the matched run scores. The same
@@ -41,6 +43,11 @@ SMEAR = True
 SECOND = OUT / "second"
 SEED_SECOND = 20261126
 TRIAL_BLOCK = 13
+# The third draw: 16 blocks of the 2016 session (HIP 17147, crowded with satellite bands), fixed before it ran.
+THIRD_TARGET = "HIP17147"
+THIRD = OUT / "hip17147"
+SEED_THIRD = 20261127
+DC_BY_CHUNK = {"HIP17147"}          # its matched records were read under the earlier DC rule; read again the same way
 SETIGEN_PYTHON = Path(os.environ.get("SSY_SETIGEN_PYTHON") or Path(os.environ.get("LOCALAPPDATA", "")) /
                       "ssy-setigen" / "Scripts" / "python.exe")
 READ_THREADS = 4
@@ -106,20 +113,26 @@ def one_block(k, rec, slices, urls, work):
                                      rec["turboseti"]["true_plain"][matched.ck(c)], turboseti=True)["three_looks"]
             on_hits = matched._turbo_on_hits(turbo, t_f_turbo, t["drift"], float(c))
             at[c] = {"setigen": {"ours": mine == "recovered", "turboseti": theirs == "recovered" and on_hits == 3},
-                     "own": {"ours": r["ours"][c]["three_looks"] == "recovered",
-                             "turboseti": r["turboseti"][c]["three_looks"] == "recovered"
-                             and r["turboseti_on_hits"][c] == 3}}
-        rows.append({"drift": t["drift"], "s_in": t["s_in"], "bin": t["bin"], "at": at})
+                     "own": own_status(r, c)}
+        rows.append({"x0": t["x0"], "drift": t["drift"], "s_in": t["s_in"], "bin": t["bin"], "at": at})
     return {"block": k, "class": rec["class"], "smearing": SMEAR, "tones": rows, "kind": "measured"}
 
 
 OWN = ("tools/setigen_plant.py", "tools/independent_injection.py")
 
 
+def own_status(w, c):
+    """The project's own planting's result for a signal at cut c, from its matched record: found by each pipeline in
+    all three ON looks (turboSETI's in three ON hits too), as the matched tables count it."""
+    return {"ours": w["ours"][c]["three_looks"] == "recovered",
+            "turboseti": w["turboseti"][c]["three_looks"] == "recovered" and w["turboseti_on_hits"][c] == 3}
+
+
 def record_problems(rec, k, cls, matched_rec, smearing, code=records.code_problems):
     """Why a block record is not this block's whole result under the protocol: its block and class, every signal
-    the matched record's in order, both cuts with both injectors and pipelines, the smearing it was planted with
-    (the first run's records carry no field: off), and the code it was made by."""
+    the matched record's in order (its place too, where the record carries it: from the third draw on), both cuts with
+    both injectors and pipelines, the project's planting's results equal to the matched record's, the smearing it was
+    planted with (the first run's records carry no field: off), and the code it was made by."""
     import matched
     name = f"block {k}"
     if not isinstance(rec, dict):
@@ -135,28 +148,40 @@ def record_problems(rec, k, cls, matched_rec, smearing, code=records.code_proble
     elif any((round(t.get("drift", 0), 6), t.get("s_in"), t.get("bin")) != (round(w["drift"], 6), w["s_in"], w["bin"])
              for t, w in zip(tones, want)):
         out.append(f"{name}: the signals are not the matched record's")
+    elif any("x0" in t and round(t["x0"], 6) != round(w["x0"], 6) for t, w in zip(tones, want)):
+        out.append(f"{name}: a signal is not at the matched record's place")
     cell = {"own": {"ours", "turboseti"}, "setigen": {"ours", "turboseti"}}
     if any(set(t.get("at", {})) != set(CUTS) or any({h: set(v) for h, v in t["at"][c].items()} != cell for c in CUTS)
            for t in tones):
         out.append(f"{name}: a signal is not scored at both cuts for both injectors and pipelines")
+    elif len(tones) == len(want) and any(t["at"][c]["own"] != own_status(w, c) for t, w in zip(tones, want)
+                                         for c in CUTS):
+        out.append(f"{name}: the project's planting's results are not the matched record's")
     out += [f"{name}: {x}" for x in code(rec.get("provenance"), own=OWN)]
     return out
 
 
-def _matched():
+def target_for(draw):
+    return THIRD_TARGET if draw == 3 else TARGET
+
+
+def _matched(target=TARGET):
     """The matched run's folder and its blocks' classes."""
     import matched
     import store
     db = store.connect_readonly()
-    session, urls = store.cadence_files(db, TARGET)
+    session, urls = store.cadence_files(db, target)
     db.close()
-    base = matched.folder(TARGET, session)
+    base = matched.folder(target, session)
     meta = json.loads((base / "blocks.json").read_text(encoding="utf-8"))
     return base, urls, {int(b): c for b, c in meta["chosen"].items()}
 
 
 def chosen_for(classes, draw):
-    """The protocol's blocks for a draw (1 or 2), and the folder its records go in."""
+    """The protocol's blocks for a draw (1 or 2 of the 2017 session's classes, 3 of the 2016 session's), and the
+    folder its records go in."""
+    if draw == 3:
+        return choose(classes, SEED_THIRD), THIRD
     first = choose(classes)
     if draw == 1:
         return first, OUT
@@ -167,33 +192,40 @@ def _whole_block(k, cls, matched_rec, smearing):
     return lambda r: not record_problems(r, k, cls, matched_rec, smearing)
 
 
-def run(say=print, draw=1):
+def run(say=print, draw=1, from_end=False):
     import seti
+    target = target_for(draw)
+    if target in DC_BY_CHUNK:
+        os.environ["SSY_DC_BY_CHUNK"] = "1"
     seti.reading.set_threads(READ_THREADS)
-    base, urls, classes = _matched()
+    base, urls, classes = _matched(target)
     chosen, folder = chosen_for(classes, draw)
     path = folder / "choice.json"
     if path.exists() and {int(b): c for b, c in json.loads(path.read_text(encoding="utf-8"))["chosen"].items()} != chosen:
         raise yoke.Refusal("INVALID_REQUEST", "The recorded choice is not the protocol's draw.")
     if not path.exists():
-        yoke.write(path, {"target": TARGET, "seed": SEED if draw == 1 else SEED_SECOND, "draw": draw, "chosen": chosen,
-                          "kind": "measured"}, indent=1, stamp=True)
+        folder.mkdir(parents=True, exist_ok=True)
+        seed = {1: SEED, 2: SEED_SECOND, 3: SEED_THIRD}[draw]
+        yoke.write(path, {"target": target, "seed": seed, "draw": draw, "chosen": chosen, "kind": "measured"},
+                   indent=1, stamp=True)
     block_list = seti.blocks(seti.reading.prepare(urls[:1])[0])
-    for k, cls in chosen.items():
+    for k, cls in (list(chosen.items())[::-1] if from_end else chosen.items()):
         out = folder / f"block_{k:03d}.json"
         rec = json.loads((base / f"block_{k:03d}.json").read_text(encoding="utf-8"))
         if out.exists() and not yoke.whole(out, _whole_block(k, cls, rec, SMEAR)):
             got = record_problems(json.loads(out.read_text(encoding="utf-8")), k, cls, rec, SMEAR)
             raise yoke.Refusal("INVALID_REQUEST", f"{out.name} is not this run's whole result ({'; '.join(got)}): "
                                                   "move it aside")
-        if yoke.whole(out, _whole_block(k, cls, rec, SMEAR)):
-            continue
-        work = folder / "work"
-        try:
-            got = one_block(k, rec, seti.read_looks(urls, *block_list[k]), urls, work)
-        finally:
-            yoke.remove_tree(work) if work.exists() else None
-        yoke.write(out, got, indent=None, stamp=True)
+        # another lane may work the same draw: a block is claimed before it is read, and skipped once whole
+        with records.claim(out) as mine:
+            if not mine or yoke.whole(out, _whole_block(k, cls, rec, SMEAR)):
+                continue
+            work = folder / f"work_{os.getpid()}"
+            try:
+                got = one_block(k, rec, seti.read_looks(urls, *block_list[k]), urls, work)
+            finally:
+                yoke.remove_tree(work) if work.exists() else None
+            yoke.write(out, got, indent=None, stamp=True)
         n = lambda who, how: sum(t["at"]["10"][how][who] for t in got["tones"])  # noqa: E731
         say(f"block {k} ({cls}): at 10, own planting ours {n('ours', 'own')} turboSETI {n('turboseti', 'own')}; "
             f"setigen ours {n('ours', 'setigen')} turboSETI {n('turboseti', 'setigen')}", flush=True)
@@ -221,7 +253,7 @@ def difference_of_advantages(blocks, cut, seed=SEED, boot=4000):
 
 def tables(say=print, folder=None, smearing=SMEAR, draw=1):
     # the protocol's draw made again here, not taken from the saved choice
-    base, _, classes = _matched()
+    base, _, classes = _matched(target_for(draw))
     chosen, home = chosen_for(classes, draw)
     folder = folder or home
     saved = json.loads((home / "choice.json").read_text(encoding="utf-8"))
@@ -236,7 +268,7 @@ def tables(say=print, folder=None, smearing=SMEAR, draw=1):
             raise yoke.Refusal("INVALID_REQUEST", f"block {k} not done or not whole (smearing {smearing})"
                                                   + (f": {'; '.join(got)}" if got else ""))
         blocks.append(json.loads(p.read_text(encoding="utf-8")))
-    out = {"blocks": len(blocks), "draw": draw, "signals": sum(len(b["tones"]) for b in blocks), "smearing": smearing,
+    out = {"target": target_for(draw), "blocks": len(blocks), "draw": draw, "signals": sum(len(b["tones"]) for b in blocks), "smearing": smearing,
            "cuts": {},
            "kind": "measured"}
     for c in CUTS:
@@ -266,9 +298,12 @@ def tables(say=print, folder=None, smearing=SMEAR, draw=1):
 
 def main():
     cmd = sys.argv[1] if len(sys.argv) > 1 else ""
-    draw = 2 if "--draw" in sys.argv and sys.argv[sys.argv.index("--draw") + 1:][:1] == ["2"] else 1
+    got = sys.argv[sys.argv.index("--draw") + 1:][:1] if "--draw" in sys.argv else ["1"]
+    if got not in (["1"], ["2"], ["3"]):
+        sys.exit(__doc__)
+    draw = int(got[0])
     if cmd == "run":
-        run(draw=draw)
+        run(draw=draw, from_end="--from-end" in sys.argv)
     elif cmd == "tables":
         tables(draw=draw)
     elif cmd == "tables-first":

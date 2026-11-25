@@ -50,10 +50,14 @@ class Records(unittest.TestCase):
     NONE = staticmethod(lambda pv, own=(): [])
 
     def pair(self, n=110):
-        want = {"tones": [{"drift": 0.1 * i, "s_in": 30, "bin": i % 5} for i in range(n)]}
+        found = {c: {"three_looks": "recovered"} for c in ii.CUTS}
+        lost = {c: {"three_looks": "missed"} for c in ii.CUTS}
+        want = {"tones": [{"x0": 1000.0 + 26 * i, "drift": 0.1 * i, "s_in": 30, "bin": i % 5, "ours": found,
+                           "turboseti": lost, "turboseti_on_hits": {c: 3 for c in ii.CUTS}} for i in range(n)]}
         cell = {"own": {"ours": True, "turboseti": False}, "setigen": {"ours": True, "turboseti": True}}
         rec = {"block": 7, "class": "clean", "smearing": True,
-               "tones": [dict(w, at={c: {h: dict(v) for h, v in cell.items()} for c in ii.CUTS}) for w in want["tones"]]}
+               "tones": [{"x0": w["x0"], "drift": w["drift"], "s_in": w["s_in"], "bin": w["bin"],
+                          "at": {c: {h: dict(v) for h, v in cell.items()} for c in ii.CUTS}} for w in want["tones"]]}
         return rec, want
 
     def problems(self, rec, want, smearing=True, code=None):
@@ -80,6 +84,34 @@ class Records(unittest.TestCase):
         rec, want = self.pair()
         rec["tones"][3] = dict(rec["tones"][3], s_in=40)
         self.assertTrue(self.problems(rec, want))
+
+    def test_a_signal_at_another_place_is_refused(self):
+        rec, want = self.pair()
+        rec["tones"][5]["x0"] += 1
+        self.assertTrue(self.problems(rec, want))
+
+    def test_a_record_without_places_is_checked_by_its_other_fields(self):
+        # the first and second draws' records carry no place: it was checked against the seed when they ran
+        rec, want = self.pair()
+        for t in rec["tones"]:
+            del t["x0"]
+        self.assertEqual(self.problems(rec, want), [])
+
+    def test_the_project_planting_results_must_be_the_matched_records(self):
+        rec, want = self.pair()
+        rec["tones"][9]["at"]["30"]["own"]["turboseti"] = True
+        self.assertTrue(self.problems(rec, want))
+        rec, want = self.pair()
+        want["tones"][9] = dict(want["tones"][9], turboseti_on_hits={c: 2 for c in ii.CUTS},
+                                turboseti={c: {"three_looks": "recovered"} for c in ii.CUTS})
+        self.assertEqual(self.problems(rec, want), [])       # found in three looks but two ON hits: not counted
+
+    def test_the_third_draw_is_of_the_2016_session(self):
+        classes = {b: ("crowded" if b % 2 else "clean") for b in range(121)}
+        third, folder = ii.chosen_for(classes, 3)
+        self.assertEqual(sorted(third.values()), ["clean"] * 8 + ["crowded"] * 8)
+        self.assertEqual((folder, ii.target_for(3)), (ii.THIRD, "HIP17147"))
+        self.assertEqual(ii.target_for(2), ii.TARGET)
 
     def test_a_missing_cut_or_pipeline_is_refused(self):
         rec, want = self.pair()
