@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DATA = Path(os.environ.get("SSY_DATA") or ROOT / "data")
 OUT = ROOT / "docs" / "report" / "report.md"
 
-VERSION = "1.9"
+VERSION = "1.10"
 DATE = "2026-11-25"
 REVISIONS = (("0.1", "2026-11-18", "first draft."),
              ("1.0", "2026-11-19", "first release: the signals BLISS finds and this search misses traced stage by "
@@ -245,7 +245,7 @@ def rescoring_problems(mid, tt, ac):
 DRIFT_LABELS = ("0 to 0.15", "0.15 to 0.5", "0.5 to 1", "1 to 2", "2 to 4")
 
 
-def injector_summary(ii, ii2=None):
+def injector_summary(ii, ii2=None, ii3=None):
     """One sentence for the summary on the independent injector."""
     c = ii["cuts"]["10"]
     d = c["own_minus_setigen_advantage"]
@@ -259,7 +259,8 @@ def injector_summary(ii, ii2=None):
                f"{d['interval'][1]:.3f}), ")
             + ("so this project's planting favours this search." if c["reading"].startswith("the project") else
                "so it is not shown that this project's planting favours this search.")
-            + (_second_draw_sentence(ii2) if ii2 else ""))
+            + (_second_draw_sentence(ii2) if ii2 else "")
+            + (_third_draw_sentence(ii3) if ii3 else ""))
 
 
 def _second_draw_sentence(ii2):
@@ -271,7 +272,16 @@ def _second_draw_sentence(ii2):
             f"{d['difference']:.3f} narrower ({d['interval'][0]:.3f} to {d['interval'][1]:.3f}).")
 
 
-def injector_section(ii, first, second):
+def _third_draw_sentence(ii3):
+    d = ii3["cuts"]["10"]["own_minus_setigen_advantage"]
+    if d["difference"] < 0:
+        return (f" A third, of {ii3['blocks']} blocks of the 2016 session, gave a gap "
+                f"{-d['difference']:.3f} wider ({-d['interval'][1]:.3f} to {-d['interval'][0]:.3f}).")
+    return (f" A third, of {ii3['blocks']} blocks of the 2016 session, gave a gap "
+            f"{d['difference']:.3f} narrower ({d['interval'][0]:.3f} to {d['interval'][1]:.3f}).")
+
+
+def injector_section(ii, first, second, third):
     L = []
     w = L.append
     w("## An independent injector")
@@ -328,11 +338,14 @@ def injector_section(ii, first, second):
     d2 = second["cuts"]["10"]["own_minus_setigen_advantage"]
     w(f"Because that change was made after the first run had been seen, a second draw of {second['blocks']} other "
       "blocks (again half crowded, half clean, none of the first draw's) was fixed in the protocol, with its seed, "
-      "before it ran, and planted with the same setting. Both draws at S/N 10:")
+      "before it ran, and planted with the same setting. Both draws come from one observation, the 2017 session: they "
+      f"are separate blocks, not separate observations. So a third draw, of {third['blocks']} blocks of the 2016 "
+      "session (HIP 17147), whose band is crowded with satellite signals, was also fixed in the protocol before it "
+      "ran, with the same setting. The three draws at S/N 10, side by side and not pooled:")
     w("")
     w("| draw | blocks | planting | this search | turboSETI | of | difference (95% interval) |")
     w("|---|---|---|---|---|---|---|")
-    for name, t in (("first", ii), ("second", second)):
+    for name, t in (("first, 2017", ii), ("second, 2017", second), ("third, 2016", third)):
         c10 = t["cuts"]["10"]
         dd = c10["own_minus_setigen_advantage"]
         for how, label in (("own", "this project's"), ("setigen", "setigen's")):
@@ -342,15 +355,19 @@ def injector_section(ii, first, second):
             w(f"| {name} | {t['blocks']} | {label} | {n(x['ours'])} | {n(x['turboseti'])} | {n(x['signals'])} | "
               f"{last} |")
     w("")
+    d3 = third["cuts"]["10"]["own_minus_setigen_advantage"]
     w("By the same reading, the second draw "
-      + ("shows that **this project's planting favours this search**."
+      + ("shows that **this project's planting favours this search**"
          if second["cuts"]["10"]["reading"].startswith("the project") else
          "does not show that this project's planting favours this search"
-         + (", and the gap is again wider with setigen's planting." if d2["interval"][1] < 0 else "."))
-      + f" At S/N 30 its difference is {second['cuts']['30']['own_minus_setigen_advantage']['difference']:+.3f}. "
-      "Both draws come from one observation, the 2017 session: they are separate blocks, not separate observations. "
-      "A third draw, of 16 blocks of the 2016 session, whose band is crowded with satellite signals, was fixed in the "
-      "protocol before it ran and is running.")
+         + (", and the gap is again wider with setigen's planting" if d2["interval"][1] < 0 else ""))
+      + "; the third draw "
+      + ("shows that **this project's planting favours this search**."
+         if third["cuts"]["10"]["reading"].startswith("the project") else
+         "does not show it either"
+         + (", and its gap is also wider with setigen's planting." if d3["interval"][1] < 0 else "."))
+      + f" At S/N 30 their differences are {second['cuts']['30']['own_minus_setigen_advantage']['difference']:+.3f} "
+      f"and {third['cuts']['30']['own_minus_setigen_advantage']['difference']:+.3f}.")
     w("")
     return L
 
@@ -667,18 +684,23 @@ def main():
     later = {"cleft": nc / "injection_checks.json", "indep": DATA / "analysis" / "independent_injection" / "tables.json",
              "indep_first": DATA / "analysis" / "independent_injection" / "unsmeared" / "tables.json",
              "indep_second": DATA / "analysis" / "independent_injection" / "second" / "tables.json",
+             "indep_third": DATA / "analysis" / "independent_injection" / "hip17147" / "tables.json",
              "mid": DATA / "analysis" / "midlook" / "tables.json",
              "turbo_mid": DATA / "analysis" / "midlook" / "turbo_tables.json",
              "assoc": DATA / "analysis" / "midlook" / "association_checks.json"}
     for p in later.values():
         if not p.exists():
             refuse(f"version {VERSION} reports {p}, which is missing")
-    cleft, indep, indep_first, indep_second, mid, turbo_mid, assoc = (json.loads(p.read_text(encoding="utf-8")) for p in later.values())
+    cleft, indep, indep_first, indep_second, indep_third, mid, turbo_mid, assoc = (json.loads(p.read_text(encoding="utf-8")) for p in later.values())
     if indep.get("smearing") is not True or indep_first.get("smearing") is not False:
         refuse("the independent injector's tables are not the smeared run and the first run")
     if indep_second.get("smearing") is not True or indep_second.get("draw") != 2:
         refuse("the independent injector's second tables are not the second draw, smeared")
-    for name, t in (("first", indep_first), ("smeared", indep), ("second", indep_second)):
+    if (indep_third.get("smearing") is not True or indep_third.get("draw") != 3
+            or indep_third.get("target") != "HIP17147"):
+        refuse("the independent injector's third tables are not the third draw, smeared, of HIP17147")
+    for name, t in (("first", indep_first), ("smeared", indep), ("second", indep_second),
+                    ("third", indep_third)):
         if (t["blocks"], t["signals"]) != (16, 16 * SIGNALS_A_BLOCK) or any(
                 t["cuts"][c][h]["signals"] != t["signals"] for c in CUTS_REPORTED for h in ("own", "setigen")):
             refuse(f"the independent injector's {name} tables are not 16 blocks of {SIGNALS_A_BLOCK} signals")
@@ -755,7 +777,7 @@ def main():
         w("")
         w("These are three sessions from one telescope. They do not show better sensitivity in general.")
         w("")
-        w(injector_summary(indep, indep_second))
+        w(injector_summary(indep, indep_second, indep_third))
         w("")
         w(control_summary(ctab, csum, cinj))
     else:
@@ -1021,7 +1043,7 @@ def main():
           "there: the step that hands BLISS each block expects a slice width these blocks do not have, and the "
           "frozen rule records that rather than adapting it.")
     w("")
-    L.extend(injector_section(indep, indep_first, indep_second))
+    L.extend(injector_section(indep, indep_first, indep_second, indep_third))
     L.extend(midlook_section(mid, turbo_mid, assoc))
     L.extend(control_section(ctab, csum, cinj, creplay, crecheck, cleft))
     w("## What the code audits found that bears on these results")
@@ -1106,6 +1128,7 @@ def main():
                     ("data/analysis/independent_injection/tables.json", indep),
                     ("data/analysis/independent_injection/unsmeared/tables.json", indep_first),
                     ("data/analysis/independent_injection/second/tables.json", indep_second),
+                    ("data/analysis/independent_injection/hip17147/tables.json", indep_third),
                     ("data/analysis/midlook/tables.json", mid),
                     ("data/analysis/midlook/turbo_tables.json", turbo_mid),
                     ("data/analysis/midlook/association_checks.json", assoc)):

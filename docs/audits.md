@@ -410,6 +410,23 @@ and records first:
 | Recovery, not sensitivity | medium | **correct.** The report says outright that 5.57 times as many found is a count under these conditions, not signals 5.57 times weaker. |
 | An evidence package for deposit | medium | **partly right.** `tools/evidence.py` already builds, checks and reproduces one. Its reproduction did not remake the newer tables; it now remakes the setigen tables, the mid-look tables, turboSETI's and the chance-match test. The record checks read the code's history from the clone, as of the package's commit, since a tree from `git archive` has none (`SSY_HISTORY`, tested). Depositing it waits for a decision. |
 
+**The third draw** (`independent_injection.py tables --draw 3`): 16
+blocks of the 2016 session, fixed in the protocol at `177861f` before they
+ran and run at that commit, setigen with its Doppler smearing.
+
+| Planting | This search, S/N 10 / 30 | turboSETI, S/N 10 / 30 |
+|---|---|---|
+| This project's | 1,105 / 584 | 221 / 61 |
+| setigen's | 1,331 / 853 | 351 / 115 |
+
+The difference is −0.055 at S/N 10 (−0.081 to −0.030) and −0.122 at 30
+(−0.144 to −0.101). **The same reading as both 2017 draws**: it is not
+shown that the project's planting favours this search, and this search's
+lead in share is wider under setigen's. So the reading now holds on a
+second observation, with very different interference, as well as on two
+sets of blocks from the first. The three draws are reported side by
+side, not pooled.
+
 ## 3. turboSETI comparison fairness: 20 November 2026
 
 **Verdict:** a fair comparison of two whole pipelines on the same data and
@@ -1502,3 +1519,4 @@ provenance. Results still running are not listed until they finish.
 | The second setigen draw, on 16 untouched blocks: the same reading as the first | 2 | `data/analysis/independent_injection/second/tables.json` | `baf7f5a`, clean (its block records made at `f2e53ea`) | `tools/independent_injection.py tables --draw 2` |
 | turboSETI scored at mid-look on all 306 blocks, each reproducing its published statuses: the gap between the pipelines widens, 5.15 to 5.57 times | 6 | `data/analysis/midlook/turbo_tables.json` | `baf7f5a`, clean (its block records made at `f2e53ea`, `ce0096e` and `97287a7`, clean) | `tools/midlook.py turbo-tables` |
 | The first setigen run, without smearing: its fast signals planted outside the scoring's tolerance | 2 | `data/analysis/independent_injection/unsmeared/tables.json` | `baf7f5a`, clean (its block records made at `170e531`) | `tools/independent_injection.py tables-first` |
+| The third setigen draw, on 16 blocks of the 2016 session: the same reading as both 2017 draws | 2 | `data/analysis/independent_injection/hip17147/tables.json` | `96ec09d`, clean (its block records made at `177861f`, clean) | `tools/independent_injection.py tables --draw 3` |

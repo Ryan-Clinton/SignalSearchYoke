@@ -158,6 +158,29 @@ bands, and both pipelines failed its false-candidate limit.
   them. If its reading differs from theirs, all are given, and the
   difference is a finding about the session, not a reason to choose.
 
+### Its result
+
+The 16 blocks ran unchanged at `177861f`, and their records pass
+`record_problems`, including the check against the matched records'
+results and places. The tables (`independent_injection.py tables
+--draw 3`, `hip17147/tables.json`) were made at `96ec09d`, from a clean
+tree.
+
+| Planting | This search, S/N 10 / 30 | turboSETI, S/N 10 / 30 |
+|---|---|---|
+| This project's | 1,105 / 584 | 221 / 61 |
+| setigen's | 1,331 / 853 | 351 / 115 |
+
+The difference is −0.055 at S/N 10 (−0.081 to −0.030) and −0.122 at 30
+(−0.144 to −0.101). By the reading fixed above, it is **not shown that
+the project's planting favours this search**. This is the same reading as
+both 2017 draws. Both intervals lie below 0, so this search's lead in
+share is again wider under setigen's planting, and its lead as a ratio
+is again smaller: 3.8 against 5.0 at S/N 10. Under both injectors, this
+search finds more at every drift range. turboSETI finds 6 signals faster
+than 1 Hz/s with the project's planting and none with setigen's, which
+is what the 2017 draws also showed.
+
 ## Checks of the planting (25 November 2026)
 
 `tests/test_setigen_plant.py` runs `setigen_plant.py` in setigen's own

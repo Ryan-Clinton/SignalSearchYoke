@@ -55,8 +55,10 @@ REVISIONS = (
     ("1.8", "2026-11-25", "The same signals planted by an independent injector (setigen); this search's "
                           "recovery scored at the middle of the look; what each check costs, the band check's cost "
                           "stated as a hypothesis under test.", True),
-    ("1.9", None, "A second draw of blocks for the independent injector, fixed before it ran; turboSETI's recovery "
-                  "scored at the middle of the look beside this search's.", True),
+    ("1.9", "2026-11-25", "A second draw of blocks for the independent injector, fixed before it ran; turboSETI's "
+                          "recovery scored at the middle of the look beside this search's.", True),
+    ("1.10", None, "A third draw for the independent injector, from the 2016 session, fixed before it ran and "
+                   "reported beside the two 2017 draws.", True),
 )
 CHROME = (Path("C:/Program Files/Google/Chrome/Application/chrome.exe"),
           Path("C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"))

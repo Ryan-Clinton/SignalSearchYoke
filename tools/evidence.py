@@ -71,6 +71,7 @@ TABLES = (("matched.py", "tables", "KIC8462852"), ("matched_tables.py", "bliss",
           ("curved_pass.py", "vet-tables", "KIC8462852"), ("curved_pass.py", "turboseti-tables", "KIC8462852"),
           ("tools/operating_points.py", ),
           ("tools/independent_injection.py", "tables"), ("tools/independent_injection.py", "tables", "--draw", "2"),
+          ("tools/independent_injection.py", "tables", "--draw", "3"),
           ("tools/independent_injection.py", "tables-first"), ("tools/midlook.py", "tables"),
           ("tools/midlook.py", "checks"), ("tools/midlook.py", "turbo-tables"), ("tools/report.py",))
 # What may differ when a table is made again, and nothing else: when it was written, by which commit, and
@@ -91,6 +92,7 @@ EXPECTED = {
     ("tools/operating_points.py",): ("data/analysis/operating_points.json",),
     ("tools/independent_injection.py", "tables"): ("data/analysis/independent_injection/tables.json",),
     ("tools/independent_injection.py", "tables", "--draw", "2"): ("data/analysis/independent_injection/second/tables.json",),
+    ("tools/independent_injection.py", "tables", "--draw", "3"): ("data/analysis/independent_injection/hip17147/tables.json",),
     ("tools/independent_injection.py", "tables-first"): ("data/analysis/independent_injection/unsmeared/tables.json",),
     ("tools/midlook.py", "tables"): ("data/analysis/midlook/tables.json",),
     ("tools/midlook.py", "checks"): ("data/analysis/midlook/association_checks.json",),

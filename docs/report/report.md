@@ -1,6 +1,6 @@
 # Comparing radio-signal searches on Breakthrough Listen data
 
-Ryan Clinton. Version 1.9, 2026-11-25.
+Ryan Clinton. Version 1.10, 2026-11-25.
 
 ## Summary
 
@@ -14,7 +14,7 @@ On a third session, chosen by a rule from the archive's metadata and fixed in ad
 
 These are three sessions from one telescope. They do not show better sensitivity in general.
 
-Planted instead by setigen, an injector this project did not write, the same 1,760 signals in 16 blocks of the 2017 session were found 1,355 times by this search and 367 by turboSETI at S/N 10, against 1,156 and 228 with this project's planting. The gap between them in share found was 0.034 wider with setigen's planting (0.020 to 0.049), so it is not shown that this project's planting favours this search. A second draw of 16 other blocks, fixed before it ran, gave a gap 0.035 wider (0.013 to 0.054).
+Planted instead by setigen, an injector this project did not write, the same 1,760 signals in 16 blocks of the 2017 session were found 1,355 times by this search and 367 by turboSETI at S/N 10, against 1,156 and 228 with this project's planting. The gap between them in share found was 0.034 wider with setigen's planting (0.020 to 0.049), so it is not shown that this project's planting favours this search. A second draw of 16 other blocks, fixed before it ran, gave a gap 0.035 wider (0.013 to 0.054). A third, of 16 blocks of the 2016 session, gave a gap 0.055 wider (0.030 to 0.081).
 
 Four real cadences of other targets, chosen by a rule fixed beforehand and searched whole, gave 0.029 to 0.31 false candidates a block at S/N 30 (0.125 over all four, bunched in 18 of 1,267 blocks), and the checks left none unexplained. Signals planted in the same cadences show the checks keeping most real-looking signals in complete blocks, but not in blocks at the hit limit, which lie mostly in listed interference bands.
 
@@ -156,16 +156,18 @@ At S/N 10, this search's share found minus turboSETI's, with this project's plan
 
 A first run of the same 16 blocks used setigen's default, which puts each spectrum's tone where it is at the spectrum's start rather than spreading it over the channels it crosses. Both pipelines are scored against the middle of the spectrum, within 6 Hz, so setigen's fast signals sat outside the tolerance: from 1 to 4 Hz/s this search found 10 and turboSETI 0, against 297 and 6 with this project's planting. That run gave a difference of +0.317 (+0.304 to +0.332). The cause was measured on synthetic data, the change and the first run's records are logged in the protocol (docs/independent-injection.md), and nothing else was changed.
 
-Because that change was made after the first run had been seen, a second draw of 16 other blocks (again half crowded, half clean, none of the first draw's) was fixed in the protocol, with its seed, before it ran, and planted with the same setting. Both draws at S/N 10:
+Because that change was made after the first run had been seen, a second draw of 16 other blocks (again half crowded, half clean, none of the first draw's) was fixed in the protocol, with its seed, before it ran, and planted with the same setting. Both draws come from one observation, the 2017 session: they are separate blocks, not separate observations. So a third draw, of 16 blocks of the 2016 session (HIP 17147), whose band is crowded with satellite signals, was also fixed in the protocol before it ran, with the same setting. The three draws at S/N 10, side by side and not pooled:
 
 | draw | blocks | planting | this search | turboSETI | of | difference (95% interval) |
 |---|---|---|---|---|---|---|
-| first | 16 | this project's | 1,156 | 228 | 1,760 | -0.034 (-0.049 to -0.020) |
-| first | 16 | setigen's | 1,355 | 367 | 1,760 |  |
-| second | 16 | this project's | 1,180 | 217 | 1,760 | -0.035 (-0.054 to -0.013) |
-| second | 16 | setigen's | 1,385 | 361 | 1,760 |  |
+| first, 2017 | 16 | this project's | 1,156 | 228 | 1,760 | -0.034 (-0.049 to -0.020) |
+| first, 2017 | 16 | setigen's | 1,355 | 367 | 1,760 |  |
+| second, 2017 | 16 | this project's | 1,180 | 217 | 1,760 | -0.035 (-0.054 to -0.013) |
+| second, 2017 | 16 | setigen's | 1,385 | 361 | 1,760 |  |
+| third, 2016 | 16 | this project's | 1,105 | 221 | 1,760 | -0.055 (-0.081 to -0.030) |
+| third, 2016 | 16 | setigen's | 1,331 | 351 | 1,760 |  |
 
-By the same reading, the second draw does not show that this project's planting favours this search, and the gap is again wider with setigen's planting. At S/N 30 its difference is -0.136. Both draws come from one observation, the 2017 session: they are separate blocks, not separate observations. A third draw, of 16 blocks of the 2016 session, whose band is crowded with satellite signals, was fixed in the protocol before it ran and is running.
+By the same reading, the second draw does not show that this project's planting favours this search, and the gap is again wider with setigen's planting; the third draw does not show it either, and its gap is also wider with setigen's planting. At S/N 30 their differences are -0.136 and -0.122.
 
 ## Scoring at the middle of the look
 
@@ -302,6 +304,7 @@ The observations are from the Breakthrough Listen Open Data Archive (Lebofsky et
 - data/analysis/independent_injection/tables.json: written 2026-11-25T09:44:41Z, commit baf7f5a
 - data/analysis/independent_injection/unsmeared/tables.json: written 2026-11-25T09:44:46Z, commit baf7f5a
 - data/analysis/independent_injection/second/tables.json: written 2026-11-25T09:44:44Z, commit baf7f5a
+- data/analysis/independent_injection/hip17147/tables.json: written 2026-11-25T11:17:57Z, commit 96ec09d
 - data/analysis/midlook/tables.json: written 2026-11-25T02:41:59Z, commit f2e53ea
 - data/analysis/midlook/turbo_tables.json: written 2026-11-25T09:44:02Z, commit baf7f5a
 - data/analysis/midlook/association_checks.json: written 2026-11-25T02:42:19Z, commit f2e53ea
