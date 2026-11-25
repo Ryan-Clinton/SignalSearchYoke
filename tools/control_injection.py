@@ -21,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tools"))
 
+import records  # noqa: E402
 import yoke  # noqa: E402
 
 def _which_control():
@@ -172,7 +173,7 @@ def _needed(rec):
     return keys
 
 
-def record_problems(rec, cadence, k, info, versions=None, at_commit=versions_at):
+def record_problems(rec, cadence, k, info, versions=None, at_commit=versions_at, code=records.code_problems):
     """Why a block record is not this block's whole result under the protocol."""
     import matched
     name = f"{cadence['target']} {k}"
@@ -195,6 +196,8 @@ def record_problems(rec, cadence, k, info, versions=None, at_commit=versions_at)
             made = at_commit(rec.get("provenance", {}).get("git_commit"))
         if any(made.get(key) != versions[key] for key in _needed(rec)):
             out.append(f"{name}: made by another version of the search or the checks")
+        # the labels alone could stay while the code under them changed: every change since must be listed
+        out += [f"{name}: {x}" for x in code(rec.get("provenance"), own=("tools/control_injection.py",))]
     return out
 
 

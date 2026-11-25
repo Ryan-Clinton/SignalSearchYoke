@@ -314,6 +314,53 @@ integrated over a spectrum, mends this.
 - setigen's sinc² profile was used with its default truncation, as in
   SI-03. That cuts the sidelobes, but both pipelines got the same spectra.
 
+### 2 and 6, record checks, a second draw and scoring for both pipelines, 25 November 2026
+
+| Finding | Severity | Verdict |
+|---|---|---|
+| SS-17: a record's version labels are checked, not the code under them | high | **built.** `tools/records.py` `code_problems`. Every commit that touched the science modules (or the tool's own file) after a record was made must be listed in `NEUTRAL`, with why it moves no result. A record made with local changes must be in `DIRTY_OK`, with what they were. Used by `control_injection.py`, `independent_injection.py` and `midlook.py`. Control B's planted records pass. The one change to their block code since (`one_block` in `control_injection.py`) only adds version 6's verdicts and the versions, checked by comparing the function at `d2a8a0a` and now. |
+| SS-24: the independent injector's records were checked by count and smearing only | high | **built.** `independent_injection.record_problems` checks the block and its class, every signal against the matched record in order, both cuts with both injectors and both pipelines, the smearing, and the code. Used by both `run` and `tables`. `tables` draws the protocol's blocks again rather than trusting `choice.json`. `run` already refused signals that were not the matched record's. Both runs' 16 records pass. |
+| SS-25: mid-look accepted any record with a signal in it, and counted files | high | **built.** `midlook.record_problems` checks the session, block and class, the 110 signals against the matched record, the published statuses equal to the record's, all three scorings at both cuts, reproduction, and the code. `tables` takes exactly the matched run's blocks and refuses any other record. All 306 records pass. |
+| SS-26: setigen's strength might change as signals are added | medium | **wrong, now tested.** setigen's `get_intensity` uses `noise_std`, which is set when the frame is made, and `add_signal` never updates it. Tested directly: the same signals in either order, or one at a time, plant identical spectra (`tests/test_setigen_plant.py`). |
+| SS-27: the frame's axis was checked with numpy's default relative tolerance | medium | **built.** Both ends to 1 mHz with no relative tolerance, and the channel width (`setigen_plant.axis_problem`). An axis 10 mHz off is refused in the tests. |
+| SS-28: the injector protocol was changed after its first result | medium | **built and queued.** A second draw of 16 untouched blocks, by seed 20261126, is written into the protocol before it runs ([docs/independent-injection.md](independent-injection.md), "A second draw"). Both earlier runs are kept. |
+| SS-29: wider tolerances could credit chance matches | medium | **measured, and turboSETI queued.** See below. BLISS is not rescored: mid-look is compared between the two pipelines in the matched tables. |
+| SS-30: two workers could take the same block | medium | **built.** `records.claim` takes a block with an exclusive create. A claim whose process has ended is taken over. Writes were already whole or nothing (`yoke.write`), so only time was at stake. |
+| SS-31: the tests did not run the real injector | medium | **built.** `tests/test_setigen_plant.py` runs in setigen's environment and is skipped where it is absent. It covers both frequency orders, drift sign, placement with and without smearing, power, signal order, signals alone and together, bounding, and the axis check. It found that a drifting tone carries about 91% of a still one's power, from setigen's truncated profile; this is written into the protocol as a limit. |
+
+**Chance matches under each scoring** (`midlook.py checks`,
+`data/analysis/midlook/association_checks.json`; from the records alone):
+
+- **The test:** each signal's place was tested against the unplanted
+  block's own events, the background a scoring could credit by mistake,
+  under all three scorings at S/N 10 and 30. It was tested at the signal
+  and at eight places shifted by 1.5 to 12 kHz (the signals are about
+  26 kHz apart).
+- **The result:** across all 306 blocks, **no match at any place under any
+  scoring**: 0 of 33,660 at the signals and 0 of 269,280 shifted. The test
+  was checked to find a match where there is one: a signal placed on an
+  unplanted event matches it in 150 of 243 cases. The rest are events
+  whose looks disagree in drift by more than the tolerance.
+- **Credit twice:** no two planted signals in a block lie within twice
+  even the widest tolerances of each other, so one event cannot be
+  credited to two.
+- **The errors, frequency and drift apart:** for the signals each scoring
+  recovers, from the closest hit to each, at S/N 10, 2 to 4 Hz/s:
+  - frequency at the look's start: median 0.6 to 0.9 Hz, 90th percentile
+    1.8 to 3.4 Hz;
+  - frequency at mid-look: median about 0.8 Hz, 90th percentile about
+    2.1 Hz;
+  - drift: median 0.005 Hz/s, 90th percentile 0.02 Hz/s.
+
+  So the scaled tolerances (40 Hz and 0.32 Hz/s at 4 Hz/s) are far wider
+  than these errors. The closest hit is the best of a signal's looks, not
+  its worst, and the failures that mid-look mends lie in the worst look.
+- **turboSETI scored the same way** (`midlook.py turbo`, queued): the same
+  306 blocks planted again and searched by turboSETI. Each block counts
+  only if it reproduces turboSETI's published statuses exactly. The
+  pipelines are compared under mid-look only once that is done. Until
+  then, mid-look stays a scoring version for this search alone.
+
 ## 3. turboSETI comparison fairness: 20 November 2026
 
 **Verdict:** a fair comparison of two whole pipelines on the same data and

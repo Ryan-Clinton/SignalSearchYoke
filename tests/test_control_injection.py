@@ -117,8 +117,13 @@ class Records(unittest.TestCase):
         r.update(change)
         return r
 
-    def problems(self, rec, held=None):
-        return ci.record_problems(rec, self.C, 7, self.INFO, self.V, lambda c: dict(self.V) if held is None else held)
+    def problems(self, rec, held=None, code=lambda pv, own=(): []):
+        return ci.record_problems(rec, self.C, 7, self.INFO, self.V, lambda c: dict(self.V) if held is None else held,
+                                  code)
+
+    def test_a_change_to_the_code_under_the_same_labels_is_refused(self):
+        moved = lambda pv, own=(): ["the science code changed after abc, in def1234"]  # noqa: E731
+        self.assertTrue(self.problems(self.rec(), code=moved))
 
     def test_a_whole_record_passes(self):
         self.assertEqual(self.problems(self.rec()), [])

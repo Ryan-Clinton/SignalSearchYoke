@@ -108,6 +108,10 @@ class EndToEnd(unittest.TestCase):
         (self.folder / "injection" / "choice.json").write_text(
             json.dumps({"seed": ci.SEED, "per_class": ci.PER_CLASS, "cadences": cadences}), encoding="utf-8")
         self.cadences, self.versions, self.tones = cadences, ci._versions_now(), matched.TONES
+        import subprocess
+        # made "now": the code check (tools/records.py) passes a record made at the checkout's own commit
+        self.head = subprocess.run(["git", "-C", str(Path(__file__).resolve().parents[1]), "rev-parse", "HEAD"],
+                                   capture_output=True, text=True).stdout.strip()
 
     def planted(self, v5_capped, v6_capped):
         import json
@@ -118,7 +122,7 @@ class EndToEnd(unittest.TestCase):
                 a = {"hit_looks": 3, "candidate": True, "already_in_the_block": False, "verdict": v5, "reasons": [],
                      "verdict_context": v6, "reasons_context": []}
                 rec = {"target": c["target"], "session": c["session"], "block": int(k), "class": info["class"],
-                       "versions": self.versions, "complete": [True] * 6,
+                       "versions": self.versions, "complete": [True] * 6, "provenance": {"git_commit": self.head},
                        "tones": [{"x0": float(i), "drift": 0.01 * i, "s_in": 30, "bin": 0, "at": {"30": a, "10": a}}
                                  for i in range(self.tones)]}
                 (self.folder / "injection" / f"{c['target']}_{int(k):03d}.json").write_text(json.dumps(rec), encoding="utf-8")

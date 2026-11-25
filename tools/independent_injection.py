@@ -5,6 +5,7 @@ planting (measure.plant) favour this search over turboSETI?
     python tools/independent_injection.py run       16 blocks of the 2017 session (hours; resumes)
     python tools/independent_injection.py tables
     python tools/independent_injection.py tables-first   the first run's, without Doppler smearing
+    python tools/independent_injection.py run --draw 2   the second draw: 16 untouched blocks (and tables --draw 2)
 
 Each chosen block of the matched run is read again and the same signals (the same seed) are planted by setigen in the
 three ON looks; this search and turboSETI are run on them and scored exactly as the matched run scores. The same
@@ -26,6 +27,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tools"))
 
+import records  # noqa: E402
 import yoke  # noqa: E402
 
 TARGET = "KIC8462852"
@@ -35,17 +37,22 @@ CUTS = ("10", "30")
 OUT = yoke.DATA / "analysis" / "independent_injection"
 FIRST = OUT / "unsmeared"          # the first run, without setigen's Doppler smearing
 SMEAR = True
+# The second draw: 16 more blocks, none of the first draw's nor the trial's, fixed in the protocol before it ran.
+SECOND = OUT / "second"
+SEED_SECOND = 20261126
+TRIAL_BLOCK = 13
 SETIGEN_PYTHON = Path(os.environ.get("SSY_SETIGEN_PYTHON") or Path(os.environ.get("LOCALAPPDATA", "")) /
                       "ssy-setigen" / "Scripts" / "python.exe")
 READ_THREADS = 4
 
 
-def choose(classes, seed=SEED, per_class=PER_CLASS):
-    """per_class crowded and clean blocks of the matched run ({block: class}), drawn by seed from the classes alone."""
+def choose(classes, seed=SEED, per_class=PER_CLASS, exclude=()):
+    """per_class crowded and clean blocks of the matched run ({block: class}), drawn by seed from the classes alone,
+    leaving out `exclude`."""
     rng = np.random.default_rng(seed)
     out = {}
     for cls in ("crowded", "clean"):
-        pool = sorted(b for b, c in classes.items() if c == cls)
+        pool = sorted(b for b, c in classes.items() if c == cls and b not in set(exclude))
         out |= {int(b): cls for b in rng.choice(pool, per_class, replace=False)}
     return dict(sorted(out.items()))
 
@@ -106,37 +113,82 @@ def one_block(k, rec, slices, urls, work):
     return {"block": k, "class": rec["class"], "smearing": SMEAR, "tones": rows, "kind": "measured"}
 
 
-def _whole_block(smearing):
-    """A block record complete and planted with this smearing (the first run's records carry no field: off)."""
-    import matched
-    return lambda r: len(r.get("tones", [])) == matched.TONES and bool(r.get("smearing", False)) == smearing
+OWN = ("tools/setigen_plant.py", "tools/independent_injection.py")
 
 
-def run(say=print):
+def record_problems(rec, k, cls, matched_rec, smearing, code=records.code_problems):
+    """Why a block record is not this block's whole result under the protocol: its block and class, every signal
+    the matched record's in order, both cuts with both injectors and pipelines, the smearing it was planted with
+    (the first run's records carry no field: off), and the code it was made by."""
     import matched
-    import seti
+    name = f"block {k}"
+    if not isinstance(rec, dict):
+        return [f"{name}: no record"]
+    out = []
+    if (rec.get("block"), rec.get("class")) != (k, cls):
+        out.append(f"{name}: the record is of another block")
+    if bool(rec.get("smearing", False)) != smearing:
+        out.append(f"{name}: planted with smearing {bool(rec.get('smearing', False))}, not {smearing}")
+    tones, want = rec.get("tones", []), matched_rec.get("tones", [])
+    if len(tones) != matched.TONES or len(want) != matched.TONES:
+        out.append(f"{name}: {len(tones)} signals, not {matched.TONES}")
+    elif any((round(t.get("drift", 0), 6), t.get("s_in"), t.get("bin")) != (round(w["drift"], 6), w["s_in"], w["bin"])
+             for t, w in zip(tones, want)):
+        out.append(f"{name}: the signals are not the matched record's")
+    cell = {"own": {"ours", "turboseti"}, "setigen": {"ours", "turboseti"}}
+    if any(set(t.get("at", {})) != set(CUTS) or any({h: set(v) for h, v in t["at"][c].items()} != cell for c in CUTS)
+           for t in tones):
+        out.append(f"{name}: a signal is not scored at both cuts for both injectors and pipelines")
+    out += [f"{name}: {x}" for x in code(rec.get("provenance"), own=OWN)]
+    return out
+
+
+def _matched():
+    """The matched run's folder and its blocks' classes."""
+    import matched
     import store
-    seti.reading.set_threads(READ_THREADS)
     db = store.connect_readonly()
     session, urls = store.cadence_files(db, TARGET)
     db.close()
     base = matched.folder(TARGET, session)
     meta = json.loads((base / "blocks.json").read_text(encoding="utf-8"))
-    chosen = choose({int(b): c for b, c in meta["chosen"].items()})
-    path = OUT / "choice.json"
+    return base, urls, {int(b): c for b, c in meta["chosen"].items()}
+
+
+def chosen_for(classes, draw):
+    """The protocol's blocks for a draw (1 or 2), and the folder its records go in."""
+    first = choose(classes)
+    if draw == 1:
+        return first, OUT
+    return choose(classes, SEED_SECOND, exclude=set(first) | {TRIAL_BLOCK}), SECOND
+
+
+def _whole_block(k, cls, matched_rec, smearing):
+    return lambda r: not record_problems(r, k, cls, matched_rec, smearing)
+
+
+def run(say=print, draw=1):
+    import seti
+    seti.reading.set_threads(READ_THREADS)
+    base, urls, classes = _matched()
+    chosen, folder = chosen_for(classes, draw)
+    path = folder / "choice.json"
     if path.exists() and {int(b): c for b, c in json.loads(path.read_text(encoding="utf-8"))["chosen"].items()} != chosen:
         raise yoke.Refusal("INVALID_REQUEST", "The recorded choice is not the protocol's draw.")
     if not path.exists():
-        yoke.write(path, {"target": TARGET, "seed": SEED, "chosen": chosen, "kind": "measured"}, indent=1, stamp=True)
+        yoke.write(path, {"target": TARGET, "seed": SEED if draw == 1 else SEED_SECOND, "draw": draw, "chosen": chosen,
+                          "kind": "measured"}, indent=1, stamp=True)
     block_list = seti.blocks(seti.reading.prepare(urls[:1])[0])
     for k, cls in chosen.items():
-        out = OUT / f"block_{k:03d}.json"
-        if out.exists() and not yoke.whole(out, _whole_block(SMEAR)):
-            raise yoke.Refusal("INVALID_REQUEST", f"{out.name} is not this run's (smearing {SMEAR}): move it aside")
-        if yoke.whole(out, _whole_block(SMEAR)):
-            continue
+        out = folder / f"block_{k:03d}.json"
         rec = json.loads((base / f"block_{k:03d}.json").read_text(encoding="utf-8"))
-        work = OUT / "work"
+        if out.exists() and not yoke.whole(out, _whole_block(k, cls, rec, SMEAR)):
+            got = record_problems(json.loads(out.read_text(encoding="utf-8")), k, cls, rec, SMEAR)
+            raise yoke.Refusal("INVALID_REQUEST", f"{out.name} is not this run's whole result ({'; '.join(got)}): "
+                                                  "move it aside")
+        if yoke.whole(out, _whole_block(k, cls, rec, SMEAR)):
+            continue
+        work = folder / "work"
         try:
             got = one_block(k, rec, seti.read_looks(urls, *block_list[k]), urls, work)
         finally:
@@ -167,15 +219,25 @@ def difference_of_advantages(blocks, cut, seed=SEED, boot=4000):
     return {"difference": float(d(idx)), "interval": [float(v) for v in np.percentile(draws, [2.5, 97.5])]}
 
 
-def tables(say=print, folder=OUT, smearing=SMEAR):
-    choice = json.loads((OUT / "choice.json").read_text(encoding="utf-8"))
+def tables(say=print, folder=None, smearing=SMEAR, draw=1):
+    # the protocol's draw made again here, not taken from the saved choice
+    base, _, classes = _matched()
+    chosen, home = chosen_for(classes, draw)
+    folder = folder or home
+    saved = json.loads((home / "choice.json").read_text(encoding="utf-8"))
+    if {int(b): c for b, c in saved["chosen"].items()} != chosen:
+        raise yoke.Refusal("INVALID_REQUEST", "The recorded choice is not the protocol's draw.")
     blocks = []
-    for k in choice["chosen"]:
-        p = folder / f"block_{int(k):03d}.json"
-        if not yoke.whole(p, _whole_block(smearing)):
-            raise yoke.Refusal("INVALID_REQUEST", f"block {k} not done (smearing {smearing})")
+    for k, cls in chosen.items():
+        p = folder / f"block_{k:03d}.json"
+        rec = json.loads((base / f"block_{k:03d}.json").read_text(encoding="utf-8"))
+        if not yoke.whole(p, _whole_block(k, cls, rec, smearing)):
+            got = record_problems(json.loads(p.read_text(encoding="utf-8")), k, cls, rec, smearing) if p.exists() else []
+            raise yoke.Refusal("INVALID_REQUEST", f"block {k} not done or not whole (smearing {smearing})"
+                                                  + (f": {'; '.join(got)}" if got else ""))
         blocks.append(json.loads(p.read_text(encoding="utf-8")))
-    out = {"blocks": len(blocks), "signals": sum(len(b["tones"]) for b in blocks), "smearing": smearing, "cuts": {},
+    out = {"blocks": len(blocks), "draw": draw, "signals": sum(len(b["tones"]) for b in blocks), "smearing": smearing,
+           "cuts": {},
            "kind": "measured"}
     for c in CUTS:
         cell = {}
@@ -204,10 +266,11 @@ def tables(say=print, folder=OUT, smearing=SMEAR):
 
 def main():
     cmd = sys.argv[1] if len(sys.argv) > 1 else ""
+    draw = 2 if "--draw" in sys.argv and sys.argv[sys.argv.index("--draw") + 1:][:1] == ["2"] else 1
     if cmd == "run":
-        run()
+        run(draw=draw)
     elif cmd == "tables":
-        tables()
+        tables(draw=draw)
     elif cmd == "tables-first":
         tables(folder=FIRST, smearing=False)
     else:

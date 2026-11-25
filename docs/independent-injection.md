@@ -111,3 +111,49 @@ Doppler smearing turned on, and the 16 blocks run again.**
   that error is shown on synthetic data. The direction of its effect on
   the measure was not known beforehand: it removed fast signals from both
   pipelines.
+
+## A second draw, fixed before it ran (25 November 2026)
+
+The change above was made after the first run's result was seen. It was
+justified by a fault measured on synthetic data, but the corrected
+protocol has so far been judged only on blocks that had already been
+looked at. So it is repeated, unchanged, on blocks nobody has looked at
+under it.
+
+- **The blocks:** 16 more blocks of the same matched run, drawn with seed
+  20261126 by class alone. The draw leaves out the first draw's 16 and
+  the trial block 13 (`independent_injection.py run --draw 2`).
+  - Crowded: 14, 34, 47, 48, 53, 98, 104 and 181.
+  - Clean: 155, 160, 184, 186, 238, 265, 299 and 302.
+- **What stays the same:** the signals, setigen with its Doppler smearing
+  and bounding, the scoring, the measure, and the reading fixed above. The
+  only change is the folder, `second/`.
+- **How it is reported:** beside the first draw, not pooled with it. If
+  the two readings differ, both are given. The second is the one not
+  chosen after a result.
+
+## Checks of the planting (25 November 2026)
+
+`tests/test_setigen_plant.py` runs `setigen_plant.py` in setigen's own
+environment, on synthetic noise.
+
+- **Orientation:** both frequency orders plant identical spectra.
+- **Placement:**
+  - Without smearing, each spectrum's centre sits within 0.4 Hz of the
+    start-of-spectrum path (the first run's fault).
+  - With smearing, it sits within 2.5 Hz of the spectrum's middle, on
+    the side of the drift's sign.
+- **Strength:** setigen sets a signal's strength from its noise estimate,
+  which it makes once, when the frame is made. Adding signals does not
+  change it. The same signals added in either order, or one at a time,
+  give identical spectra.
+- **Bounding:** it changes nothing, to 1e-9.
+- **The frequency axis:** it is now checked at both ends to 1 mHz, with
+  no relative tolerance, and in its channel width. The earlier check's
+  default relative tolerance would have passed 14 kHz at 1.4 GHz.
+- **Power, a limit found here:** a drifting tone carries about 91% of a
+  still tone's power, with or without smearing. setigen's sinc² profile is
+  cut at its first zeros by default, and that cuts more from a tone that
+  lies between channels. Both pipelines get the same spectra, so the
+  comparison stands, but setigen's fast signals are about 9% weaker than
+  their nominal strength.

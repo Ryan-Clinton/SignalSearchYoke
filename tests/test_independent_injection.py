@@ -43,3 +43,60 @@ class Rule(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Records(unittest.TestCase):
+    """record_problems: a block record is the protocol's whole result, or it is refused."""
+    NONE = staticmethod(lambda pv, own=(): [])
+
+    def pair(self, n=110):
+        want = {"tones": [{"drift": 0.1 * i, "s_in": 30, "bin": i % 5} for i in range(n)]}
+        cell = {"own": {"ours": True, "turboseti": False}, "setigen": {"ours": True, "turboseti": True}}
+        rec = {"block": 7, "class": "clean", "smearing": True,
+               "tones": [dict(w, at={c: {h: dict(v) for h, v in cell.items()} for c in ii.CUTS}) for w in want["tones"]]}
+        return rec, want
+
+    def problems(self, rec, want, smearing=True, code=None):
+        return ii.record_problems(rec, 7, "clean", want, smearing, code or self.NONE)
+
+    def test_a_whole_record_passes(self):
+        self.assertEqual(self.problems(*self.pair()), [])
+
+    def test_another_block_or_class_is_refused(self):
+        rec, want = self.pair()
+        self.assertTrue(self.problems(dict(rec, block=8), want))
+        self.assertTrue(self.problems(dict(rec, **{"class": "crowded"}), want))
+
+    def test_the_other_smearing_is_refused(self):
+        rec, want = self.pair()
+        self.assertTrue(self.problems(rec, want, smearing=False))
+        self.assertTrue(self.problems({k: v for k, v in rec.items() if k != "smearing"}, want))
+
+    def test_a_short_record_is_refused(self):
+        rec, want = self.pair()
+        self.assertTrue(self.problems(dict(rec, tones=rec["tones"][:50]), want))
+
+    def test_other_signals_are_refused(self):
+        rec, want = self.pair()
+        rec["tones"][3] = dict(rec["tones"][3], s_in=40)
+        self.assertTrue(self.problems(rec, want))
+
+    def test_a_missing_cut_or_pipeline_is_refused(self):
+        rec, want = self.pair()
+        del rec["tones"][2]["at"]["30"]
+        self.assertTrue(self.problems(rec, want))
+        rec, want = self.pair()
+        del rec["tones"][2]["at"]["10"]["setigen"]["turboseti"]
+        self.assertTrue(self.problems(rec, want))
+
+    def test_changed_code_is_refused(self):
+        self.assertTrue(self.problems(*self.pair(), code=lambda pv, own=(): ["changed"]))
+
+    def test_the_second_draw_leaves_out_the_first_and_the_trial(self):
+        classes = {b: ("crowded" if b % 3 == 0 else "clean") for b in range(80)}
+        first, _ = ii.chosen_for(classes, 1)
+        second, folder = ii.chosen_for(classes, 2)
+        self.assertFalse(set(first) & set(second))
+        self.assertNotIn(ii.TRIAL_BLOCK, second)
+        self.assertEqual(sorted(second.values()), ["clean"] * 8 + ["crowded"] * 8)
+        self.assertEqual(folder, ii.SECOND)

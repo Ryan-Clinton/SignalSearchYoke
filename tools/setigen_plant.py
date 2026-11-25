@@ -19,6 +19,20 @@ import setigen as stg
 BOUND_CHANNELS = 200
 
 
+AXIS_TOL_HZ = 1e-3      # the frame's axis must be the data's to a millihertz (the scoring's tolerance is 6 Hz)
+
+
+def axis_problem(fs, low_hz, width_hz, n_f):
+    """Refuses a frame whose frequency axis is not the data's: both ends and the channel width, absolutely, with no
+    relative tolerance (at 1.4 GHz a relative 1e-5 would allow 14 kHz)."""
+    want = (low_hz, low_hz + (n_f - 1) * width_hz)
+    got = (float(fs[0]), float(fs[-1]))
+    step = float(fs[1] - fs[0]) if len(fs) > 1 else width_hz
+    if len(fs) != n_f or any(abs(g - w) > AXIS_TOL_HZ for g, w in zip(got, want)) or abs(step - width_hz) > 1e-5:
+        raise SystemExit(f"setigen_plant.py: the frame's frequencies are not the data's: {got} against {want}, "
+                         f"channels {step} Hz against {width_hz}")
+
+
 def plant(looks, fch1, foff, tsamp, x, drift, snr, smear=False):
     out = np.empty_like(looks)
     width = abs(foff) * 1e6
@@ -28,8 +42,7 @@ def plant(looks, fch1, foff, tsamp, x, drift, snr, smear=False):
         asc = data[:, ::-1] if flip else data
         low = (fch1 + (n_f - 1) * foff) if flip else fch1            # MHz of ascending channel 0
         frame = stg.Frame.from_data(df=width, dt=tsamp, fch1=low * 1e6, ascending=True, data=asc.astype(float).copy())
-        if not np.isclose(frame.fs[0], low * 1e6):
-            raise SystemExit("setigen_plant.py: the frame's frequencies are not the data's")
+        axis_problem(frame.fs, low * 1e6, width, n_f)
         for xi, d, s in zip(x[j], drift, snr):
             f_hz = (fch1 + xi * foff) * 1e6
             # With smearing, setigen works each signal out over the whole frame unless bounded: bound it to the
