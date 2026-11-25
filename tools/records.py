@@ -36,6 +36,9 @@ NEUTRAL = {
     "0259e41": "setigen_plant.py: each smeared signal bounded to the channels it crosses, only with smearing on; the "
                "same placement and power (tests/test_setigen_plant.py)",
     "42f9b04": "midlook.py: a session worked from its last block too; each block's work unchanged",
+    "7b9317e": "record checks, block claims and turboSETI's mid-look scoring added beside the tools' block work, which "
+               "is unchanged; setigen_plant.py checks the frame's axis more strictly, refusing only, not planting "
+               "differently",
 }
 
 # Records made with local changes, and what those changes were.
