@@ -44,6 +44,8 @@ NEUTRAL = {
                "by before; records carry each signal's place from now on",
     "dda5abb": "midlook.py: turbo-tables adds paired intervals from the same block records; each block's work "
                "unchanged",
+    "5392a58": "independent_injection.py: from the third draw on a record must carry each signal's place, a stricter "
+               "check of records already written; each block's work unchanged",
 }
 
 # Records made with local changes, and what those changes were.
