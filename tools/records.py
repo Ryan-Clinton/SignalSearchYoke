@@ -46,6 +46,8 @@ NEUTRAL = {
                "unchanged",
     "5392a58": "independent_injection.py: from the third draw on a record must carry each signal's place, a stricter "
                "check of records already written; each block's work unchanged",
+    "7022450": "seti.py: the sweep's lock and log are one a target, so sweeps of different targets may run at once; "
+               "the search and what each block keeps unchanged",
 }
 
 # Records made with local changes, and what those changes were.
