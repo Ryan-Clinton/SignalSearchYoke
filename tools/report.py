@@ -22,7 +22,7 @@ DATA = Path(os.environ.get("SSY_DATA") or ROOT / "data")
 OUT = ROOT / "docs" / "report" / "report.md"
 
 VERSION = "1.8"
-DATE = "2026-11-24"
+DATE = "2026-11-25"
 REVISIONS = (("0.1", "2026-11-18", "first draft."),
              ("1.0", "2026-11-19", "first release: the signals BLISS finds and this search misses traced stage by "
                          "stage, and the detector's misses measured."),
@@ -198,11 +198,13 @@ def injector_summary(ii):
     return (f"Planted instead by setigen, an injector this project did not write, the same {n(ii['signals'])} signals "
             f"in {ii['blocks']} blocks of the 2017 session were found {n(c['setigen']['ours'])} times by this search and "
             f"{n(c['setigen']['turboseti'])} by turboSETI at S/N 10, against {n(c['own']['ours'])} and "
-            f"{n(c['own']['turboseti'])} with this project's planting: "
-            + ("this project's planting favours this search" if c["reading"].startswith("the project") else
-               "not shown to favour this search")
-            + f" (the difference in the gap between them, {d['difference']:+.3f} of the signals, "
-              f"{d['interval'][0]:+.3f} to {d['interval'][1]:+.3f}).")
+            f"{n(c['own']['turboseti'])} with this project's planting. The gap between them in share found was "
+            + (f"{-d['difference']:.3f} wider with setigen's planting ({-d['interval'][1]:.3f} to "
+               f"{-d['interval'][0]:.3f}), " if d["difference"] < 0 else
+               f"{d['difference']:.3f} narrower with setigen's planting ({d['interval'][0]:.3f} to "
+               f"{d['interval'][1]:.3f}), ")
+            + ("so this project's planting favours this search." if c["reading"].startswith("the project") else
+               "so it is not shown that this project's planting favours this search."))
 
 
 def injector_section(ii, first):
