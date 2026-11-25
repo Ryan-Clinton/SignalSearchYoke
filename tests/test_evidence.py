@@ -76,6 +76,14 @@ class Package(unittest.TestCase):
         store = z.read("data/" + evidence.STORE)
         self.assertNotIn(b"A-PC", store)
 
+    def test_appdata_allowed_only_under_a_home_written_tilde(self):
+        raw = json.dumps({"base_python": "C:\\Users\\Someone\\AppData\\Local\\Programs\\Python\\python.exe"}).encode()
+        out, homes, _ = evidence.scrub(raw, [])
+        self.assertEqual(homes, 1)
+        self.assertIsNone(evidence.MACHINE_PATH.search(out))
+        for left in (b'{"p": "D:\\\\Profiles\\\\Someone\\\\AppData\\\\x"}', b'{"p": "AppData/Roaming"}'):
+            self.assertIsNotNone(evidence.MACHINE_PATH.search(evidence.scrub(left, [])[0]), left)
+
     def test_changed_entry_refused(self):
         bad = self.tmp / "changed.zip"
         rewrite(self.zip, bad, change=("data/measurements/m.json", b'{"found": 4521}'))

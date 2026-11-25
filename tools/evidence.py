@@ -62,7 +62,9 @@ FOLDERS = ("measurements", "step10", "step12", "results", "analysis", "matched",
 KEEP = {".json", ".md", ".png", ".svg", ".csv", ".txt"}     # .txt: step 12's saved archive replies
 LEAVE_OUT = {"partial", "work"}
 MACHINE_PATH = re.compile(rb'(/home/[^/"\s]+|/Users/[^/"\s]+|/mnt/[a-z]/|[A-Za-z]:\\\\Users\\\\[^\\"]+'
-                          rb'|[A-Za-z]:/Users/[^/"]+|\\\\\\\\[A-Za-z0-9_.-]+\\\\|AppData)')
+                          rb'|[A-Za-z]:/Users/[^/"]+|\\\\\\\\[A-Za-z0-9_.-]+\\\\|(?<!~\\\\)(?<!~\\)(?<!~/)AppData)')
+# AppData directly under a home folder already written `~` names no machine (a standard install's Python,
+# say); anywhere else it may be a profile the substitution did not reach, so it is refused.
 STORE_LIKE = ("%/home/%", "%/Users/%", "%:\\Users\\%", "%AppData%", "%/mnt/%")
 STORE = "ssy.sqlite"
 # The commands that make the published tables from the records, and the report.
