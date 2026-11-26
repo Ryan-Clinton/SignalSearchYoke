@@ -21,8 +21,8 @@ ROOT = Path(__file__).resolve().parents[1]
 DATA = Path(os.environ.get("SSY_DATA") or ROOT / "data")
 OUT = ROOT / "docs" / "report" / "report.md"
 
-VERSION = "1.10"
-DATE = "2026-11-25"
+VERSION = "1.11"
+DATE = "2026-11-26"
 REVISIONS = (("0.1", "2026-11-18", "first draft."),
              ("1.0", "2026-11-19", "first release: the signals BLISS finds and this search misses traced stage by "
                          "stage, and the detector's misses measured."),
@@ -45,15 +45,18 @@ REVISIONS = (("0.1", "2026-11-18", "first draft."),
              ("1.7", "2026-11-24", "a false-candidate control on four real cadences of other targets, chosen by a "
                            "rule fixed beforehand and searched whole, with the checks' verdicts on its candidates; and "
                            "signals planted in those cadences, to show how many real-looking signals the checks keep."),
-             ("1.8", DATE, "the same signals planted by an independent injector (setigen); this search's recovery "
+             ("1.8", "2026-11-25", "the same signals planted by an independent injector (setigen); this search's recovery "
                            "scored at the middle of the look; what each check costs, with the band check's cost "
                            "stated as a hypothesis under test."),
-             ("1.9", DATE, "a second draw of blocks for the independent injector, fixed before it ran; turboSETI's "
+             ("1.9", "2026-11-25", "a second draw of blocks for the independent injector, fixed before it ran; turboSETI's "
                            "recovery scored at the middle of the look beside this search's, with paired intervals by "
                            "session; the test for chance matches under each scoring."),
-             ("1.10", DATE, "a third draw for the independent injector, from the 2016 session, fixed before it ran "
+             ("1.10", "2026-11-25", "a third draw for the independent injector, from the 2016 session, fixed before it ran "
                             "and given beside the two 2017 draws at both cuts; the same-hit control on BLISS's "
-                            "hits described for all ten of its blocks."))
+                            "hits described for all ten of its blocks."),
+             ("1.11", DATE, "control C: four more real cadences by the same rule, their false candidates, signals "
+                            "planted in them, and the version of the checks that treats a listed band as context "
+                            "adopted by the rule fixed before they were read."))
 
 
 def control_reading(inj):
@@ -187,10 +190,83 @@ def control_section(ctab, csum, inj, replay, recheck, checks_left_out=None):
               f"of control B's {n(groups['all four']['at_30']['candidates'])} candidates. The next most costly is "
               f"{others[0][0]} ({n(sum(others[0][1]['planted_kept_without_it'].values()))}). So on these blocks the "
               "band check loses the most real-looking signals and removes almost nothing the other checks do not. "
-              "This was found on control B, so it is a hypothesis here, not a result: a version of the checks "
-              "with a band as context rather than a sign was fixed beforehand and is being tested on four new "
-              "cadences (docs/control-c.md in the repository). The checks in force are unchanged.")
+              "This was found on control B, so it was a hypothesis there, not a result: a version of the "
+              "checks with a band as context rather than a sign was fixed beforehand and tested on four new "
+              "cadences, below.")
             w("")
+    return L
+
+
+def control_c_summary(tsum, tver):
+    """One sentence for the summary on control C."""
+    a30 = tsum["groups"]["all four"]["at_30"]
+    r = tver["real_unexplained_by_version_6"]
+    return (f"Four more cadences chosen by the same rule (control C) gave {a30['rate']:.2g} false candidates a block at "
+            f"S/N 30, none left unexplained by the checks in force; there a version of the checks that treats a listed "
+            "interference band as context, not a sign, "
+            + ("kept more of the planted signals and let one real candidate through in "
+               f"{n(r['blocks'])} blocks, and is adopted by the rule fixed before control C was read."
+               if tver["adopted"] else "did not meet the rule fixed before control C was read, so the checks in "
+               "force stay."))
+
+
+def control_c_section(ttab, tsum, tinj, tver, treplay, control_b_rate):
+    """The report's lines on control C and the version of the checks tested on it, from their records."""
+    L = []
+    w = L.append
+    g = tsum["groups"]["all four"]
+    a30, a10 = g["at_30"], g["at_10"]
+    w("## Control C: four more cadences, and the checks with a band as context")
+    w("")
+    w("Control B suggested that the known-band check costs real-looking signals and removes almost nothing the "
+      "others do not. A version of the checks that treats a listed interference band as context rather than a "
+      "sign of interference (version 6), and a rule for adopting it, were fixed before four more cadences, chosen "
+      "by control B's rule and never read by this project, were read (docs/control-c.md in the repository). Each "
+      "was searched whole by the search as frozen, its candidates were judged by both versions, and signals were "
+      f"planted in {tinj['blocks']} of its blocks as above, half at the hit limit and half complete.")
+    w("")
+    w("| cadence | blocks | candidates at S/N 30 | a block | at S/N 10 |")
+    w("|---|---|---|---|---|")
+    for r in ttab["sessions"]:
+        w(f"| {r['target']} | {n(r['blocks'])} | {n(r['candidates_30'])} | {r['rate_30']:.3g} | {n(r['candidates_10'])} |")
+    w(f"| all four | {n(a30['blocks'])} | {n(a30['candidates'])} | {a30['rate']:.3g} | {n(a10['candidates'])} |")
+    w("")
+    run16 = a30["bootstrap_consecutive_blocks"]["16"]
+    w(f"Over all four the rate at S/N 30 is {a30['rate']:.2g} a block ({iv(run16, 2)} drawing runs of 16 consecutive "
+      f"blocks again), against control B's {control_b_rate:.3g}; {a30['candidates_in_capped_blocks']} of the {n(a30['candidates'])} lie in "
+      f"the {a30['blocks_capped']} blocks at the hit limit. The checks in force left {a30['unexplained']} unexplained "
+      f"at S/N 30 and {a10['unexplained']} at S/N 10. The tables and verdict counts made again from the packaged "
+      f"records alone were {'identical' if treplay['tables_same'] and treplay['summary_same'] else 'not identical'}, "
+      "on the same computer.")
+    w("")
+    v5, v6 = tinj["cuts"]["30"], tinj["cuts_bands_as_context"]["30"]
+    w("Planted candidates at S/N 30 left unexplained, by version:")
+    w("")
+    w("| blocks | candidates | the checks in force (5) | with a band as context (6) |")
+    w("|---|---|---|---|")
+    for name, k in (("complete", "complete"), ("at the hit limit", "capped"), ("all", "all")):
+        w(f"| {name} | {n(v5[k]['candidates'])} | {n(v5[k]['unexplained'])} | {n(v6[k]['unexplained'])} |")
+    w("")
+    pc, pw, r = tver["planted_capped"], tver["planted_weighted"], tver["real_unexplained_by_version_6"]
+    lim = tver["limits"]
+    w("The rule, fixed before control C was read, adopts version 6 only if, at S/N 30:")
+    w("")
+    w("| criterion | required | measured |")
+    w("|---|---|---|")
+    w(f"| planted candidates left unexplained, version 6 less 5, in blocks at the hit limit | lower end above 0 | "
+      f"{pc['difference']:+.3f} ({pc['interval'][0]:.3f} to {pc['interval'][1]:.3f}) |")
+    w(f"| the same, weighted to control C's mix ({100 * tver['share_of_blocks_capped']:.0f}% of blocks at the limit) | "
+      f"lower end above 0 | {pw['difference']:+.3f} ({pw['interval'][0]:.3f} to {pw['interval'][1]:.3f}) |")
+    w(f"| control C's real candidates left unexplained by version 6 | at most {lim['rate']:g} a block, upper end at "
+      f"most {lim['upper']:g} | {r['unexplained']} in {n(r['blocks'])} blocks, {r['rate']:.4f} a block "
+      f"({r['interval'][0]:.4f} to {r['interval'][1]:.4f}) |")
+    w("")
+    w(("Both hold, so **version 6 is adopted** as the checks' next version. " if tver["adopted"] else
+       "**Version 6 is not adopted**: the checks in force stay. ")
+      + "Every candidate and verdict elsewhere in this report was judged by version 5 and is unchanged; they stand "
+      "until they are judged again and that is reported. These are four more cadences from one telescope, and the "
+      "planted signals are this project's own planting.")
+    w("")
     return L
 
 
@@ -703,6 +779,19 @@ def main():
         if not p.exists():
             refuse(f"version {VERSION} reports {p}, which is missing")
     cleft, indep, indep_first, indep_second, indep_third, mid, turbo_mid, assoc = (json.loads(p.read_text(encoding="utf-8")) for p in later.values())
+    cc = DATA / "analysis" / "negative_controls_c"
+    for p in ("tables.json", "summary.json", "injection.json", "verdict.json", "package_replay.json"):
+        if not (cc / p).exists():
+            refuse(f"version {VERSION} reports control C, and {cc / p} is missing")
+    ttab, tsum, tinj, tver, treplay = (json.loads((cc / p).read_text(encoding="utf-8")) for p in
+                                       ("tables.json", "summary.json", "injection.json", "verdict.json",
+                                        "package_replay.json"))
+    blocks_c = sum(r["blocks"] for r in ttab["sessions"])
+    if (len(ttab["sessions"]) != 4 or tsum["groups"]["all four"]["at_30"]["blocks"] != blocks_c
+            or tver["real_unexplained_by_version_6"]["blocks"] != blocks_c or tver["cut"] != 30):
+        refuse("control C's tables, summary and verdict do not cover the same four cadences at S/N 30")
+    if {r["target"] for r in ttab["sessions"]} & {r["target"] for r in ctab["sessions"]}:
+        refuse("control C shares a cadence with control B")
     if indep.get("smearing") is not True or indep_first.get("smearing") is not False:
         refuse("the independent injector's tables are not the smeared run and the first run")
     if indep_second.get("smearing") is not True or indep_second.get("draw") != 2:
@@ -790,7 +879,7 @@ def main():
         w("")
         w(injector_summary(indep, indep_second, indep_third))
         w("")
-        w(control_summary(ctab, csum, cinj))
+        w(control_summary(ctab, csum, cinj) + " " + control_c_summary(tsum, tver))
     else:
         w("These are two sessions from one telescope. They do not show better sensitivity in general.")
     w("")
@@ -1052,8 +1141,9 @@ def main():
     if not s12:
         w("- A third session, chosen by a rule fixed in advance, is still to be measured; until it is, nothing "
           "here is claimed beyond these two sessions.")
-    w("- The false-candidate control is four cadences: enough to show the rate varies between them, not to say how "
-      "much it varies between sessions in general. Its interval over blocks describes those four observations only.")
+    w("- The false-candidate controls are eight cadences in two sets of four: enough to show the rate varies "
+      "between them, not to say how much it varies between sessions in general. Their intervals over blocks "
+      "describe those observations only.")
     w("- The frozen recovery criterion compares two Wilson intervals, which treat the planted signals as "
       "independent; signals share their block and their session. The paired difference with a bootstrap over "
       "blocks (above) is the better measure, and it is supplementary. All the blocks of a session come from "
@@ -1066,6 +1156,7 @@ def main():
     L.extend(injector_section(indep, indep_first, indep_second, indep_third))
     L.extend(midlook_section(mid, turbo_mid, assoc))
     L.extend(control_section(ctab, csum, cinj, creplay, crecheck, cleft))
+    L.extend(control_c_section(ttab, tsum, tinj, tver, treplay, csum["groups"]["all four"]["at_30"]["rate"]))
     w("## What the code audits found that bears on these results")
     w("")
     w("A line-by-line audit of the code (docs/audits.md in the repository) found the following. None changes "
@@ -1145,6 +1236,11 @@ def main():
                     ("data/analysis/negative_controls/package_recheck.json", crecheck),
                     ("data/analysis/negative_controls/injection.json", cinj),
                     ("data/analysis/negative_controls/injection_checks.json", cleft),
+                    ("data/analysis/negative_controls_c/tables.json", ttab),
+                    ("data/analysis/negative_controls_c/summary.json", tsum),
+                    ("data/analysis/negative_controls_c/injection.json", tinj),
+                    ("data/analysis/negative_controls_c/verdict.json", tver),
+                    ("data/analysis/negative_controls_c/package_replay.json", treplay),
                     ("data/analysis/independent_injection/tables.json", indep),
                     ("data/analysis/independent_injection/unsmeared/tables.json", indep_first),
                     ("data/analysis/independent_injection/second/tables.json", indep_second),

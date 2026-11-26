@@ -12,7 +12,7 @@ Listen's published recordings over the web.
 ## What has been found
 
 The report, [Comparing radio-signal searches on Breakthrough Listen
-data](docs/report/report.md) (version 1.10; also on
+data](docs/report/report.md) (version 1.11; also on
 [ryanclinton.uk](https://ryanclinton.uk/astrophotography/signalsearch/comparing-searches/)
 with a PDF), has the method, tables and limits. In short:
 
