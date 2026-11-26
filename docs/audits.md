@@ -26,7 +26,7 @@ answered it.
 | 1 | Scientific methodology | 1 | critical | **done** (19 Nov 2026), re-audited the same day; see below |
 | 2 | Signal injection accuracy | 1 | critical | **re-audited** (20 Nov 2026): the paired reruns finished, no change to either pipeline's recovery beyond 2 signals in 880; see below |
 | 3 | turboSETI comparison fairness | 1 | critical | **measured** (21 Nov 2026): the 16 blocks run; turboSETI loses most signals before its event stage, with no hit at SNR 5; the zero-drift trial changes nothing; matched operating points cannot be resolved on 8 blocks a session; see below |
-| 4 | False-positive methodology | 1 | critical | **in progress** (21 Nov 2026): record-based checks done; time order changes no wrong choice's candidates; control B (four real cadences of other targets in their own order, chosen by a rule fixed first) **measured**: 0.125 candidates a block at 30 over 1,267 blocks, none left unexplained by the checks, 157 of the 158 in blocks at the hit cap; see below |
+| 4 | False-positive methodology | 1 | critical | **in progress** (21 Nov 2026): record-based checks done; time order changes no wrong choice's candidates; control B (four real cadences of other targets in their own order, chosen by a rule fixed first) **measured**: 0.125 candidates a block at 30 over 1,267 blocks, none left unexplained by the checks, 157 of the 158 in blocks at the hit cap; control C (four more, 26 Nov 2026) **measured**: 0.076 a block at 30, none left unexplained by version 5, and version 6 adopted by its fixed rule; see below |
 | 5 | The 2016 interference failure | 1 | critical | **measured** (21 Nov 2026): all 23 blocks read again; the cap is not the cause (raising it removes 137 of 3,654); the OFF looks hold weak related hits under the veto; two ON hits would cut the false candidates by 86%; see below |
 | 6 | Detector completeness and missed signals | 1 | high | **in progress** (21 Nov 2026): the cap, crowding, close pairs and offsets measured; the strong 2017 misses are detected and measured outside the tolerances, which compare frequencies at the look's start; shadow refresh changes nothing that counts; see below |
 | 7 | BLISS comparison | 1 | high | **in progress** (21 Nov 2026): provenance enforced, two-ON split measured; on eight blocks chosen beforehand the same-hit control finds no large event-stage effect; see below |
@@ -625,6 +625,28 @@ sweep is running. Its protocol, the rule for adopting version 6, and the tool
 that applies it (`tools/control_c_verdict.py`, with a synthetic test from the
 choice records to the decision) were committed before any of its results
 existed; the changes made since are logged in `docs/control-c.md`.
+
+### 4, control C measured, 26 November 2026
+
+Control C ran whole under its protocol ([docs/control-c.md](control-c.md)):
+four cadences, 1,267 blocks, and 32 blocks with 3,520 signals planted. Every
+step's record is at `332866d`, clean.
+
+- **False candidates at S/N 30:** 96, or 0.076 a block (0.061 to 0.093 exact
+  Poisson; 0.027 to 0.140 resampling runs of 16 blocks). Control B gave
+  0.125.
+  - 93 of the 96 are in the 257 blocks at the hit limit.
+  - The checks in force, version 5, leave none unexplained.
+- **Version 6 is adopted** by the rule fixed beforehand
+  (`tools/control_c_verdict.py`):
+  - Planted candidates left unexplained rise by +0.422 in capped blocks
+    (0.246 to 0.585) and by +0.289 weighted to control C's mix (0.135 to
+    0.456). Both intervals lie above 0.
+  - Control C's real candidates left unexplained by version 6: 1 in 1,267
+    blocks, or 0.0008 a block (0 to 0.0023), against a limit of 0.02.
+- **What changes:** version 6 becomes the checks' next version. Published
+  results were judged by version 5 and stand until they are judged again
+  and that is reported.
 
 ### 4, the time-order test, 21 November 2026
 
@@ -1536,3 +1558,9 @@ provenance. Results still running are not listed until they finish.
 | The first setigen run, without smearing: its fast signals planted outside the scoring's tolerance | 2 | `data/analysis/independent_injection/unsmeared/tables.json` | `baf7f5a`, clean (its block records made at `170e531`) | `tools/independent_injection.py tables-first` |
 | The third setigen draw, on 16 blocks of the 2016 session: the same reading as both 2017 draws | 2 | `data/analysis/independent_injection/hip17147/tables.json` | `96ec09d`, clean (its block records made at `177861f`, clean) | `tools/independent_injection.py tables --draw 3` |
 | The evidence package for report 1.10 made again from the package alone: all 1,027 pages and records the same | 2, 16 | `data/analysis/reproduction.json` | `4a9e68e`, clean | `tools/evidence.py reproduce data/evidence/ssy-evidence-4a9e68e.zip` |
+| Control C's false-candidate rates on four more real cadences | 4 | `data/analysis/negative_controls_c/tables.json` | `332866d`, clean | `tools/negative_controls.py tables --control c` |
+| Control C: none unexplained by version 5 at 30; 93 of 96 candidates in capped blocks | 4 | `data/analysis/negative_controls_c/summary.json` | `332866d`, clean | `tools/negative_controls.py summary --control c` |
+| Control C's candidates judged by version 6 beside version 5 | 4 | `data/analysis/negative_controls_c/checks_context.json` | `332866d`, clean | `tools/negative_controls.py context --control c` |
+| Control C's tables and summary made again from its package alone | 4 | `data/analysis/negative_controls_c/package_replay.json` | `332866d`, clean | `tools/negative_controls.py replay --control c` |
+| Planted signals in control C's cadences: version 6 leaves 883 of 1,111 planted candidates unexplained at 30, version 5 512 | 4 | `data/analysis/negative_controls_c/injection.json` | `332866d`, clean (its block records made at `332866d`, clean) | `tools/control_injection.py tables --control c` |
+| Version 6 adopted by the rule fixed beforehand: more planted signals kept in capped blocks and weighted, 0.0008 real candidates a block unexplained | 4 | `data/analysis/negative_controls_c/verdict.json` | `332866d`, clean | `tools/control_c_verdict.py` |

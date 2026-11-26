@@ -108,3 +108,61 @@ that result is reported as descriptive only.
   The search, its parameters, the cadences, the store and every rule above
   are unchanged; each block is searched and kept exactly as before. Only
   the wall time changes.
+
+## The result (26 November 2026)
+
+All four cadences were swept whole by the frozen search, 1,267 blocks in
+all, and every step that follows ran unchanged:
+- the checks, by both versions, on every candidate;
+- the summary, the context, the package and its replay;
+- the 32 planted blocks; and
+- the verdict.
+
+Every record is at `332866d`, clean.
+
+**Version 6 is adopted**, by the rule above
+(`tools/control_c_verdict.py`, `data/analysis/negative_controls_c/verdict.json`):
+
+| Criterion, at S/N 30 | Required | Measured |
+|---|---|---|
+| Planted candidates left unexplained, version 6 less version 5, capped blocks | lower end above 0 | +0.422 (0.246 to 0.585) |
+| The same, weighted to control C's mix (20.3% of its blocks capped) | lower end above 0 | +0.289 (0.135 to 0.456) |
+| Control C's real candidates left unexplained by version 6 | at most 0.02 a block; upper end at most 0.05 | 1 in 1,267 blocks: 0.0008 a block (0 to 0.0023; exact Poisson upper 0.0044) |
+
+**The false-candidate rate** (`tables.json`, `summary.json`): at S/N 30,
+96 cadence candidates, 0.076 a block. That is 0.061 to 0.093 exact Poisson,
+or 0.027 to 0.140 resampling runs of 16 blocks. By cadence it ranged from
+0.044 to 0.107.
+
+They bunch as in control B:
+- 93 of the 96 are in the 257 blocks at the hit limit;
+- 3 are in the 1,010 complete blocks;
+- 23 blocks hold any, and the busiest holds 20.
+
+Under version 5, the checks in force, none is left unexplained (6
+interference, 90 likely interference). At S/N 10 there are 1,081 (0.85 a
+block), and version 5 leaves 3 unexplained, all weak.
+
+**Planted signals** (`injection.json`): 3,520 signals were planted in 32
+blocks, four capped and four complete in each cadence. At S/N 30, 1,111
+became candidates.
+
+| Planted candidates left unexplained | Version 5 | Version 6 |
+|---|---|---|
+| Capped blocks | 117 of 502 (23%) | 329 of 502 (66%) |
+| Complete blocks | 395 of 609 (65%) | 554 of 609 (91%) |
+| All | 512 of 1,111 (46%) | 883 of 1,111 (79%) |
+
+**What it means.** Version 5 calls most real-looking signals in crowded,
+capped blocks interference, because they lie in a known band. Version 6,
+which treats the band as context, keeps far more of them. On control C's
+real candidates it let one through in 1,267 blocks, against a limit of
+0.02 a block.
+
+**What it does not mean:**
+- Four more cadences, from one telescope, chosen by the same rule as
+  control B's.
+- The planted signals are this project's planting, in 32 blocks.
+- Adopting version 6 changes the checks from here on. Results already
+  published were judged by version 5 and stand as they were, until they are
+  judged again and that is reported.
