@@ -568,6 +568,8 @@ def replay(folder=None, say=print):
         raise yoke.Refusal("INVALID_REQUEST", problems[0])
     want = {"choice.json", "tables.json", "summary.json", "verdicts.json"} | {
         f"sweeps/{c['target']}-{c['session']}.json" for c in chosen}
+    if CONTROL == "c":
+        want.add("verdicts_bands_as_context.json")      # version 6's, for its adoption rule
     if present != want:
         raise yoke.Refusal("INVALID_REQUEST", f"The package holds {sorted(present ^ want)} it should not, or lacks them")
     verdicts = load("verdicts.json")
