@@ -664,6 +664,23 @@ and records first:
 | SS-48: the Poisson limit | low | **correct.** In the report, 0.0044 a block, with its independence assumption. |
 | Next research directions (an end-to-end matched comparison, crowded blocks, combs, reprocessing, another telescope) | | **not findings.** They are recorded here as proposals. None is started without Ryan. |
 
+### 4, before the deposit: what it holds, its licences, the README and the guide, 27 November 2026
+
+Report 1.12 and its Zenodo draft reviewed at `5f136b9`. Each point, checked
+against the code and the files first:
+
+| Finding | Severity | Verdict and what changed |
+|---|---|---|
+| The deposit's files were not in git for review | | **correct** (Ryan). `docs/zenodo/1.12/` holds every file of the deposit except the evidence package, which at 260 MB is over GitHub's limit; its SHA-256 and its manifest, which hashes every record in it, are there. |
+| The README describes two setigen draws of three | low | **correct.** It gives all three, from two sessions. |
+| The README says the planting "does not favour this search" | low | **correct.** That is stronger than the report. It now says what the report says: not shown that the planting favours this search. |
+| The reproduction guide says nothing is deposited | low | **correct.** It names the deposit and `docs/zenodo/1.12/`. |
+| The report should keep adopting version 6 apart from putting it into use | low | **correct.** It says version 6 is adopted by the rule and not yet in use: every verdict is still version 5's until it is put into use and that is reported. |
+| The packaged version 6 verdicts are not checked against the sweep records | medium | **correct.** `control_c_verdict.from_package` now refuses verdicts not labelled version 6, or whose candidates in any block are not the sweep record's, by the identity the version 5 replay uses. Tested with the manifest's hashes made to match. |
+| The licences in the Zenodo record are unclear | medium | **correct.** The record's notes say CC BY 4.0 covers the report and records only. The code is MIT, two BLISS-derived files are BSD 3-Clause, and the observations stay under Breakthrough Listen's terms. |
+| The zip's contents are not shown to be free of personal details | | **partly right.** The build refuses home paths and the computer name. The built zip was also searched for the user's names, email and machine name (below). |
+| Do not publish until the files are seen | | **taste: Ryan's.** Publishing is his click. |
+
 ### 4, the time-order test, 21 November 2026
 
 F4-02's measurement (`tools/false_checks.py chronological`, 16 blocks):

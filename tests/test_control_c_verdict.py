@@ -169,9 +169,54 @@ class EndToEnd(unittest.TestCase):
         rec = json.loads(path.read_text(encoding="utf-8"))
         rec["versions"] = dict(rec["versions"], checks_context="an earlier 6")
         path.write_text(json.dumps(rec), encoding="utf-8")
-        with self.assertRaises(yoke.Refusal):
+        with self.assertRaises(cv.yoke.Refusal):
             self.decide()
 
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FromPackage(unittest.TestCase):
+    """The decision from the package alone refuses packaged version 6 verdicts that are not the sweep records'
+    candidates, or not version 6's, even when the manifest's hashes are made to match."""
+    PACKAGE = Path(__file__).resolve().parents[1] / "data" / "analysis" / "negative_controls_c" / "package"
+
+    def setUp(self):
+        if not (self.PACKAGE / "verdicts_bands_as_context.json").exists():
+            self.skipTest("control C's package is not here")
+        import shutil
+        import tempfile
+        self.tmp = Path(tempfile.mkdtemp(prefix="ssy-ccv-"))
+        self.folder = self.tmp / "package"
+        shutil.copytree(self.PACKAGE, self.folder)
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def rewrite(self, change):
+        import hashlib
+        import json
+        p = self.folder / "verdicts_bands_as_context.json"
+        d = json.loads(p.read_text(encoding="utf-8"))
+        change(d)
+        p.write_text(json.dumps(d), encoding="utf-8")
+        m = json.loads((self.folder / "manifest.json").read_text(encoding="utf-8"))
+        m["files"]["verdicts_bands_as_context.json"] = hashlib.sha256(p.read_bytes()).hexdigest()
+        (self.folder / "manifest.json").write_text(json.dumps(m), encoding="utf-8")
+
+    def test_the_package_as_made_passes(self):
+        control, events = cv.from_package(self.folder)
+        self.assertEqual(len(control), 4)
+        self.assertTrue(events)
+
+    def test_a_candidate_not_the_sweep_records_is_refused(self):
+        self.rewrite(lambda d: d["events"][0].update(frequency_mhz=d["events"][0]["frequency_mhz"] + 0.001))
+        with self.assertRaises(cv.yoke.Refusal):
+            cv.from_package(self.folder)
+
+    def test_verdicts_of_another_version_are_refused(self):
+        self.rewrite(lambda d: d.update(checks_version="5"))
+        with self.assertRaises(cv.yoke.Refusal):
+            cv.from_package(self.folder)

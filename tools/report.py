@@ -327,7 +327,9 @@ def control_c_section(ttab, tsum, tinj, tver, treplay, control_b_rate, tctx):
       f"{(lambda k: 'none' if k == 0 else n(k))(c10['by_verdict'].get('unexplained, strong', 0))} of them strong); a search at S/N 10 would have more of "
       "them to look into.")
     w("")
-    w(("Both hold, so **version 6 is adopted** as the checks' next version. " if tver["adopted"] else
+    w(("Both hold, so **version 6 is adopted** as the checks' next version: adopted by the rule, not yet in "
+       "use, since the checks that judge candidates are still version 5's until it is put into use and that is "
+       "reported. " if tver["adopted"] else
        "**Version 6 is not adopted**: the checks in force stay. ")
       + "Every candidate and verdict elsewhere in this report was judged by version 5 and is unchanged; they stand "
       "until they are judged again and that is reported. These are four more cadences from one telescope, and the "

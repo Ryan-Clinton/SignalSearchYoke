@@ -117,14 +117,28 @@ def from_package(folder):
              if hashlib.sha256((folder / n).read_bytes()).hexdigest() != sha]
     if wrong:
         raise yoke.Refusal("INVALID_REQUEST", f"Files differ from the package's manifest: {wrong}")
+    import vetting
     control, problems = [], []
     for c in load("choice.json")["chosen"]:
         rec = load(f"sweeps/{c['target']}-{c['session']}.json")
         problems += nc.sweep_problems(c, rec, manifest["search_version"])
         control.append((c, rec))
+    packaged = load("verdicts_bands_as_context.json")
+    if packaged.get("checks_version") != vetting.VERSION_BANDS_AS_CONTEXT:
+        problems.append("the packaged verdicts are not version 6's")
+    events = packaged["events"]
+    held = {}
+    for e in events:
+        held.setdefault((e["session"], int(e["block"])), set()).add(
+            nc._candidate_key(e["event_id"], e["frequency_mhz"], e["drift_hz_s"], e["snr"]))
+    for c, rec in control:          # every candidate of every block, by identity, as the version 5 replay checks
+        if any(held.get((c["session"], int(k)), set()) != {nc._candidate_key(e["event_id"], e["frequency_mhz"],
+                                                                            e["drift_hz_s"], e["snr"])
+                                                           for e in d["events"]} for k, d in rec["done"].items()):
+            problems.append(f"{c['session']}: the packaged version 6 verdicts' candidates and the sweep record's differ")
     if problems:
         raise yoke.Refusal("INVALID_REQUEST", "; ".join(problems))
-    return control, load("verdicts_bands_as_context.json")["events"]
+    return control, events
 
 
 def main(say=print, package=None):

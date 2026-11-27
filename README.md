@@ -60,15 +60,15 @@ limits. In short:
   three times as many, though the gap in share is then wider (+0.47 of the
   signals against +0.31). No single ratio describes it; the report gives
   every tested cut.
-- **The planting does not favour this search.** The same 1,760 signals
-  were planted in 16 blocks of the 2017 session by setigen, an injector
-  this project did not write, by a protocol fixed first
-  ([docs/independent-injection.md](docs/independent-injection.md)). Under
-  it, this search's lead over turboSETI in share found was wider, though
-  as a ratio it fell (at SNR 30, about 7 times as many against 11). A
-  first run planted setigen's fast signals half a spectrum early; that
-  run, and why it was replaced, is in the report. A second draw of 16
-  other blocks, fixed before it ran, read the same way.
+- **Not shown that the planting favours this search.** The same signals
+  were planted by setigen, an injector this project did not write, by a
+  protocol fixed first ([docs/independent-injection.md](docs/independent-injection.md)),
+  in three draws of 16 blocks: two of the 2017 session and one of the 2016
+  session, each fixed before it ran. In every draw this search's lead over
+  turboSETI in share found was wider under setigen's planting, though as a
+  ratio it fell (at SNR 30, about 7 times as many against 11 in the first
+  draw). A first run planted setigen's fast signals half a spectrum early;
+  that run, and why it was replaced, is in the report.
 - **Scoring at the middle of the look widens the gap.** Rescored on all
   306 matched blocks, each reproducing its published result, this search
   gains 12% and turboSETI 3%: about 5.2 times as many signals found as

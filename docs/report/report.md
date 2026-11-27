@@ -282,7 +282,7 @@ The rule was set at S/N 30. At S/N 10, supplementary and not part of it:
 
 So at the lower cut version 6 also keeps more of the planted signals, and leaves more of the real candidates unexplained (18 against 3, none of them strong); a search at S/N 10 would have more of them to look into.
 
-Both hold, so **version 6 is adopted** as the checks' next version. Every candidate and verdict elsewhere in this report was judged by version 5 and is unchanged; they stand until they are judged again and that is reported. These are four more cadences from one telescope, and the planted signals are this project's own planting.
+Both hold, so **version 6 is adopted** as the checks' next version: adopted by the rule, not yet in use, since the checks that judge candidates are still version 5's until it is put into use and that is reported. Every candidate and verdict elsewhere in this report was judged by version 5 and is unchanged; they stand until they are judged again and that is reported. These are four more cadences from one telescope, and the planted signals are this project's own planting.
 
 ## What the code audits found that bears on these results
 
