@@ -87,7 +87,7 @@ Three sessions from one telescope do not show better sensitivity in general.
 | Reading the archive: only the blocks of a slice, by HTTP range requests (`reading.py`) | in use |
 | The search: desmeared drift sums to ±4 Hz/s, hits at SNR 10, shadow hits from 5 (`searching.py`) | in use, search version 4; measured on planted and real signals ([docs/seti.md](docs/seti.md)) |
 | The ON-OFF cadence test (`onoff.py`) | in use; its false rate failed the 2016 test above |
-| The ten checks on a candidate, after blc1 (`check.py`, `vetting.py`) | in use, checks version 5 |
+| The ten checks on a candidate, after blc1 (`check.py`, `vetting.py`) | in use, checks version 6 since 27 Nov 2026 (a listed band is context, not a sign; adopted by control C's rule, docs/control-c.md); version 5 kept for its records |
 | Planted signals through everything (`injection.py`, `measure.py`) | in use |
 | Comparison with turboSETI, pickles and BLISS at matched false rates (`pipelines.py`, `matched.py`) | done: turboSETI on all three sessions, pickles and BLISS on the 2017 session |
 | A second pass for curved tracks (`curved.py`, `curved_pass.py`) | **experimental**, apart from the search |

@@ -353,7 +353,7 @@ def checks_here(say=print, bands_as_context=False):
     import check
     import store
     import vetting
-    version = vetting.VERSION_BANDS_AS_CONTEXT if bands_as_context else vetting.VERSION
+    version = vetting.VERSION_BANDS_AS_CONTEXT if bands_as_context else vetting.VERSION_5
     db = store.connect()
     done = store.checked_events(db, version, vetting.N_CHECKS)
     rows = [r for r in db.execute("SELECT * FROM events WHERE label='candidate' AND superseded_run IS NULL"
@@ -466,7 +466,7 @@ def summary(say=print):
     records = _whole_control()
     db = _store()
     try:
-        events = candidate_verdicts(db, vetting.VERSION, vetting.N_CHECKS)
+        events = candidate_verdicts(db, vetting.VERSION_5, vetting.N_CHECKS)
     finally:
         db.close()
     out = dict(summary_rows(records, events), one_wrong_choice_on_the_project_sessions=_one_wrong_choice(),
@@ -488,11 +488,11 @@ def context(say=print):
     records = _whole_control()
     db = _store()
     try:
-        by = {"in_force": candidate_verdicts(db, vetting.VERSION, vetting.N_CHECKS),
+        by = {"in_force": candidate_verdicts(db, vetting.VERSION_5, vetting.N_CHECKS),
               "bands_as_context": candidate_verdicts(db, vetting.VERSION_BANDS_AS_CONTEXT, vetting.N_CHECKS)}
     finally:
         db.close()
-    out = {"versions": {"in_force": vetting.VERSION, "bands_as_context": vetting.VERSION_BANDS_AS_CONTEXT},
+    out = {"versions": {"in_force": vetting.VERSION_5, "bands_as_context": vetting.VERSION_BANDS_AS_CONTEXT},
            "control": CONTROL, "kind": "measured"}
     for name, events in by.items():
         out[name] = summary_rows(records, events)["groups"]
@@ -521,7 +521,7 @@ def package(say=print):
     records = _whole_control()
     db = _store()
     try:
-        events = candidate_verdicts(db, vetting.VERSION, vetting.N_CHECKS)
+        events = candidate_verdicts(db, vetting.VERSION_5, vetting.N_CHECKS)
         # control C's adoption rule reads the candidate version 6's verdicts on the real candidates: packaged
         # too, so the decision can be made again from the package alone (control_c_verdict.py --from-package)
         events6 = candidate_verdicts(db, vetting.VERSION_BANDS_AS_CONTEXT, vetting.N_CHECKS) if CONTROL == "c" else None
@@ -533,14 +533,14 @@ def package(say=print):
                 PACKAGE / "sweeps" / f"{c['target']}-{c['session']}.json") for c, _ in records]
     for a, b in copied:
         shutil.copyfile(a, b)
-    (PACKAGE / "verdicts.json").write_text(json.dumps({"checks_version": vetting.VERSION, "events": events}, indent=0),
+    (PACKAGE / "verdicts.json").write_text(json.dumps({"checks_version": vetting.VERSION_5, "events": events}, indent=0),
                                            encoding="utf-8")
     if events6 is not None:
         (PACKAGE / "verdicts_bands_as_context.json").write_text(
             json.dumps({"checks_version": vetting.VERSION_BANDS_AS_CONTEXT, "events": events6}, indent=0),
             encoding="utf-8")
     names = sorted(p for p in PACKAGE.rglob("*.json") if p.name != "manifest.json")
-    yoke.write(PACKAGE / "manifest.json", {"search_version": seti.SEARCH_VERSION, "checks_version": vetting.VERSION,
+    yoke.write(PACKAGE / "manifest.json", {"search_version": seti.SEARCH_VERSION, "checks_version": vetting.VERSION_5,
                                            "files": {p.relative_to(PACKAGE).as_posix(): _sha(p) for p in names},
                                            "kind": "measured"}, indent=1, stamp=True)
     say(f"packaged {len(names)} files, {len(events)} verdicts")
@@ -628,7 +628,7 @@ def recheck(say=print):
     if r.returncode:
         raise yoke.Refusal("INTERNAL_ERROR", f"the checks stopped ({r.returncode})")
     db = sqlite3.connect(f"file:{(work / 'ssy.sqlite').as_posix()}?mode=ro", uri=True)
-    again = {e["event_id"]: e["verdict"] for e in candidate_verdicts(db, vetting.VERSION, vetting.N_CHECKS)}
+    again = {e["event_id"]: e["verdict"] for e in candidate_verdicts(db, vetting.VERSION_5, vetting.N_CHECKS)}
     db.close()
     first = {e["event_id"]: e["verdict"] for e in
              json.loads((PACKAGE / "verdicts.json").read_text(encoding="utf-8"))["events"]}

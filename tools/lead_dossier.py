@@ -52,13 +52,13 @@ def dossier(control, event_id, say=print):
         out_dir.mkdir(parents=True, exist_ok=True)
         hits = check.session_hits(db, session)
         runs = {}
-        for name, version, context in (("5", vetting.VERSION, False), ("6", vetting.VERSION_BANDS_AS_CONTEXT, True)):
+        for name, version, context in (("5", vetting.VERSION_5, False), ("6", vetting.VERSION_BANDS_AS_CONTEXT, True)):
             res = check.vet_from_store(db, e, looks, session, target, own, hits=hits, report_dir=out_dir,
                                        lead=f"{lead}-v{name}", bands_as_context=context)
             runs[name] = {"version": version, "verdict": res["verdict"], "checks": res["checks"]}
         recorded = {name: [r[0] for r in db.execute(
             "SELECT result FROM checks WHERE event_id=? AND version=? AND name='10. report'", (event_id, version))]
-            for name, version in (("5", vetting.VERSION), ("6", vetting.VERSION_BANDS_AS_CONTEXT))}
+            for name, version in (("5", vetting.VERSION_5), ("6", vetting.VERSION_BANDS_AS_CONTEXT))}
     finally:
         db.close()
     same = {k: runs[k]["verdict"] in recorded[k] for k in runs}

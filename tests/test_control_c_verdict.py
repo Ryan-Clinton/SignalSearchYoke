@@ -90,7 +90,7 @@ class EndToEnd(unittest.TestCase):
             event = 100 + n                                    # one real candidate a cadence, in block 0
             db.execute("INSERT INTO events VALUES (?,?,0,40,0.5,0,'candidate',NULL)", (event, c["session"]))
             done["0"]["events"] = [{"event_id": event, "frequency_mhz": 0.5, "drift_hz_s": 0.0, "snr": 40.0}]
-            for version, verdict in ((vetting.VERSION, "likely interference (indicated: zero or very low drift)"),
+            for version, verdict in ((vetting.VERSION_5, "likely interference (indicated: zero or very low drift)"),
                                      (vetting.VERSION_BANDS_AS_CONTEXT, "likely interference (indicated: zero or very low drift)")):
                 db.executemany("INSERT INTO checks VALUES (?,?,?,?,?,?)",
                                [(event, f"L{event}", name, verdict if name == "10. report" else "x", version, version[:1])
@@ -163,7 +163,6 @@ class EndToEnd(unittest.TestCase):
 
     def test_a_planted_record_by_another_version_6_is_refused(self):
         import json
-        import yoke
         self.planted("likely interference (indicated: known interference bands)", "unexplained, weak")
         path = next((self.folder / "injection").glob("A_*.json"))
         rec = json.loads(path.read_text(encoding="utf-8"))

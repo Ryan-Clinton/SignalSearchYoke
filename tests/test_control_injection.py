@@ -169,7 +169,7 @@ class Records(unittest.TestCase):
         got = ci.versions_at("c7dcf67")
         import seti
         import vetting
-        self.assertEqual((got["search"], got["checks"]), (seti.SEARCH_VERSION, vetting.VERSION))
+        self.assertEqual((got["search"], got["checks"]), (seti.SEARCH_VERSION, vetting.VERSION_5))
         self.assertNotIn("checks_context", got)
         self.assertEqual(ci.versions_at(None), {})
 

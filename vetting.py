@@ -41,13 +41,20 @@ import numpy as np
 import occupancy as occupancy_mod
 import onoff
 
-VERSION = ("5 (20 Nov 2026: check 8 leaves the candidate's own hits out of the strong zero-drift hits, which "
+VERSION_5 = ("5 (20 Nov 2026: check 8 leaves the candidate's own hits out of the strong zero-drift hits, which "
            "with a - b = 1 made a*f1 - b*f2 = f by themselves; check 6 keeps the same target's other sessions apart, "
            "as a repeat at the target, not interference; check 1 calls a look of unknown completeness or a missing "
            "stamp not sound. No recorded verdict of version 4 changes: tools/vetting_checks.py)")
-# Not in force: the candidate version tested on control C (docs/control-c.md), as version 5 with one change.
+# Version 6: as version 5 with one change, tested on control C and adopted by its rule fixed beforehand
+# (docs/control-c.md). Its label is the one its verdicts were recorded under while it was a candidate, so they stay
+# its own.
 VERSION_BANDS_AS_CONTEXT = ("6 candidate (24 Nov 2026): as 5, but check 3's band is context, not a sign of "
                             "interference by itself (docs/control-c.md)")
+VERSION_6 = VERSION_BANDS_AS_CONTEXT
+# In force since 27 Nov 2026 (version 5 before). Version 5 stays as it was, asked for with bands_as_context=False,
+# so every record it made can be made again.
+VERSION = VERSION_6
+IN_FORCE_BANDS_AS_CONTEXT = True
 N_CHECKS = 10                                   # the checks vet() makes on every candidate
 C = 299792458.0
 GBT_LAT, GBT_LON = 38.4331, -79.8398            # degrees (north, east)
@@ -283,7 +290,7 @@ def _check(n, name, result, strength=None, **evidence):
 
 
 def vet(event, looks, target=None, others=(), session_hits=(), report_dir=None, lead=None, background=None,
-        occupancy=None, own_mhz=(), bands_as_context=False):
+        occupancy=None, own_mhz=(), bands_as_context=None):
     """The checks on one candidate. `event` as onoff.judge gives it (with
     `matches` and `stamps`); `looks` its cadence (LookInfo or onoff.Look);
     `target` {ra_hours, dec_deg, name}; `others` hits at other targets
@@ -299,7 +306,10 @@ def vet(event, looks, target=None, others=(), session_hits=(), report_dir=None, 
     candidate's own hits, which check 8 does not count as other signals.
     `bands_as_context`: the candidate version of the checks under test on control C (docs/control-c.md): check 3
     still names the band, but being in one is not by itself a sign of interference. Every other check is the
-    same. Its verdicts carry VERSION_BANDS_AS_CONTEXT; the checks in force are unchanged."""
+    same. Its verdicts carry VERSION_6 (VERSION_BANDS_AS_CONTEXT). None, the default, is the version in force:
+    6 since 27 Nov 2026; False is version 5, kept so its records can be made again."""
+    if bands_as_context is None:
+        bands_as_context = IN_FORCE_BANDS_AS_CONTEXT
     f, drift = event["frequency_mhz"], event["drift_hz_s"]
     l0 = looks[event.get("seed_position", 0)]
     step = l0.step
@@ -494,7 +504,7 @@ def vet(event, looks, target=None, others=(), session_hits=(), report_dir=None, 
                                                                 for n, w, h in CHECKLIST],
                          rio="to be scored by hand" if verdict == "unexplained, strong" else "not needed"))
     out = {"verdict": verdict, "reasons": [c["name"] for c in shown_ + indicated], "checks": checks,
-           "version": VERSION_BANDS_AS_CONTEXT if bands_as_context else VERSION,
+           "version": VERSION_6 if bands_as_context else VERSION_5,
            "checked": datetime.now(timezone.utc).isoformat(timespec="seconds")}
     if report_dir is not None and lead:
         out["report"] = write_report(out, event, lead, Path(report_dir), target)

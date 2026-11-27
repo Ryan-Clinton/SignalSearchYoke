@@ -179,7 +179,7 @@ def target_of(db, session):
 
 
 def vet_from_store(db, e, looks, session, target, own=(), on_positions=None, hits=None, report_dir=None,
-                   lead=None, bands_as_context=False):
+                   lead=None, bands_as_context=None):
     """The checks on an event with the store's evidence, as every candidate
     of a sweep gets them: recurrence in the files `recurrence_files` names
     (the store's hits `own` left out), check 6's background, and the

@@ -121,7 +121,7 @@ def one_block(cadence, k, info, ctx):
             if event is not None and not already:
                 if event not in verdicts:
                     v = check.vet_from_store(ctx["db"], candidates[event], looks, session, ctx["target"], own=(),
-                                             on_positions=TRUE, hits=ctx["hits"])
+                                             on_positions=TRUE, hits=ctx["hits"], bands_as_context=False)
                     v6 = check.vet_from_store(ctx["db"], candidates[event], looks, session, ctx["target"], own=(),
                                               on_positions=TRUE, hits=ctx["hits"], bands_as_context=True)
                     verdicts[event] = {"verdict": v["verdict"], "reasons": v["reasons"],
@@ -139,11 +139,12 @@ def _versions_now():
     """The versions a record is made by: the search, the checks in force, and the candidate version 6."""
     import seti
     import vetting
-    return {"search": seti.SEARCH_VERSION, "checks": vetting.VERSION, "checks_context": vetting.VERSION_BANDS_AS_CONTEXT}
+    # the controls' records are judged by version 5 ("checks") and version 6 ("checks_context"), whichever is in force
+    return {"search": seti.SEARCH_VERSION, "checks": vetting.VERSION_5, "checks_context": vetting.VERSION_BANDS_AS_CONTEXT}
 
 
 # where each version is written: (file, name)
-VERSION_NAMES = {"search": ("seti.py", "SEARCH_VERSION"), "checks": ("vetting.py", "VERSION"),
+VERSION_NAMES = {"search": ("seti.py", "SEARCH_VERSION"), "checks": ("vetting.py", ("VERSION_5", "VERSION")),
                  "checks_context": ("vetting.py", "VERSION_BANDS_AS_CONTEXT")}
 
 
@@ -154,13 +155,24 @@ def versions_at(commit):
     out = {}
     if not commit:
         return out
-    for key, (path, name) in VERSION_NAMES.items():
+    for key, (path, names) in VERSION_NAMES.items():
         got = subprocess.run(["git", "-C", str(ROOT), "show", f"{commit}:{path}"], capture_output=True, text=True)
         if got.returncode:
             continue
+        literal = {}
         for node in ast.parse(got.stdout).body:
-            if isinstance(node, ast.Assign) and any(getattr(t, "id", None) == name for t in node.targets):
-                out[key] = ast.literal_eval(node.value)
+            if isinstance(node, ast.Assign) and isinstance(node.value, (ast.Constant, ast.JoinedStr, ast.Tuple)):
+                for t in node.targets:
+                    if getattr(t, "id", None):
+                        try:
+                            literal[t.id] = ast.literal_eval(node.value)
+                        except ValueError:
+                            pass
+        # the first name the file held as a literal: version 5's label was VERSION until version 6 was put in force
+        for name in (names if isinstance(names, tuple) else (names,)):
+            if name in literal:
+                out[key] = literal[name]
+                break
     return out
 
 
@@ -462,10 +474,10 @@ def checks_left_out(say=print):
     choice = json.loads((OUT / "choice.json").read_text(encoding="utf-8"))
     records = load_records(choice, _versions_now())
     db = sqlite3.connect(f"file:{(nc.CONTROLS / 'ssy.sqlite').as_posix()}?mode=ro", uri=True)
-    current = {e["event_id"]: e["snr"] for e in nc.candidate_verdicts(db, vetting.VERSION, vetting.N_CHECKS)}
+    current = {e["event_id"]: e["snr"] for e in nc.candidate_verdicts(db, vetting.VERSION_5, vetting.N_CHECKS)}
     strengths, bands = {}, Counter()
     for event, name, result, strength in db.execute(
-            "SELECT event_id, name, result, strength FROM checks WHERE version=?", (vetting.VERSION,)):
+            "SELECT event_id, name, result, strength FROM checks WHERE version=?", (vetting.VERSION_5,)):
         if event in current:
             short = name.split(". ", 1)[1]
             if strength in ("shown", "indicated"):
