@@ -648,6 +648,22 @@ step's record is at `332866d`, clean.
   results were judged by version 5 and stand until they are judged again
   and that is reported.
 
+### 4, control C's decision from its package, the report's checks of it, one candidate's dossier, 27 November 2026
+
+Report 1.11 reviewed at `7c4f4c7`. Each point, checked against the code
+and records first:
+
+| Finding | Severity | Verdict and what changed |
+|---|---|---|
+| SS-42: version 6 adopted but not in use | high | **correct; for a decision.** `vetting.VERSION` is still 5, and `check.py` saves with it, `bands_as_context=False`. Putting version 6 into use changes the checks of every future candidate, and `check.py` would re-judge every stored one, since it skips only those checked by the version in force. That is put to Ryan. Until he decides, the published verdicts stay version 5's. |
+| SS-43: the adoption decision cannot be made again from the package | high | **correct, and wider than said.** The decision read version 6's verdicts on the real candidates from control C's 1.7 GB store, which nothing packages. The package now holds them (`verdicts_bands_as_context.json`). `control_c_verdict.py --from-package` makes the decision from the package and the planted records alone, each file checked against the manifest, and is refused unless it is the recorded verdict: it is. The evidence reproduction runs both controls' replays and that decision. |
+| SS-44: hard-coded counts in the report's summary | medium | **correct.** Both counts now come from the records (tested). |
+| SS-45: the report's checks of control C were thin | medium | **correct.** `report.control_c_problems` refuses unless control C is four distinct sessions apart from control B's, 32 planted blocks of 3,520 signals, the same candidates under both versions at both cuts and in the summary, a verdict that follows from its own measures by the rule, and an identical replay. Tested by planting each fault. |
+| SS-46: the one candidate version 6 leaves unexplained | medium | **correct.** `tools/lead_dossier.py` runs the ten checks again on event 390050 by both versions, through a connection that cannot write. The result is `docs/leads/control-c/`. HIP 436, block 192, 1587.696 MHz, −0.2245 Hz/s, S/N 54. Version 5 calls it likely interference, from the GNSS bands alone (GPS L1, GLONASS L1, Galileo, BeiDou). Version 6 calls it unexplained, weak. Check 1 calls the data not sound under both, and 9 look-alikes lie in the OFF looks. The store's verdicts are unchanged, and running the checks again gives them. Not done: no other pipeline on this block, no satellite list, no other observation. |
+| SS-47: version 6 at S/N 10 | medium | **correct.** In the report, supplementary: real candidates left unexplained 3 by version 5 and 18 by version 6, none strong; planted 965 and 1,649 of 2,093. |
+| SS-48: the Poisson limit | low | **correct.** In the report, 0.0044 a block, with its independence assumption. |
+| Next research directions (an end-to-end matched comparison, crowded blocks, combs, reprocessing, another telescope) | | **not findings.** They are recorded here as proposals. None is started without Ryan. |
+
 ### 4, the time-order test, 21 November 2026
 
 F4-02's measurement (`tools/false_checks.py chronological`, 16 blocks):
@@ -1546,7 +1562,7 @@ provenance. Results still running are not listed until they finish.
 | The two DC rules give identical counts on eight 2016 blocks | 14 | `data/analysis/dc_checks.json` | `d3e5699`, clean | `tools/dc_checks.py` |
 | Control B's false-candidate rates on four real cadences | 4 | `data/analysis/negative_controls/tables.json` | `ac59d3c`, clean | `tools/negative_controls.py tables` |
 | Control B: none unexplained after the checks; candidates bunched and in capped blocks; one wrong choice beside it | 4 | `data/analysis/negative_controls/summary.json` | `ac59d3c`, clean | `tools/negative_controls.py summary` |
-| Control B's tables and summary made again from its package alone | 4 | `data/analysis/negative_controls/package_replay.json` | `ac59d3c`, clean | `tools/negative_controls.py replay` |
+| Control B's tables and summary made again from its package alone | 4 | `data/analysis/negative_controls/package_replay.json` | `3814dfd`, clean (its package made at `ac59d3c`; replayed again when the evidence reproduction took it up) | `tools/negative_controls.py replay` |
 | Control B's checks run again from nothing: no verdict differs | 4 | `data/analysis/negative_controls/package_recheck.json` | `6a50490`, clean | `tools/negative_controls.py recheck` |
 | Planted signals in control B's cadences: the checks keep them in complete blocks, not in capped ones | 4 | `data/analysis/negative_controls/injection.json` | `ac59d3c`, clean (its block records made at `c7dcf67`; the checkout changed while they ran, in the tables' interval code, docs and the report only) | `tools/control_injection.py tables` |
 | The known-band check stands alone against 298 planted candidates and none of control B's at 30 | 4 | `data/analysis/negative_controls/injection_checks.json` | `ac59d3c`, clean | `tools/control_injection.py checks-left-out` |
@@ -1561,6 +1577,8 @@ provenance. Results still running are not listed until they finish.
 | Control C's false-candidate rates on four more real cadences | 4 | `data/analysis/negative_controls_c/tables.json` | `332866d`, clean | `tools/negative_controls.py tables --control c` |
 | Control C: none unexplained by version 5 at 30; 93 of 96 candidates in capped blocks | 4 | `data/analysis/negative_controls_c/summary.json` | `332866d`, clean | `tools/negative_controls.py summary --control c` |
 | Control C's candidates judged by version 6 beside version 5 | 4 | `data/analysis/negative_controls_c/checks_context.json` | `332866d`, clean | `tools/negative_controls.py context --control c` |
-| Control C's tables and summary made again from its package alone | 4 | `data/analysis/negative_controls_c/package_replay.json` | `332866d`, clean | `tools/negative_controls.py replay --control c` |
+| Control C's tables and summary made again from its package alone | 4 | `data/analysis/negative_controls_c/package_replay.json` | `3814dfd`, clean (its package made again at `2dd723e`, with version 6's verdicts) | `tools/negative_controls.py replay --control c` |
 | Planted signals in control C's cadences: version 6 leaves 883 of 1,111 planted candidates unexplained at 30, version 5 512 | 4 | `data/analysis/negative_controls_c/injection.json` | `332866d`, clean (its block records made at `332866d`, clean) | `tools/control_injection.py tables --control c` |
 | Version 6 adopted by the rule fixed beforehand: more planted signals kept in capped blocks and weighted, 0.0008 real candidates a block unexplained | 4 | `data/analysis/negative_controls_c/verdict.json` | `332866d`, clean | `tools/control_c_verdict.py` |
+| Control C's decision made again from its package and planted records alone, no store: the recorded verdict | 4 | `data/analysis/negative_controls_c/verdict_from_package.json` | `3814dfd`, clean | `tools/control_c_verdict.py --from-package` |
+| Control C's one candidate left unexplained by version 6, its checks run again by both versions without writing: the store's verdicts are what they give | 4 | `data/analysis/negative_controls_c/lead_390050.json` | `2c7b7fe`, clean | `tools/lead_dossier.py --control c --event 390050` |
