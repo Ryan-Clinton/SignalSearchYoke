@@ -1,1 +1,2 @@
 config/*.tsv -text
+docs/zenodo/** -text
