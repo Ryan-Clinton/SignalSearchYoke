@@ -48,6 +48,8 @@ NEUTRAL = {
                "check of records already written; each block's work unchanged",
     "7022450": "seti.py: the sweep's lock and log are one a target, so sweeps of different targets may run at once; "
                "the search and what each block keeps unchanged",
+    "389490b": "vetting.py, check.py: version 6 of the checks put in force; version 5, which every earlier record "
+               "was judged by, unchanged and asked for by name; each record names its version",
 }
 
 # Records made with local changes, and what those changes were.
