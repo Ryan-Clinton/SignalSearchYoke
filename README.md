@@ -14,7 +14,9 @@ Listen's published recordings over the web.
 The report, [Comparing radio-signal searches on Breakthrough Listen
 data](docs/report/report.md) (version 1.12; also on
 [ryanclinton.uk](https://ryanclinton.uk/astrophotography/signalsearch/comparing-searches/)
-with a PDF), has the method, tables and limits. In short:
+with a PDF, and archived with its evidence on Zenodo,
+[doi:10.5281/zenodo.24577702](https://doi.org/10.5281/zenodo.24577702)), has the method, tables and
+limits. In short:
 
 - **2017 session (KIC 8462852, AGBT17A_999_68), 121 blocks, 13,310 planted
   signals.** At the cut where each pipeline's measured false-candidate

@@ -297,7 +297,7 @@ A line-by-line audit of the code (docs/audits.md in the repository) found the fo
 
 ## Data and code availability
 
-The observations are from the Breakthrough Listen Open Data Archive (Lebofsky et al. 2019, PASP 131, 124505). Breakthrough Listen is managed by the Breakthrough Initiatives. The code is at https://github.com/Ryan-Clinton/SignalSearchYoke (this version was built from the commit named on its page). The code and the result records behind every number here are to be archived on Zenodo; the DOI will be added here when they are.
+The observations are from the Breakthrough Listen Open Data Archive (Lebofsky et al. 2019, PASP 131, 124505). Breakthrough Listen is managed by the Breakthrough Initiatives. The code is at https://github.com/Ryan-Clinton/SignalSearchYoke (this version was built from the commit named on its page). This version, with the evidence behind every number here (the result records, the source at its commit and how to make the tables again), is archived on Zenodo: https://doi.org/10.5281/zenodo.24577702. To cite it: Clinton, R. (2026). Comparing radio-signal searches on Breakthrough Listen data (Version 1.12). Zenodo. https://doi.org/10.5281/zenodo.24577702
 
 ## References
 

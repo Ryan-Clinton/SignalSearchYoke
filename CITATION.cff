@@ -12,6 +12,22 @@ authors:
 version: 0.1.0
 license: MIT
 repository-code: "https://github.com/Ryan-Clinton/SignalSearchYoke"
+identifiers:
+  - type: doi
+    value: "10.5281/zenodo.24577702"
+    description: "Report 1.12 with its evidence package and the source at its commit"
+preferred-citation:
+  type: report
+  title: "Comparing radio-signal searches on Breakthrough Listen data"
+  authors:
+    - given-names: Ryan
+      family-names: Clinton
+  version: "1.12"
+  year: 2026
+  publisher:
+    name: Zenodo
+  doi: "10.5281/zenodo.24577702"
+  url: "https://ryanclinton.uk/astrophotography/signalsearch/comparing-searches/"
 keywords:
   - SETI
   - technosignatures
