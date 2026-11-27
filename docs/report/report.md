@@ -1,6 +1,6 @@
 # Comparing radio-signal searches on Breakthrough Listen data
 
-Ryan Clinton. Version 1.11, 2026-11-26.
+Ryan Clinton. Version 1.12, 2026-11-27.
 
 ## Summary
 
@@ -323,6 +323,7 @@ The observations are from the Breakthrough Listen Open Data Archive (Lebofsky et
 - 1.9 (2026-11-25): a second draw of blocks for the independent injector, fixed before it ran; turboSETI's recovery scored at the middle of the look beside this search's, with paired intervals by session; the test for chance matches under each scoring.
 - 1.10 (2026-11-25): a third draw for the independent injector, from the 2016 session, fixed before it ran and given beside the two 2017 draws at both cuts; the same-hit control on BLISS's hits described for all ten of its blocks.
 - 1.11 (2026-11-26): control C: four more real cadences by the same rule, their false candidates, signals planted in them, and the version of the checks that treats a listed band as context adopted by the rule fixed before they were read.
+- 1.12 (2026-11-27): control C's counts all from its records and its records checked as one experiment; its decision made again from its package alone; the two versions of the checks at S/N 10 and the exact Poisson limit beside the rule's interval.
 
 ## Records this version was written from
 
@@ -349,7 +350,7 @@ The observations are from the Breakthrough Listen Open Data Archive (Lebofsky et
 - data/measurements/off_null.json: written 2026-11-11T02:41:54Z, commit e5f6c77
 - data/analysis/negative_controls/tables.json: written 2026-11-24T09:45:23Z, commit ac59d3c
 - data/analysis/negative_controls/summary.json: written 2026-11-24T09:45:40Z, commit ac59d3c
-- data/analysis/negative_controls/package_replay.json: written 2026-11-24T09:45:47Z, commit ac59d3c
+- data/analysis/negative_controls/package_replay.json: written 2026-11-27T05:11:53Z, commit 3814dfd
 - data/analysis/negative_controls/package_recheck.json: written 2026-11-24T03:24:25Z, commit 6a50490
 - data/analysis/negative_controls/injection.json: written 2026-11-24T09:45:54Z, commit ac59d3c
 - data/analysis/negative_controls/injection_checks.json: written 2026-11-24T09:45:59Z, commit ac59d3c
@@ -357,7 +358,7 @@ The observations are from the Breakthrough Listen Open Data Archive (Lebofsky et
 - data/analysis/negative_controls_c/summary.json: written 2026-11-26T17:41:50Z, commit 332866d
 - data/analysis/negative_controls_c/injection.json: written 2026-11-26T20:05:18Z, commit 332866d
 - data/analysis/negative_controls_c/verdict.json: written 2026-11-26T20:05:22Z, commit 332866d
-- data/analysis/negative_controls_c/package_replay.json: written 2026-11-26T17:42:01Z, commit 332866d
+- data/analysis/negative_controls_c/package_replay.json: written 2026-11-27T05:11:50Z, commit 3814dfd
 - data/analysis/negative_controls_c/checks_context.json: written 2026-11-26T17:41:56Z, commit 332866d
 - data/analysis/independent_injection/tables.json: written 2026-11-25T09:44:41Z, commit baf7f5a
 - data/analysis/independent_injection/unsmeared/tables.json: written 2026-11-25T09:44:46Z, commit baf7f5a

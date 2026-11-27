@@ -21,8 +21,8 @@ ROOT = Path(__file__).resolve().parents[1]
 DATA = Path(os.environ.get("SSY_DATA") or ROOT / "data")
 OUT = ROOT / "docs" / "report" / "report.md"
 
-VERSION = "1.11"
-DATE = "2026-11-26"
+VERSION = "1.12"
+DATE = "2026-11-27"
 REVISIONS = (("0.1", "2026-11-18", "first draft."),
              ("1.0", "2026-11-19", "first release: the signals BLISS finds and this search misses traced stage by "
                          "stage, and the detector's misses measured."),
@@ -54,9 +54,12 @@ REVISIONS = (("0.1", "2026-11-18", "first draft."),
              ("1.10", "2026-11-25", "a third draw for the independent injector, from the 2016 session, fixed before it ran "
                             "and given beside the two 2017 draws at both cuts; the same-hit control on BLISS's "
                             "hits described for all ten of its blocks."),
-             ("1.11", DATE, "control C: four more real cadences by the same rule, their false candidates, signals "
+             ("1.11", "2026-11-26", "control C: four more real cadences by the same rule, their false candidates, signals "
                             "planted in them, and the version of the checks that treats a listed band as context "
-                            "adopted by the rule fixed before they were read."))
+                            "adopted by the rule fixed before they were read."),
+             ("1.12", DATE, "control C's counts all from its records and its records checked as one experiment; "
+                            "its decision made again from its package alone; the two versions of the checks at S/N "
+                            "10 and the exact Poisson limit beside the rule's interval."))
 
 
 def control_reading(inj):

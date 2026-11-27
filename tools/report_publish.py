@@ -59,8 +59,10 @@ REVISIONS = (
                           "recovery scored at the middle of the look beside this search's.", True),
     ("1.10", "2026-11-25", "A third draw for the independent injector, from the 2016 session, fixed before it ran "
                            "and reported beside the two 2017 draws.", True),
-    ("1.11", None, "Control C: four more real cadences, signals planted in them, and the version of the checks "
+    ("1.11", "2026-11-26", "Control C: four more real cadences, signals planted in them, and the version of the checks "
                    "that treats a listed band as context adopted by the rule fixed before they were read.", True),
+    ("1.12", None, "Control C's decision made again from its package alone; the two versions of the checks at "
+                   "S/N 10 and the exact Poisson limit beside the rule's interval.", True),
 )
 CHROME = (Path("C:/Program Files/Google/Chrome/Application/chrome.exe"),
           Path("C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"))
