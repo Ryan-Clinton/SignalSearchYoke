@@ -1,0 +1,42 @@
+{
+ "metadata": {
+  "upload_type": "publication",
+  "publication_type": "report",
+  "title": "Comparing radio-signal searches on Breakthrough Listen data",
+  "creators": [
+   {
+    "name": "Clinton, Ryan",
+    "affiliation": "Independent researcher"
+   }
+  ],
+  "version": "1.12",
+  "publication_date": "2026-11-27",
+  "language": "eng",
+  "access_right": "open",
+  "license": "cc-by-4.0",
+  "doi": "10.5281/zenodo.24577702",
+  "keywords": [
+   "SETI",
+   "technosignatures",
+   "Breakthrough Listen",
+   "radio astronomy",
+   "narrowband signals",
+   "Doppler drift",
+   "radio-frequency interference",
+   "signal injection",
+   "turboSETI",
+   "BLISS",
+   "Green Bank Telescope",
+   "SignalSearchYoke"
+  ],
+  "description": "<p>A narrowband radio-signal search of my own (SignalSearchYoke) compared with two published pipelines, turboSETI and BLISS, on recorded Breakthrough Listen observations from the Green Bank Telescope: synthetic signals planted in the data (33,660 over three sessions) and counted as found by each pipeline, with the false candidates each raised, on the same blocks.</p><p>On a 2017 session (KIC 8462852), at the cut where each pipeline's measured false-candidate rate is at most 0.1 a block, this search found 4,520 of 13,310 planted signals in all three ON looks, turboSETI 442. On a 2016 session fixed in advance (HIP 17147) it again found far more (4,337 against 417), but both pipelines <strong>failed</strong> the false-candidate limit set beforehand; that failure is part of the result. On a third session chosen by a rule and fixed in advance (NGC 6946, C band, 2019) every criterion fixed beforehand was met at its point estimate. Three sessions from one telescope: they do not show better sensitivity in general.</p><p>Planted instead by setigen, an injector this project did not write, in three draws fixed before they ran (two sessions), the gap between the pipelines was wider, not narrower: it is not shown that this project's planting favours this search. Two false-candidate controls of four real cadences each, chosen by a rule fixed beforehand (2,534 blocks), measure false candidates on real cadences; on the second, a version of the candidate checks that treats a listed interference band as context was adopted by a rule fixed before its data were read.</p><p>Version 6 of the candidate checks is adopted by that rule but not yet in use: every verdict in the report is version 5's.</p><p>This record holds the report (PDF), its evidence package (the result records behind every number, with a manifest of SHA-256 hashes; tables made again from it alone with the commit's code), the source at that commit, and how to reproduce the results. The raw spectra stay in the Breakthrough Listen Open Data Archive (Lebofsky et al. 2019, PASP 131, 124505). Not peer reviewed. Versions are kept, each with what changed, at https://ryanclinton.uk/astrophotography/signalsearch/comparing-searches/.</p>",
+  "related_identifiers": [
+   {
+    "identifier": "https://github.com/Ryan-Clinton/SignalSearchYoke/tree/5a3de68",
+    "relation": "isSupplementedBy",
+    "resource_type": "software"
+   }
+  ],
+  "notes": "Licences: the CC BY 4.0 licence of this record covers the report and the evidence records only; it does not replace the software's licences or the data's terms. The source (the repository and the source zip) is under the MIT licence, except two files derived from BLISS, under BLISS's BSD 3-Clause licence (THIRD_PARTY_NOTICES.md). The observations are Breakthrough Listen's, from their Open Data Archive, under its own terms; no raw spectra are in this record."
+ }
+}
