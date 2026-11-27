@@ -197,20 +197,63 @@ def control_section(ctab, csum, inj, replay, recheck, checks_left_out=None):
     return L
 
 
+def _count(k, one, many):
+    return f"{WORDS_SMALL.get(k, n(k))} {one if k == 1 else many}"
+
+
+WORDS_SMALL = {0: "no", 1: "one", 2: "two", 3: "three"}
+
+
+CONTROL_C_PLANTED = (32, 3520)       # blocks and signals, fixed in docs/control-c.md
+
+
+def control_c_problems(ttab, tsum, tinj, tver, treplay, tctx, control_b_tab):
+    """Why control C's records are not the one experiment its protocol describes, judged as the rule fixed it."""
+    out = []
+    sessions = [r["session"] for r in ttab["sessions"]]
+    if len(sessions) != 4 or len(set(sessions)) != 4:
+        out.append(f"control C has sessions {sessions}, not four distinct ones")
+    if set(sessions) & {r["session"] for r in control_b_tab["sessions"]}:
+        out.append("control C shares a session with control B")
+    if (tinj["blocks"], tinj["signals"]) != CONTROL_C_PLANTED:
+        out.append(f"control C's planting is {tinj['blocks']} blocks of {tinj['signals']} signals, not "
+                   f"{CONTROL_C_PLANTED[0]} of {CONTROL_C_PLANTED[1]}")
+    for cut in CUTS_REPORTED:
+        for k in ("capped", "complete", "all"):
+            if tinj["cuts"][cut][k]["candidates"] != tinj["cuts_bands_as_context"][cut][k]["candidates"]:
+                out.append(f"control C's planted candidates at {cut} ({k}) differ between the two versions")
+        a, b = tctx["in_force"]["all four"][f"at_{cut}"], tctx["bands_as_context"]["all four"][f"at_{cut}"]
+        if a["candidates"] != b["candidates"] or a["candidates"] != tsum["groups"]["all four"][f"at_{cut}"]["candidates"]:
+            out.append(f"control C's real candidates at {cut} differ between the versions or the summary")
+    if tver["real_unexplained_by_version_6"]["unexplained"] != tctx["bands_as_context"]["all four"]["at_30"]["unexplained"]:
+        out.append("the verdict's real candidates left unexplained by version 6 are not the context record's")
+    pc, pw, r, lim = (tver["planted_capped"], tver["planted_weighted"], tver["real_unexplained_by_version_6"],
+                      tver["limits"])
+    keeps = pc["interval"][0] > 0 and pw["interval"][0] > 0
+    clean = r["rate"] <= lim["rate"] and r["interval"][1] <= lim["upper"]
+    if (tver["keeps_more_real_signals"], tver["lets_no_more_interference_through"], tver["adopted"]) != \
+            (keeps, clean, keeps and clean):
+        out.append("control C's verdict does not follow from its own measures by the rule")
+    if not (treplay["tables_same"] and treplay["summary_same"]):
+        out.append("control C's package replay did not give the same tables and summary")
+    return out
+
+
 def control_c_summary(tsum, tver):
-    """One sentence for the summary on control C."""
+    """One sentence for the summary on control C, every count from its records."""
     a30 = tsum["groups"]["all four"]["at_30"]
     r = tver["real_unexplained_by_version_6"]
+    left5 = a30["unexplained"]
     return (f"Four more cadences chosen by the same rule (control C) gave {a30['rate']:.2g} false candidates a block at "
-            f"S/N 30, none left unexplained by the checks in force; there a version of the checks that treats a listed "
-            "interference band as context, not a sign, "
-            + ("kept more of the planted signals and let one real candidate through in "
-               f"{n(r['blocks'])} blocks, and is adopted by the rule fixed before control C was read."
+            f"S/N 30, {'none' if left5 == 0 else n(left5)} left unexplained by the checks in force; there a version of the "
+            "checks that treats a listed interference band as context, not a sign, "
+            + (f"kept more of the planted signals and left {_count(r['unexplained'], 'real candidate', 'real candidates')}"
+               f" unexplained in {n(r['blocks'])} blocks, and is adopted by the rule fixed before control C was read."
                if tver["adopted"] else "did not meet the rule fixed before control C was read, so the checks in "
                "force stay."))
 
 
-def control_c_section(ttab, tsum, tinj, tver, treplay, control_b_rate):
+def control_c_section(ttab, tsum, tinj, tver, treplay, control_b_rate, tctx):
     """The report's lines on control C and the version of the checks tested on it, from their records."""
     L = []
     w = L.append
@@ -260,6 +303,25 @@ def control_c_section(ttab, tsum, tinj, tver, treplay, control_b_rate):
     w(f"| control C's real candidates left unexplained by version 6 | at most {lim['rate']:g} a block, upper end at "
       f"most {lim['upper']:g} | {r['unexplained']} in {n(r['blocks'])} blocks, {r['rate']:.4f} a block "
       f"({r['interval'][0]:.4f} to {r['interval'][1]:.4f}) |")
+    w("")
+    w(f"The interval for real candidates resamples runs of {lim['run']} consecutive blocks within each cadence, the "
+      f"rule's measure. An exact Poisson upper limit, which takes blocks as independent (they are not: interference "
+      f"bunches), is {r['poisson_upper_95']:.4f} a block, also under the limit.")
+    w("")
+    c10, p5, p6 = tctx["bands_as_context"]["all four"]["at_10"], tinj["cuts"]["10"]["all"], \
+        tinj["cuts_bands_as_context"]["10"]["all"]
+    f10 = tctx["in_force"]["all four"]["at_10"]
+    w("The rule was set at S/N 30. At S/N 10, supplementary and not part of it:")
+    w("")
+    w("| at S/N 10 | candidates | left unexplained, version 5 | version 6 |")
+    w("|---|---|---|---|")
+    w(f"| control C's real candidates | {n(f10['candidates'])} | {n(f10['unexplained'])} | {n(c10['unexplained'])} |")
+    w(f"| planted candidates | {n(p5['candidates'])} | {n(p5['unexplained'])} | {n(p6['unexplained'])} |")
+    w("")
+    w("So at the lower cut version 6 also keeps more of the planted signals, and leaves more of the real "
+      f"candidates unexplained ({n(c10['unexplained'])} against {n(f10['unexplained'])}, "
+      f"{(lambda k: 'none' if k == 0 else n(k))(c10['by_verdict'].get('unexplained, strong', 0))} of them strong); a search at S/N 10 would have more of "
+      "them to look into.")
     w("")
     w(("Both hold, so **version 6 is adopted** as the checks' next version. " if tver["adopted"] else
        "**Version 6 is not adopted**: the checks in force stay. ")
@@ -780,12 +842,15 @@ def main():
             refuse(f"version {VERSION} reports {p}, which is missing")
     cleft, indep, indep_first, indep_second, indep_third, mid, turbo_mid, assoc = (json.loads(p.read_text(encoding="utf-8")) for p in later.values())
     cc = DATA / "analysis" / "negative_controls_c"
-    for p in ("tables.json", "summary.json", "injection.json", "verdict.json", "package_replay.json"):
+    names_c = ("tables.json", "summary.json", "injection.json", "verdict.json", "package_replay.json",
+               "checks_context.json")
+    for p in names_c:
         if not (cc / p).exists():
             refuse(f"version {VERSION} reports control C, and {cc / p} is missing")
-    ttab, tsum, tinj, tver, treplay = (json.loads((cc / p).read_text(encoding="utf-8")) for p in
-                                       ("tables.json", "summary.json", "injection.json", "verdict.json",
-                                        "package_replay.json"))
+    ttab, tsum, tinj, tver, treplay, tctx = (json.loads((cc / p).read_text(encoding="utf-8")) for p in names_c)
+    bad = control_c_problems(ttab, tsum, tinj, tver, treplay, tctx, ctab)
+    if bad:
+        refuse("; ".join(bad))
     blocks_c = sum(r["blocks"] for r in ttab["sessions"])
     if (len(ttab["sessions"]) != 4 or tsum["groups"]["all four"]["at_30"]["blocks"] != blocks_c
             or tver["real_unexplained_by_version_6"]["blocks"] != blocks_c or tver["cut"] != 30):
@@ -1156,7 +1221,7 @@ def main():
     L.extend(injector_section(indep, indep_first, indep_second, indep_third))
     L.extend(midlook_section(mid, turbo_mid, assoc))
     L.extend(control_section(ctab, csum, cinj, creplay, crecheck, cleft))
-    L.extend(control_c_section(ttab, tsum, tinj, tver, treplay, csum["groups"]["all four"]["at_30"]["rate"]))
+    L.extend(control_c_section(ttab, tsum, tinj, tver, treplay, csum["groups"]["all four"]["at_30"]["rate"], tctx))
     w("## What the code audits found that bears on these results")
     w("")
     w("A line-by-line audit of the code (docs/audits.md in the repository) found the following. None changes "
@@ -1241,6 +1306,7 @@ def main():
                     ("data/analysis/negative_controls_c/injection.json", tinj),
                     ("data/analysis/negative_controls_c/verdict.json", tver),
                     ("data/analysis/negative_controls_c/package_replay.json", treplay),
+                    ("data/analysis/negative_controls_c/checks_context.json", tctx),
                     ("data/analysis/independent_injection/tables.json", indep),
                     ("data/analysis/independent_injection/unsmeared/tables.json", indep_first),
                     ("data/analysis/independent_injection/second/tables.json", indep_second),

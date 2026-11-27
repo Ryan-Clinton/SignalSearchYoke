@@ -522,6 +522,9 @@ def package(say=print):
     db = _store()
     try:
         events = candidate_verdicts(db, vetting.VERSION, vetting.N_CHECKS)
+        # control C's adoption rule reads the candidate version 6's verdicts on the real candidates: packaged
+        # too, so the decision can be made again from the package alone (control_c_verdict.py --from-package)
+        events6 = candidate_verdicts(db, vetting.VERSION_BANDS_AS_CONTEXT, vetting.N_CHECKS) if CONTROL == "c" else None
     finally:
         db.close()
     (PACKAGE / "sweeps").mkdir(parents=True, exist_ok=True)
@@ -532,6 +535,10 @@ def package(say=print):
         shutil.copyfile(a, b)
     (PACKAGE / "verdicts.json").write_text(json.dumps({"checks_version": vetting.VERSION, "events": events}, indent=0),
                                            encoding="utf-8")
+    if events6 is not None:
+        (PACKAGE / "verdicts_bands_as_context.json").write_text(
+            json.dumps({"checks_version": vetting.VERSION_BANDS_AS_CONTEXT, "events": events6}, indent=0),
+            encoding="utf-8")
     names = sorted(p for p in PACKAGE.rglob("*.json") if p.name != "manifest.json")
     yoke.write(PACKAGE / "manifest.json", {"search_version": seti.SEARCH_VERSION, "checks_version": vetting.VERSION,
                                            "files": {p.relative_to(PACKAGE).as_posix(): _sha(p) for p in names},

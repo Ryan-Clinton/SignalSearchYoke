@@ -76,7 +76,9 @@ TABLES = (("matched.py", "tables", "KIC8462852"), ("matched_tables.py", "bliss",
           ("tools/independent_injection.py", "tables"), ("tools/independent_injection.py", "tables", "--draw", "2"),
           ("tools/independent_injection.py", "tables", "--draw", "3"),
           ("tools/independent_injection.py", "tables-first"), ("tools/midlook.py", "tables"),
-          ("tools/midlook.py", "checks"), ("tools/midlook.py", "turbo-tables"), ("tools/report.py",))
+          ("tools/midlook.py", "checks"), ("tools/midlook.py", "turbo-tables"),
+          ("tools/negative_controls.py", "replay"), ("tools/negative_controls.py", "replay", "--control", "c"),
+          ("tools/control_c_verdict.py", "--from-package"), ("tools/report.py",))
 # What may differ when a table is made again, and nothing else: when it was written, by which commit, and
 # the machine's Python and libraries (a record's written_utc, and in its provenance GENERATED); in a page,
 # the UTC time on its "written by" line and the time and commit after "written" or "finished" in the
@@ -100,6 +102,9 @@ EXPECTED = {
     ("tools/midlook.py", "tables"): ("data/analysis/midlook/tables.json",),
     ("tools/midlook.py", "checks"): ("data/analysis/midlook/association_checks.json",),
     ("tools/midlook.py", "turbo-tables"): ("data/analysis/midlook/turbo_tables.json",),
+    ("tools/negative_controls.py", "replay"): ("data/analysis/negative_controls/package_replay.json",),
+    ("tools/negative_controls.py", "replay", "--control", "c"): ("data/analysis/negative_controls_c/package_replay.json",),
+    ("tools/control_c_verdict.py", "--from-package"): ("data/analysis/negative_controls_c/verdict_from_package.json",),
     ("tools/report.py",): ("docs/report/recovery.svg", "docs/report/report.md"),
 }
 STAMP_KEYS = {"written_utc"}

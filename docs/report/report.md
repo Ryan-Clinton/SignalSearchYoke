@@ -16,7 +16,7 @@ These are three sessions from one telescope. They do not show better sensitivity
 
 Planted instead by setigen, an injector this project did not write, the same 1,760 signals in 16 blocks of the 2017 session were found 1,355 times by this search and 367 by turboSETI at S/N 10, against 1,156 and 228 with this project's planting. The gap between them in share found was 0.034 wider with setigen's planting (0.020 to 0.049), so it is not shown that this project's planting favours this search. A second draw of 16 other blocks, fixed before it ran, gave a gap 0.035 wider (0.013 to 0.054). A third, of 16 blocks of the 2016 session, gave a gap 0.055 wider (0.030 to 0.081).
 
-Four real cadences of other targets, chosen by a rule fixed beforehand and searched whole, gave 0.029 to 0.31 false candidates a block at S/N 30 (0.125 over all four, bunched in 18 of 1,267 blocks), and the checks left none unexplained. Signals planted in the same cadences show the checks keeping most real-looking signals in complete blocks, but not in blocks at the hit limit, which lie mostly in listed interference bands. Four more cadences chosen by the same rule (control C) gave 0.076 false candidates a block at S/N 30, none left unexplained by the checks in force; there a version of the checks that treats a listed interference band as context, not a sign, kept more of the planted signals and let one real candidate through in 1,267 blocks, and is adopted by the rule fixed before control C was read.
+Four real cadences of other targets, chosen by a rule fixed beforehand and searched whole, gave 0.029 to 0.31 false candidates a block at S/N 30 (0.125 over all four, bunched in 18 of 1,267 blocks), and the checks left none unexplained. Signals planted in the same cadences show the checks keeping most real-looking signals in complete blocks, but not in blocks at the hit limit, which lie mostly in listed interference bands. Four more cadences chosen by the same rule (control C) gave 0.076 false candidates a block at S/N 30, none left unexplained by the checks in force; there a version of the checks that treats a listed interference band as context, not a sign, kept more of the planted signals and left one real candidate unexplained in 1,267 blocks, and is adopted by the rule fixed before control C was read.
 
 ## The question
 
@@ -271,6 +271,17 @@ The rule, fixed before control C was read, adopts version 6 only if, at S/N 30:
 | the same, weighted to control C's mix (20% of blocks at the limit) | lower end above 0 | +0.289 (0.135 to 0.456) |
 | control C's real candidates left unexplained by version 6 | at most 0.02 a block, upper end at most 0.05 | 1 in 1,267 blocks, 0.0008 a block (0.0000 to 0.0023) |
 
+The interval for real candidates resamples runs of 16 consecutive blocks within each cadence, the rule's measure. An exact Poisson upper limit, which takes blocks as independent (they are not: interference bunches), is 0.0044 a block, also under the limit.
+
+The rule was set at S/N 30. At S/N 10, supplementary and not part of it:
+
+| at S/N 10 | candidates | left unexplained, version 5 | version 6 |
+|---|---|---|---|
+| control C's real candidates | 1,081 | 3 | 18 |
+| planted candidates | 2,093 | 965 | 1,649 |
+
+So at the lower cut version 6 also keeps more of the planted signals, and leaves more of the real candidates unexplained (18 against 3, none of them strong); a search at S/N 10 would have more of them to look into.
+
 Both hold, so **version 6 is adopted** as the checks' next version. Every candidate and verdict elsewhere in this report was judged by version 5 and is unchanged; they stand until they are judged again and that is reported. These are four more cadences from one telescope, and the planted signals are this project's own planting.
 
 ## What the code audits found that bears on these results
@@ -347,6 +358,7 @@ The observations are from the Breakthrough Listen Open Data Archive (Lebofsky et
 - data/analysis/negative_controls_c/injection.json: written 2026-11-26T20:05:18Z, commit 332866d
 - data/analysis/negative_controls_c/verdict.json: written 2026-11-26T20:05:22Z, commit 332866d
 - data/analysis/negative_controls_c/package_replay.json: written 2026-11-26T17:42:01Z, commit 332866d
+- data/analysis/negative_controls_c/checks_context.json: written 2026-11-26T17:41:56Z, commit 332866d
 - data/analysis/independent_injection/tables.json: written 2026-11-25T09:44:41Z, commit baf7f5a
 - data/analysis/independent_injection/unsmeared/tables.json: written 2026-11-25T09:44:46Z, commit baf7f5a
 - data/analysis/independent_injection/second/tables.json: written 2026-11-25T09:44:44Z, commit baf7f5a

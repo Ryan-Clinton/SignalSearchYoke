@@ -2,6 +2,10 @@
 before any of control C's results existed.
 
     python tools/control_c_verdict.py
+    python tools/control_c_verdict.py --from-package   the same decision from control C's package and its
+                                                       planted records alone, no store: written to
+                                                       verdict_from_package.json, refused unless it is the
+                                                       recorded verdict's
 
 Reads control C's planted-signal records (both versions' verdicts on every planted candidate), its store (both
 versions' verdicts on every real candidate) and its sweep records; writes
@@ -95,13 +99,44 @@ def decide(capped, weighted, rate):
             "so": "version 6 becomes the checks' next version" if keeps and clean else "version 5 stays"}
 
 
-def main(say=print):
+DECISION = ("planted_capped", "planted_weighted", "real_unexplained_by_version_6", "keeps_more_real_signals",
+            "lets_no_more_interference_through", "adopted", "share_of_blocks_capped")
+
+
+def from_package(folder):
+    """Control C's sweep records and version 6's verdicts on its real candidates, from its package alone, each
+    file checked against the package's manifest: [(choice, sweep record)], [events]."""
+    import hashlib
+    import negative_controls as nc
+    folder = Path(folder)
+    load = lambda p: json.loads((folder / p).read_text(encoding="utf-8"))  # noqa: E731
+    manifest = load("manifest.json")
+    if "verdicts_bands_as_context.json" not in manifest["files"]:
+        raise yoke.Refusal("INVALID_REQUEST", "The package holds no verdicts of version 6.")
+    wrong = [n for n, sha in manifest["files"].items()
+             if hashlib.sha256((folder / n).read_bytes()).hexdigest() != sha]
+    if wrong:
+        raise yoke.Refusal("INVALID_REQUEST", f"Files differ from the package's manifest: {wrong}")
+    control, problems = [], []
+    for c in load("choice.json")["chosen"]:
+        rec = load(f"sweeps/{c['target']}-{c['session']}.json")
+        problems += nc.sweep_problems(c, rec, manifest["search_version"])
+        control.append((c, rec))
+    if problems:
+        raise yoke.Refusal("INVALID_REQUEST", "; ".join(problems))
+    return control, load("verdicts_bands_as_context.json")["events"]
+
+
+def main(say=print, package=None):
     os.environ["SSY_CONTROL"] = "c"          # before the tools are imported: their paths are control C's
     import control_injection as ci
     import negative_controls as nc
     import vetting
     choice = json.loads((ci.OUT / "choice.json").read_text(encoding="utf-8"))
-    control = nc._whole_control()
+    if package:
+        control, packaged = from_package(nc.PACKAGE if package is True else package)
+    else:
+        control, packaged = nc._whole_control(), None
     problems = ci.choice_problems(choice, control)
     if problems:
         raise yoke.Refusal("INVALID_REQUEST", problems[0])
@@ -114,11 +149,14 @@ def main(say=print):
         len(rec["done"]) for _, rec in control)
     capped = paired_difference(rows, classes, only="capped")
     weighted = paired_difference(rows, classes, w_capped=capped_share)
-    db = nc._store()
-    try:
-        events = nc.candidate_verdicts(db, vetting.VERSION_BANDS_AS_CONTEXT, vetting.N_CHECKS)
-    finally:
-        db.close()
+    if packaged is not None:
+        events = packaged
+    else:
+        db = nc._store()
+        try:
+            events = nc.candidate_verdicts(db, vetting.VERSION_BANDS_AS_CONTEXT, vetting.N_CHECKS)
+        finally:
+            db.close()
     left = {}
     for e in events:
         if e["snr"] >= CUT and nc.verdict_class(e["verdict"]).startswith("unexplained"):
@@ -129,6 +167,16 @@ def main(say=print):
            "planted_capped": capped, "planted_weighted": weighted, "real_unexplained_by_version_6": rate,
            "limits": {"rate": LIMIT_RATE, "upper": LIMIT_UPPER, "run": RUN}, **decide(capped, weighted, rate),
            "kind": "measured"}
+    if package:
+        recorded = json.loads((nc.OUT / "verdict.json").read_text(encoding="utf-8"))
+        out["from"] = "control C's package and planted records alone, no store"
+        out["same_as_recorded"] = all(out[k] == recorded[k] for k in DECISION)
+        yoke.write(nc.OUT / "verdict_from_package.json", out, indent=1, stamp=True)
+        if not out["same_as_recorded"]:
+            raise yoke.Refusal("INTERNAL_ERROR", "The verdict made from the package is not the recorded one: "
+                               + ", ".join(k for k in DECISION if out[k] != recorded[k]))
+        say(f"made again from the package: the recorded verdict ({out['so']})")
+        return out
     yoke.write(nc.OUT / "verdict.json", out, indent=1, stamp=True)
     say(json.dumps({k: out[k] for k in ("planted_capped", "planted_weighted", "real_unexplained_by_version_6", "so")},
                    default=float))
@@ -136,4 +184,4 @@ def main(say=print):
 
 
 if __name__ == "__main__":
-    main()
+    main(package=True if "--from-package" in sys.argv[1:] else None)
